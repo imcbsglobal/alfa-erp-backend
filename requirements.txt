@@ -1,0 +1,7 @@
+# Root requirements file
+# This file points to the appropriate requirements based on environment
+# For development, use: pip install -r requirements/dev.txt
+# For production, use: pip install -r requirements/prod.txt
+
+# To install base requirements only:
+-r requirements/base.txt
