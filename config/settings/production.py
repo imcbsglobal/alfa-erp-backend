@@ -2,10 +2,12 @@
 Production settings for ALFA ERP Backend
 """
 from .base import *
+import os
 
 DEBUG = False
 
-ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
+# Allowed hosts from environment (comma separated string)
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")
 
 # Security Settings
 SECURE_SSL_REDIRECT = True
@@ -17,6 +19,4 @@ X_FRAME_OPTIONS = 'DENY'
 
 # CORS - production should have specific origins
 CORS_ALLOW_ALL_ORIGINS = False
-
-# Get allowed hosts from environment
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',')
+CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
