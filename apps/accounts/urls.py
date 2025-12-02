@@ -8,6 +8,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from .views import CustomTokenObtainPairView, UserViewSet
 
 router = DefaultRouter()
+#  /api/auth/users/` — Admin-only create user 
 router.register(r'users', UserViewSet, basename='user')
 
 app_name = 'accounts'
