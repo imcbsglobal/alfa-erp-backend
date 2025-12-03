@@ -47,7 +47,9 @@ class User(AbstractBaseUser, PermissionsMixin):
     
     # Role choices for access control
     class Role(models.TextChoices):
+        #admin,superadmin,user
         ADMIN = 'ADMIN', 'Admin'
+        
         STORE = 'STORE', 'Store'
         DELIVERY = 'DELIVERY', 'Delivery'
         PURCHASE = 'PURCHASE', 'Purchase'
