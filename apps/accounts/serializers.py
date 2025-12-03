@@ -11,7 +11,7 @@ User = get_user_model()
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     """
     Custom JWT token serializer
-    Returns user information along with tokens
+    Returns user information, tokens, and menu structure
     """
     
     def validate(self, attrs):
@@ -33,6 +33,18 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
         # Include Django groups (if any) for backward compatibility
         data['user']['groups'] = list(self.user.groups.values_list('name', flat=True))
+        
+        # Add menu structure based on user's directly assigned menus (no roles)
+        try:
+            from apps.accesscontrol.models import UserMenu
+            
+            # Get menu structure directly from user's assigned menus
+            menu_structure = UserMenu.get_user_menu_structure(self.user)
+            data['menus'] = menu_structure
+                
+        except Exception as e:
+            # Fallback if accesscontrol app is not available
+            data['menus'] = []
         
         return data
 

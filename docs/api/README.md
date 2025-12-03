@@ -95,8 +95,11 @@ GET /api/auth/users/?search=admin&ordering=email
 ## API Endpoints
 
 ### Authentication
-- [Login](./authentication.md#login) - `POST /api/auth/login/`
+- [Login](./authentication.md#login) - `POST /api/auth/login/` - Returns JWT tokens and user menus
 - [Refresh Token](./authentication.md#refresh-token) - `POST /api/auth/token/refresh/`
+
+### Menu Access Control
+- [Get User Menus](./menu_access_control.md#get-user-menus) - `GET /api/access/menus/` - Retrieve user's assigned menus
 
 ### User Management
 - [List Users](./users.md#list-users) - `GET /api/auth/users/`
