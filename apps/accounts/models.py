@@ -3,6 +3,7 @@ Custom User model for ALFA ERP Backend
 Users can only be created by admin, no self-registration
 """
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.utils import timezone
 
@@ -26,6 +27,7 @@ class UserManager(BaseUserManager):
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
         extra_fields.setdefault('is_active', True)
+        extra_fields.setdefault('roles', [User.Role.ADMIN]) 
         
         if extra_fields.get('is_staff') is not True:
             raise ValueError('Superuser must have is_staff=True')
@@ -60,12 +62,12 @@ class User(AbstractBaseUser, PermissionsMixin):
         db_index=True
     )
     
-    # Role-based access control
-    role = models.CharField(
-        max_length=20,
-        choices=Role.choices,
-        default=Role.VIEWER,
-        help_text='User role for access control'
+    # Role-based access control (multiple roles support)
+    roles = ArrayField(
+        models.CharField(max_length=20, choices=Role.choices),
+        default=list,
+        blank=True,
+        help_text='List of roles assigned to the user for access control'
     )
     
     # Personal information
@@ -128,3 +130,20 @@ class User(AbstractBaseUser, PermissionsMixin):
     def get_short_name(self):
         """Return the short name for the user"""
         return self.first_name or self.email.split('@')[0]
+    
+    def has_role(self, role):
+        """Check if user has a specific role"""
+        return role in self.roles
+    
+    def has_any_role(self, *roles):
+        """Check if user has any of the specified roles"""
+        return any(role in self.roles for role in roles)
+    
+    def has_all_roles(self, *roles):
+        """Check if user has all of the specified roles"""
+        return all(role in self.roles for role in roles)
+    
+    @property
+    def primary_role(self):
+        """Return the first/primary role or VIEWER if no roles assigned"""
+        return self.roles[0] if self.roles else self.Role.VIEWER

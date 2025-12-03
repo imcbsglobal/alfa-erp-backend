@@ -64,6 +64,7 @@ Authorization: Bearer <access_token>
         "first_name": "John",
         "last_name": "Doe",
         "full_name": "John Doe",
+        "roles": ["STORE"],
         "is_active": true,
         "is_staff": false
       },
@@ -73,6 +74,7 @@ Authorization: Bearer <access_token>
         "first_name": "Jane",
         "last_name": "Smith",
         "full_name": "Jane Smith",
+        "roles": ["ADMIN", "ACCOUNTS"],
         "is_active": true,
         "is_staff": true
       }
@@ -145,6 +147,7 @@ Required (Any authenticated user)
     "full_name": "John Doe",
     "phone": "+1234567890",
     "avatar": "http://localhost:8000/media/avatars/2025/12/01/photo.jpg",
+    "roles": ["VIEWER"],
     "is_active": true,
     "is_staff": false,
     "date_joined": "2025-01-15T08:00:00Z",
@@ -210,6 +213,7 @@ Required
     "full_name": "John Doe",
     "phone": "+1234567890",
     "avatar": null,
+    "roles": ["DELIVERY", "PURCHASE"],
     "is_active": true,
     "is_staff": false,
     "date_joined": "2025-01-15T08:00:00Z",
@@ -259,6 +263,7 @@ Content-Type: application/json
   "first_name": "Jane",
   "last_name": "Smith",
   "phone": "+9876543210",
+  "roles": ["STORE"],
   "is_staff": false,
   "is_active": true
 }
@@ -272,6 +277,7 @@ Content-Type: application/json
 - `phone` (string, optional): Phone number
 - `is_staff` (boolean, optional): Admin status (default: false)
 - `is_active` (boolean, optional): Active status (default: true)
+- `roles` (array, optional): Array of role codes (e.g., `["ADMIN", "ACCOUNTS"]`). Available roles: `ADMIN`, `STORE`, `DELIVERY`, `PURCHASE`, `ACCOUNTS`, `VIEWER`. Admins only can set this when creating users.
 
 ### Response
 
@@ -289,6 +295,7 @@ Content-Type: application/json
     "full_name": "Jane Smith",
     "phone": "+9876543210",
     "avatar": null,
+    "roles": ["STORE"],
     "is_active": true,
     "is_staff": false,
     "date_joined": "2025-12-02T11:00:00Z",
@@ -358,7 +365,8 @@ Content-Type: application/json
 ```json
 {
   "first_name": "Johnny",
-  "phone": "+1112223333"
+  "phone": "+1112223333",
+  "roles": ["DELIVERY", "STORE"]  
 }
 ```
 
@@ -378,6 +386,7 @@ Content-Type: application/json
     "full_name": "Johnny Doe",
     "phone": "+1112223333",
     "avatar": null,
+    "roles": ["DELIVERY", "STORE"],
     "is_active": true,
     "is_staff": false,
     "date_joined": "2025-01-15T08:00:00Z",
@@ -386,7 +395,7 @@ Content-Type: application/json
 }
 ```
 
-**Note:** Cannot update `email`, `date_joined`, `last_login` (read-only fields)
+**Note:** Cannot update `email`, `date_joined`, `last_login` (read-only fields). Only admins can update a user's `roles` array.
 
 ---
 

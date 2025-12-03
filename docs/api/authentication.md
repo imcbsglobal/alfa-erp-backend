@@ -69,9 +69,11 @@ Content-Type: application/json
       "last_name": "User",
       "full_name": "Admin User",
       "avatar": "http://localhost:8000/media/avatars/2025/12/01/photo.jpg",
+      "roles": ["ADMIN", "ACCOUNTS"],
+      "primary_role": "ADMIN",
       "is_staff": true,
       "is_superuser": true,
-      "roles": ["Admin", "Manager"]
+      "groups": ["Admin", "Manager"]
     }
   }
 }
@@ -91,9 +93,11 @@ Content-Type: application/json
     - `last_name` (string): Last name
     - `full_name` (string): Combined full name
     - `avatar` (string|null): Avatar image URL or null
+    - `roles` (array): Array of role codes assigned to the user (e.g., `["ADMIN", "ACCOUNTS"]`)
+    - `primary_role` (string): First/primary role from the roles array (used for default navigation)
     - `is_staff` (boolean): Admin/staff status
     - `is_superuser` (boolean): Superuser status
-    - `roles` (array): List of role names from Django groups
+    - `groups` (array): List of Django group names (if any)
 
 **Error (401 Unauthorized):**
 ```json
@@ -155,7 +159,8 @@ if (result.success) {
   localStorage.setItem('refresh_token', result.data.refresh);
   
   // Use user data for UI
-  console.log('User roles:', result.data.user.roles);
+  console.log('User roles:', result.data.user.roles); // ["ADMIN", "ACCOUNTS"]
+  console.log('Primary role:', result.data.user.primary_role); // "ADMIN"
   console.log('Avatar:', result.data.user.avatar);
 }
 ```
@@ -186,7 +191,7 @@ if data['success']:
 - Use access token in `Authorization: Bearer <token>` header for protected endpoints
 - Tokens are rotated on refresh for security
 - User must have `is_active=True` to login
-- Roles are derived from Django `Group` memberships
+- The `roles` field contains an array of role codes assigned to the user (e.g., `["ADMIN", "ACCOUNTS"]`). Users can have multiple roles for flexible access control. The `primary_role` is the first role in the array. The `groups` array lists any Django `Group` names for additional permissions.
 - Avatar URL is absolute and includes media domain
 
 ---

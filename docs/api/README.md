@@ -15,7 +15,7 @@ Most endpoints require JWT authentication. Include the access token in the Autho
 Authorization: Bearer <access_token>
 ```
 
-Get tokens via the [Login endpoint](./authentication.md#login).
+Get tokens via the [Login endpoint](./authentication.md#login). The login response includes a `roles` array (multiple role codes) and `primary_role` for navigation control.
 
 ## Standard Response Format
 
@@ -124,6 +124,8 @@ curl -X POST http://localhost:8000/api/auth/login/ \
 curl -X GET http://localhost:8000/api/auth/users/me/ \
   -H "Authorization: Bearer <access_token>"
 ```
+
+Note: The returned user object includes a `roles` array (role codes) and `primary_role` for navigation, plus `groups` (Django group names if any).
 
 ### 3. Create New User (Admin Only)
 ```bash

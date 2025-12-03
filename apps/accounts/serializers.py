@@ -25,13 +25,14 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'last_name': self.user.last_name,
             'full_name': self.user.get_full_name(),
             'avatar': (self.user.avatar.url if self.user.avatar else None),
-            'role': self.user.role,
+            'roles': self.user.roles,  # Array of role codes
+            'primary_role': self.user.primary_role,  # First role or VIEWER
             'is_staff': self.user.is_staff,
             'is_superuser': self.user.is_superuser,
         }
 
-        # Include Django groups as roles (if any)
-        data['user']['roles'] = list(self.user.groups.values_list('name', flat=True))
+        # Include Django groups (if any) for backward compatibility
+        data['user']['groups'] = list(self.user.groups.values_list('name', flat=True))
         
         return data
 
@@ -47,7 +48,7 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'email', 'first_name', 'last_name', 'full_name',
-            'phone', 'avatar', 'role', 'is_active', 'is_staff', 'date_joined',
+            'phone', 'avatar', 'roles', 'is_active', 'is_staff', 'date_joined',
             'last_login', 'password'
         ]
         read_only_fields = ['id', 'date_joined', 'last_login']
@@ -96,7 +97,7 @@ class UserListSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = User
-        fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'role', 'is_active', 'is_staff']
+        fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'roles', 'is_active', 'is_staff']
     
     def get_full_name(self, obj):
         return obj.get_full_name()
