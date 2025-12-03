@@ -1,44 +1,48 @@
-# Authentication API
+# Authentication & User Management API
 
-Complete API documentation for authentication endpoints.
-
-## Base URL
-
-- **Development**: `http://localhost:8000`
-- **Production**: `https://alfa-erp-backend.onrender.com`
+**Base URL**: `http://localhost:8000/api/auth`  
+**Authentication**: JWT Bearer Token (except login endpoints)
 
 ---
 
-## Login
+## 📋 Complete Endpoint List
 
-Authenticate user and obtain JWT tokens with user information.
+### Authentication Endpoints
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/api/auth/login/` | Login and get JWT tokens | Public |
+| POST | `/api/auth/token/refresh/` | Refresh access token | Public |
 
-### Endpoint
+### User Management Endpoints
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/auth/users/` | List all users | Admin |
+| POST | `/api/auth/users/` | Create new user | Admin |
+| GET | `/api/auth/users/{id}/` | Get user by ID | Admin |
+| PUT | `/api/auth/users/{id}/` | Update user (full) | Admin |
+| PATCH | `/api/auth/users/{id}/` | Update user (partial) | Admin |
+| DELETE | `/api/auth/users/{id}/` | Delete user | Admin |
+| GET | `/api/auth/users/me/` | Get current user profile | User |
+| POST | `/api/auth/users/change_password/` | Change own password | User |
+| POST | `/api/auth/users/{id}/activate/` | Activate user account | Admin |
+| POST | `/api/auth/users/{id}/deactivate/` | Deactivate user account | Admin |
 
-```
-POST /api/auth/login/
-```
+---
 
-### Authentication
+## Authentication Endpoints
 
-Not required (public endpoint)
+### 1. Login
 
-### Request
+`POST /api/auth/login/`
+
+Authenticate user and obtain JWT tokens with user information and assigned menus.
 
 **Headers:**
 ```
 Content-Type: application/json
 ```
 
-**Body:**
-```json
-{
-  "username": "admin@gmail.com",
-  "password": "admin@123"
-}
-```
-
-**Alternative (also supported):**
+**Request Body:**
 ```json
 {
   "email": "admin@gmail.com",
@@ -46,18 +50,10 @@ Content-Type: application/json
 }
 ```
 
-**Fields:**
-- `username` (string, required): User's email address
-- `password` (string, required): User's password
-- Note: Both `username` and `email` keys are accepted for the email field
-
-### Response
-
-**Success (200 OK):**
+**Response (200 OK):**
 ```json
 {
-  "success": true,
-  "status_code": 200,
+  "status": "success",
   "message": "Login successful",
   "data": {
     "access": "eyJ0eXAiOiJKV1QiLCJhbGc...",
@@ -68,168 +64,82 @@ Content-Type: application/json
       "first_name": "Admin",
       "last_name": "User",
       "full_name": "Admin User",
-      "avatar": "http://localhost:8000/media/avatars/2025/12/01/photo.jpg",
-      "roles": ["ADMIN", "ACCOUNTS"],
+      "avatar": null,
+      "roles": ["ADMIN"],
       "primary_role": "ADMIN",
       "is_staff": true,
       "is_superuser": true,
-      "groups": ["Admin", "Manager"]
-    }
+      "groups": []
+    },
+    "menus": [
+      {
+        "id": "cc17dc82-a37d-423a-bd21-ff659780ed93",
+        "name": "Dashboard",
+        "code": "dashboard",
+        "icon": "dashboard",
+        "url": "/",
+        "order": 1,
+        "children": []
+      },
+      {
+        "id": "8f9e1234-b567-89ab-cdef-0123456789ab",
+        "name": "Delivery Management",
+        "code": "delivery",
+        "icon": "local_shipping",
+        "url": "/delivery",
+        "order": 2,
+        "children": [
+          {
+            "id": "1a2b3c4d-5e6f-7g8h-9i0j-k1l2m3n4o5p6",
+            "name": "Bills",
+            "code": "delivery_bills",
+            "icon": "receipt",
+            "url": "/delivery/bills",
+            "order": 1
+          }
+        ]
+      }
+    ]
   }
 }
-```
-
-**Response Fields:**
-- `success` (boolean): Always `true` for successful requests
-- `status_code` (integer): HTTP status code (200)
-- `message` (string): Human-readable success message
-- `data` (object): Response payload
-  - `access` (string): JWT access token (expires in 1 hour)
-  - `refresh` (string): JWT refresh token (expires in 7 days)
-  - `user` (object): Authenticated user information
-    - `id` (integer): User ID
-    - `email` (string): User's email
-    - `first_name` (string): First name
-    - `last_name` (string): Last name
-    - `full_name` (string): Combined full name
-    - `avatar` (string|null): Avatar image URL or null
-    - `roles` (array): Array of role codes assigned to the user (e.g., `["ADMIN", "ACCOUNTS"]`)
-    - `primary_role` (string): First/primary role from the roles array (used for default navigation)
-    - `is_staff` (boolean): Admin/staff status
-    - `is_superuser` (boolean): Superuser status
-    - `groups` (array): List of Django group names (if any)
 
 **Error (401 Unauthorized):**
 ```json
 {
-  "success": false,
-  "status_code": 401,
-  "message": "Authentication failed",
-  "errors": {
-    "detail": "No active account found with the given credentials"
-  }
+  "status": "error",
+  "message": "No active account found with the given credentials",
+  "status_code": 401
 }
 ```
 
 **Error (400 Bad Request):**
 ```json
 {
-  "success": false,
-  "status_code": 400,
+  "status": "error",
   "message": "Validation failed",
   "errors": {
-    "username": ["This field is required"],
+    "email": ["This field is required"],
     "password": ["This field is required"]
-  }
+  },
+  "status_code": 400
 }
 ```
-
-### Usage Examples
-
-**cURL:**
-```bash
-curl -X POST http://localhost:8000/api/auth/login/ \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin@gmail.com", "password":"admin@123"}'
-```
-
-**HTTPie:**
-```bash
-http POST http://localhost:8000/api/auth/login/ \
-  username=admin@gmail.com \
-  password=admin@123
-```
-
-**JavaScript (Fetch):**
-```javascript
-const response = await fetch('http://localhost:8000/api/auth/login/', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    username: 'admin@gmail.com',
-    password: 'admin@123'
-  })
-});
-
-const result = await response.json();
-
-if (result.success) {
-  // Store tokens securely
-  localStorage.setItem('access_token', result.data.access);
-  localStorage.setItem('refresh_token', result.data.refresh);
-  
-  // Use user data for UI
-  console.log('User roles:', result.data.user.roles); // ["ADMIN", "ACCOUNTS"]
-  console.log('Primary role:', result.data.user.primary_role); // "ADMIN"
-  console.log('Avatar:', result.data.user.avatar);
-}
-```
-
-**Python (requests):**
-```python
-import requests
-
-response = requests.post(
-    'http://localhost:8000/api/auth/login/',
-    json={
-        'username': 'admin@gmail.com',
-        'password': 'admin@123'
-    }
-)
-
-data = response.json()
-if data['success']:
-    access_token = data['data']['access']
-    user = data['data']['user']
-```
-
-### Notes
-
-- Both `username` and `email` field names are accepted (both map to email internally)
-- Access tokens expire after 1 hour (configurable in settings)
-- Refresh tokens expire after 7 days (configurable in settings)
-- Use access token in `Authorization: Bearer <token>` header for protected endpoints
-- Tokens are rotated on refresh for security
-- User must have `is_active=True` to login
-- The `roles` field contains an array of role codes assigned to the user (e.g., `["ADMIN", "ACCOUNTS"]`). Users can have multiple roles for flexible access control. The `primary_role` is the first role in the array. The `groups` array lists any Django `Group` names for additional permissions.
-- Avatar URL is absolute and includes media domain
 
 ---
 
-## Refresh Token
+### 2. Refresh Token
+`POST /api/auth/token/refresh/`
 
 Obtain a new access token using a valid refresh token.
 
-### Endpoint
-
-```
-POST /api/auth/token/refresh/
-```
-
-### Authentication
-
-Not required (uses refresh token)
-
-### Request
-
-**Headers:**
-```
-Content-Type: application/json
-```
-
-**Body:**
+**Request Body:**
 ```json
 {
   "refresh": "eyJ0eXAiOiJKV1QiLCJhbGc..."
 }
 ```
 
-**Fields:**
-- `refresh` (string, required): Valid refresh token from login
-
-### Response
-
-**Success (200 OK):**
+**Response (200 OK):**
 ```json
 {
   "access": "eyJ0eXAiOiJKV1QiLCJhbGc..."
@@ -244,37 +154,452 @@ Content-Type: application/json
 }
 ```
 
-### Usage Example
+---
 
-**cURL:**
-```bash
-curl -X POST http://localhost:8000/api/auth/token/refresh/ \
-  -H "Content-Type: application/json" \
-  -d '{"refresh":"<your-refresh-token>"}'
+## User Management Endpoints
+
+### 3. List All Users (Admin)
+`GET /api/auth/users/`
+
+Get a list of all users in the system.
+
+**Headers:**
+```
+Authorization: Bearer {admin_token}
 ```
 
-**JavaScript:**
-```javascript
-const refreshToken = localStorage.getItem('refresh_token');
+**Query Parameters:**
+- `page` (optional): Page number for pagination
+- `page_size` (optional): Number of items per page (default: 10)
 
-const response = await fetch('http://localhost:8000/api/auth/token/refresh/', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ refresh: refreshToken })
-});
-
-const result = await response.json();
-if (response.ok) {
-  localStorage.setItem('access_token', result.access);
+**Response (200 OK):**
+```json
+{
+  "status": "success",
+  "message": "Users retrieved successfully",
+  "data": {
+    "count": 25,
+    "next": "http://localhost:8000/api/auth/users/?page=2",
+    "previous": null,
+    "results": [
+      {
+        "id": 1,
+        "email": "admin@gmail.com",
+        "first_name": "Admin",
+        "last_name": "User",
+        "full_name": "Admin User",
+        "phone": "+1234567890",
+        "is_active": true,
+        "is_staff": true,
+        "date_joined": "2025-01-15T10:30:00Z",
+        "last_login": "2025-12-03T08:45:00Z"
+      },
+      {
+        "id": 2,
+        "email": "user@example.com",
+        "first_name": "John",
+        "last_name": "Doe",
+        "full_name": "John Doe",
+        "phone": "+0987654321",
+        "is_active": true,
+        "is_staff": false,
+        "date_joined": "2025-02-20T14:20:00Z",
+        "last_login": "2025-12-02T16:30:00Z"
+      }
+    ]
+  }
 }
 ```
 
-### Notes
+---
 
-- Refresh tokens are single-use when `ROTATE_REFRESH_TOKENS=True` (default)
-- Old refresh token becomes invalid after successful refresh
-- New refresh token is returned in response when rotation is enabled
-- Implement auto-refresh logic in frontend before access token expires
+### 4. Create User (Admin)
+`POST /api/auth/users/`
+
+Create a new user account.
+
+**Headers:**
+```
+Authorization: Bearer {admin_token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "email": "newuser@example.com",
+  "first_name": "Jane",
+  "last_name": "Smith",
+  "phone": "+1122334455",
+  "password": "SecurePass123!",
+  "is_staff": false,
+  "is_active": true
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "status": "success",
+  "message": "User created successfully",
+  "data": {
+    "id": 3,
+    "email": "newuser@example.com",
+    "first_name": "Jane",
+    "last_name": "Smith",
+    "full_name": "Jane Smith",
+    "phone": "+1122334455",
+    "avatar": null,
+    "roles": [],
+    "is_active": true,
+    "is_staff": false,
+    "date_joined": "2025-12-03T10:00:00Z",
+    "last_login": null
+  }
+}
+```
+
+---
+
+### 5. Get User by ID (Admin)
+`GET /api/auth/users/{id}/`
+
+Get detailed information about a specific user.
+
+**Headers:**
+```
+Authorization: Bearer {admin_token}
+```
+
+**Response (200 OK):**
+```json
+{
+  "status": "success",
+  "message": "User retrieved successfully",
+  "data": {
+    "id": 2,
+    "email": "user@example.com",
+    "first_name": "John",
+    "last_name": "Doe",
+    "full_name": "John Doe",
+    "phone": "+0987654321",
+    "avatar": null,
+    "roles": ["VIEWER"],
+    "is_active": true,
+    "is_staff": false,
+    "date_joined": "2025-02-20T14:20:00Z",
+    "last_login": "2025-12-02T16:30:00Z"
+  }
+}
+```
+
+---
+
+### 6. Update User (Admin)
+`PUT /api/auth/users/{id}/` (Full Update)  
+`PATCH /api/auth/users/{id}/` (Partial Update)
+
+Update user information.
+
+**Headers:**
+```
+Authorization: Bearer {admin_token}
+Content-Type: application/json
+```
+
+**Request Body (PATCH example):**
+```json
+{
+  "first_name": "Johnny",
+  "phone": "+1111111111"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "status": "success",
+  "message": "User updated successfully",
+  "data": {
+    "id": 2,
+    "email": "user@example.com",
+    "first_name": "Johnny",
+    "last_name": "Doe",
+    "full_name": "Johnny Doe",
+    "phone": "+1111111111",
+    "avatar": null,
+    "roles": ["VIEWER"],
+    "is_active": true,
+    "is_staff": false,
+    "date_joined": "2025-02-20T14:20:00Z",
+    "last_login": "2025-12-02T16:30:00Z"
+  }
+}
+```
+
+---
+
+### 7. Delete User (Admin)
+`DELETE /api/auth/users/{id}/`
+
+Delete a user account.
+
+**Headers:**
+```
+Authorization: Bearer {admin_token}
+```
+
+**Response (200 OK):**
+```json
+{
+  "status": "success",
+  "message": "User deleted successfully"
+}
+```
+
+---
+
+### 8. Get Current User Profile
+`GET /api/auth/users/me/`
+
+Get the authenticated user's own profile.
+
+**Headers:**
+```
+Authorization: Bearer {access_token}
+```
+
+**Response (200 OK):**
+```json
+{
+  "status": "success",
+  "message": "Profile retrieved successfully",
+  "data": {
+    "id": 1,
+    "email": "admin@gmail.com",
+    "first_name": "Admin",
+    "last_name": "User",
+    "full_name": "Admin User",
+    "phone": "+1234567890",
+    "avatar": null,
+    "roles": ["ADMIN"],
+    "is_active": true,
+    "is_staff": true,
+    "date_joined": "2025-01-15T10:30:00Z",
+    "last_login": "2025-12-03T08:45:00Z"
+  }
+}
+```
+
+---
+
+### 9. Change Password
+`POST /api/auth/users/change_password/`
+
+Change the authenticated user's password.
+
+**Headers:**
+```
+Authorization: Bearer {access_token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "old_password": "OldPass123!",
+  "new_password": "NewSecurePass456!"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "status": "success",
+  "message": "Password changed successfully"
+}
+```
+
+**Error (400 Bad Request):**
+```json
+{
+  "status": "error",
+  "message": "Password verification failed",
+  "errors": {
+    "old_password": ["Wrong password"]
+  },
+  "status_code": 400
+}
+```
+
+---
+
+### 10. Activate User (Admin)
+`POST /api/auth/users/{id}/activate/`
+
+Activate a deactivated user account.
+
+**Headers:**
+```
+Authorization: Bearer {admin_token}
+```
+
+**Response (200 OK):**
+```json
+{
+  "status": "success",
+  "message": "User user@example.com activated successfully",
+  "data": {
+    "email": "user@example.com",
+    "is_active": true
+  }
+}
+```
+
+---
+
+### 11. Deactivate User (Admin)
+`POST /api/auth/users/{id}/deactivate/`
+
+Deactivate a user account (soft delete).
+
+**Headers:**
+```
+Authorization: Bearer {admin_token}
+```
+
+**Response (200 OK):**
+```json
+{
+  "status": "success",
+  "message": "User user@example.com deactivated successfully",
+  "data": {
+    "email": "user@example.com",
+    "is_active": false
+  }
+}
+```
+
+---
+
+## Code Examples
+
+### Login and Store Tokens
+```javascript
+async function login(email, password) {
+  const response = await fetch('http://localhost:8000/api/auth/login/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password })
+  });
+  
+  const result = await response.json();
+  
+  if (result.status === 'success') {
+    localStorage.setItem('access_token', result.data.access);
+    localStorage.setItem('refresh_token', result.data.refresh);
+    localStorage.setItem('user', JSON.stringify(result.data.user));
+    localStorage.setItem('menus', JSON.stringify(result.data.menus));
+    return result.data;
+  } else {
+    throw new Error(result.message);
+  }
+}
+```
+
+### Auto-Refresh Token
+```javascript
+axios.interceptors.response.use(
+  response => response,
+  async error => {
+    const originalRequest = error.config;
+    
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      
+      const refreshToken = localStorage.getItem('refresh_token');
+      
+      try {
+        const response = await axios.post('/api/auth/token/refresh/', {
+          refresh: refreshToken
+        });
+        
+        const { access } = response.data;
+        localStorage.setItem('access_token', access);
+        
+        originalRequest.headers['Authorization'] = `Bearer ${access}`;
+        return axios(originalRequest);
+      } catch (refreshError) {
+        localStorage.clear();
+        window.location.href = '/login';
+        return Promise.reject(refreshError);
+      }
+    }
+    
+    return Promise.reject(error);
+  }
+);
+```
+
+### Fetch Current User Profile
+```javascript
+async function getCurrentUser() {
+  const token = localStorage.getItem('access_token');
+  
+  const response = await fetch('http://localhost:8000/api/auth/users/me/', {
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  });
+  
+  const result = await response.json();
+  return result.data;
+}
+```
+
+### Create New User (Admin)
+```python
+import requests
+
+admin_token = "your_admin_access_token"
+
+headers = {
+    'Authorization': f'Bearer {admin_token}',
+    'Content-Type': 'application/json'
+}
+
+new_user_data = {
+    'email': 'newuser@example.com',
+    'first_name': 'Jane',
+    'last_name': 'Smith',
+    'phone': '+1122334455',
+    'password': 'SecurePass123!',
+    'is_staff': False,
+    'is_active': True
+}
+
+response = requests.post(
+    'http://localhost:8000/api/auth/users/',
+    headers=headers,
+    json=new_user_data
+)
+
+if response.status_code == 201:
+    user = response.json()['data']
+    print(f"Created user: {user['email']}")
+```
+
+---
+
+## Notes
+
+- **Access Token**: Expires in 1 hour
+- **Refresh Token**: Expires in 7 days
+- **Menus**: Automatically included in login response based on user assignments
+- **Admin Endpoints**: Require `is_staff=True`
+- **User Must Be Active**: `is_active=True` required for login
+- **Password Requirements**: Minimum 8 characters (configurable)
+- **Pagination**: Default page size is 10 items
 
 ---
 
