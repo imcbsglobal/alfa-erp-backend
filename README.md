@@ -123,7 +123,13 @@ alfa-erp-backend/
 │   ├── wsgi.py               # WSGI config
 │   └── asgi.py               # ASGI config
 ├── docs/                      # Documentation
-│   └── auth_login.md         # Login API documentation
+│   ├── api/                  # API documentation
+│   │   ├── README.md         # API overview and quick start
+│   │   ├── authentication.md # Login and token endpoints
+│   │   └── users.md          # User management endpoints
+│   ├── adding_new_app.md     # Guide for creating new apps
+│   ├── development_setup.md  # Development environment setup
+│   └── response_handlers.md  # API response format guide
 ├── media/                     # User-uploaded files
 │   └── avatars/              # User profile photos
 ├── static/                    # Static files (CSS, JS, images)
@@ -133,4 +139,29 @@ alfa-erp-backend/
 ├── .env.example              # Environment variables template
 └── README.md                 # This file
 ```
+
+## API Documentation
+
+Complete API documentation is available in the `docs/api/` directory:
+
+- **[API Overview](docs/api/README.md)** - Quick start, response format, pagination, filtering
+- **[Authentication API](docs/api/authentication.md)** - Login, token refresh endpoints
+- **[User Management API](docs/api/users.md)** - User CRUD operations, profile, password management
+
+### Quick API Examples
+
+**Login:**
+```bash
+curl -X POST http://localhost:8000/api/auth/login/ \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin@gmail.com","password":"admin@123"}'
+```
+
+**Get Current User:**
+```bash
+curl -X GET http://localhost:8000/api/auth/users/me/ \
+  -H "Authorization: Bearer <access_token>"
+```
+
+For complete API documentation with all endpoints, request/response examples, and integration guides, see [docs/api/README.md](docs/api/README.md).
 

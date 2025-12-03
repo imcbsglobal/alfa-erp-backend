@@ -8,6 +8,13 @@ from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth import get_user_model
 
+from apps.common.response import (
+    success_response,
+    error_response,
+    validation_error_response,
+    created_response
+)
+from apps.common.viewsets import BaseModelViewSet
 from .serializers import (
     CustomTokenObtainPairSerializer,
     UserSerializer,
@@ -25,8 +32,14 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     """
     serializer_class = CustomTokenObtainPairSerializer
 
+    def post(self, request, *args, **kwargs):
+        """Wrap the JWT response into our success_response format"""
+        response = super().post(request, *args, **kwargs)
+        # response.data contains tokens and 'user' key added by serializer
+        return success_response(data=response.data, message='Login successful', status_code=response.status_code)
 
-class UserViewSet(viewsets.ModelViewSet):
+
+class UserViewSet(BaseModelViewSet):
     """
     ViewSet for user management
     - Only admins can create, update, delete users
@@ -65,7 +78,7 @@ class UserViewSet(viewsets.ModelViewSet):
     def me(self, request):
         """Get current user's profile"""
         serializer = self.get_serializer(request.user)
-        return Response(serializer.data)
+        return success_response(data=serializer.data, message='Profile retrieved successfully')
     
     @action(detail=False, methods=['post'])
     def change_password(self, request):
@@ -77,16 +90,16 @@ class UserViewSet(viewsets.ModelViewSet):
         
         # Check old password
         if not user.check_password(serializer.validated_data['old_password']):
-            return Response(
-                {'old_password': ['Wrong password']},
-                status=status.HTTP_400_BAD_REQUEST
+            return validation_error_response(
+                errors={'old_password': ['Wrong password']},
+                message='Password verification failed'
             )
         
         # Set new password
         user.set_password(serializer.validated_data['new_password'])
         user.save()
         
-        return Response({'message': 'Password changed successfully'})
+        return success_response(message='Password changed successfully')
     
     @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
     def activate(self, request, pk=None):
@@ -94,7 +107,10 @@ class UserViewSet(viewsets.ModelViewSet):
         user = self.get_object()
         user.is_active = True
         user.save()
-        return Response({'message': f'User {user.email} activated successfully'})
+        return success_response(
+            data={'email': user.email, 'is_active': user.is_active},
+            message=f'User {user.email} activated successfully'
+        )
     
     @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
     def deactivate(self, request, pk=None):
@@ -102,4 +118,7 @@ class UserViewSet(viewsets.ModelViewSet):
         user = self.get_object()
         user.is_active = False
         user.save()
-        return Response({'message': f'User {user.email} deactivated successfully'})
+        return success_response(
+            data={'email': user.email, 'is_active': user.is_active},
+            message=f'User {user.email} deactivated successfully'
+        )

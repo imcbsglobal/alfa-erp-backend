@@ -43,12 +43,29 @@ class User(AbstractBaseUser, PermissionsMixin):
     - No self-registration
     """
     
+    # Role choices for access control
+    class Role(models.TextChoices):
+        ADMIN = 'ADMIN', 'Admin'
+        STORE = 'STORE', 'Store'
+        DELIVERY = 'DELIVERY', 'Delivery'
+        PURCHASE = 'PURCHASE', 'Purchase'
+        ACCOUNTS = 'ACCOUNTS', 'Accounts'
+        VIEWER = 'VIEWER', 'Viewer'
+    
     # User identification
     email = models.EmailField(
         verbose_name='Email Address',
         max_length=255,
         unique=True,
         db_index=True
+    )
+    
+    # Role-based access control
+    role = models.CharField(
+        max_length=20,
+        choices=Role.choices,
+        default=Role.VIEWER,
+        help_text='User role for access control'
     )
     
     # Personal information
@@ -72,6 +89,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         default=False,
         help_text='Designates whether the user can log into the admin site.'
     )
+
     
     # Timestamps
     date_joined = models.DateTimeField(default=timezone.now)
