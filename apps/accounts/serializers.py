@@ -19,14 +19,22 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         
         # Add custom user data to the response
         data['user'] = {
-            'id': self.user.id,
+            'id': str(self.user.id),
             'email': self.user.email,
             'first_name': self.user.first_name,
             'last_name': self.user.last_name,
             'full_name': self.user.get_full_name(),
             'avatar': (self.user.avatar.url if self.user.avatar else None),
-            'roles': self.user.roles,  # Array of role codes
-            'primary_role': self.user.primary_role,  # First role or VIEWER
+            'role': self.user.role,
+            'department': {
+                'id': str(self.user.department.id),
+                'name': self.user.department.name
+            } if self.user.department else None,
+            'job_title': {
+                'id': str(self.user.job_title.id),
+                'title': self.user.job_title.title,
+                'department_id': str(self.user.job_title.department_id)
+            } if self.user.job_title else None,
             'is_staff': self.user.is_staff,
             'is_superuser': self.user.is_superuser,
         }
@@ -38,9 +46,9 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         try:
             from apps.accesscontrol.models import UserMenu, MenuItem
 
-            # If user is admin/staff or has ADMIN/SUPER_ADMIN role, return full menu tree
-            user_roles = getattr(self.user, 'roles', []) or []
-            is_admin_user = bool(self.user.is_staff or self.user.is_superuser or any(r in ['ADMIN', 'SUPER_ADMIN'] for r in user_roles))
+            # If user is admin/staff or has ADMIN/SUPERADMIN role, return full menu tree
+            user_role = getattr(self.user, 'role', 'USER')
+            is_admin_user = bool(self.user.is_staff or self.user.is_superuser or user_role in ['ADMIN', 'SUPERADMIN'])
 
             if is_admin_user:
                 menu_structure = MenuItem.get_all_menu_structure()
@@ -56,21 +64,64 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         return data
 
 
+class JobTitleSerializer(serializers.ModelSerializer):
+    """Serializer for JobTitle model"""
+    department_name = serializers.CharField(source='department.name', read_only=True)
+    
+    class Meta:
+        model = get_user_model().job_title.field.related_model
+        fields = ['id', 'title', 'department', 'department_name', 'description', 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class DepartmentSerializer(serializers.ModelSerializer):
+    """Serializer for Department model with nested job titles"""
+    job_titles = JobTitleSerializer(many=True, read_only=True)
+    
+    class Meta:
+        from apps.accounts.models import Department
+        model = Department
+        fields = ['id', 'name', 'description', 'is_active', 'job_titles', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class DepartmentListSerializer(serializers.ModelSerializer):
+    """Lightweight Department serializer for lists with job_titles array"""
+    job_titles = serializers.SerializerMethodField()
+    
+    class Meta:
+        from apps.accounts.models import Department
+        model = Department
+        fields = ['id', 'name', 'description', 'is_active', 'job_titles']
+    
+    def get_job_titles(self, obj):
+        """Return array of job titles under this department"""
+        return [{
+            'id': str(jt.id),
+            'title': jt.title,
+            'description': jt.description,
+            'is_active': jt.is_active
+        } for jt in obj.job_titles.filter(is_active=True)]
+
+
 class UserSerializer(serializers.ModelSerializer):
     """Serializer for User model"""
     
     full_name = serializers.SerializerMethodField()
     password = serializers.CharField(write_only=True, required=False)
     avatar = serializers.ImageField(required=False, allow_null=True)
+    department_name = serializers.CharField(source='department.name', read_only=True)
+    job_title_name = serializers.CharField(source='job_title.title', read_only=True)
     
     class Meta:
         model = User
         fields = [
             'id', 'email', 'first_name', 'last_name', 'full_name',
-            'phone', 'avatar', 'roles', 'is_active', 'is_staff', 'date_joined',
+            'phone', 'avatar', 'role', 'department', 'department_name',
+            'job_title', 'job_title_name', 'is_active', 'is_staff', 'date_joined',
             'last_login', 'password'
         ]
-        read_only_fields = ['id', 'date_joined', 'last_login']
+        read_only_fields = ['id', 'date_joined', 'last_login', 'department_name', 'job_title_name']
     
     def get_full_name(self, obj):
         return obj.get_full_name()
@@ -116,7 +167,7 @@ class UserListSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = User
-        fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'roles', 'is_active', 'is_staff']
+        fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'role', 'department', 'job_title', 'is_active', 'is_staff']
     
     def get_full_name(self, obj):
         return obj.get_full_name()

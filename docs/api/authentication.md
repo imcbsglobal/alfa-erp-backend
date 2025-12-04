@@ -27,6 +27,21 @@
 | POST | `/api/auth/users/{id}/activate/` | Activate user account | Admin |
 | POST | `/api/auth/users/{id}/deactivate/` | Deactivate user account | Admin |
 
+### Department & Job Title Endpoints
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/auth/departments/` | List all departments with job titles | User |
+| POST | `/api/auth/departments/` | Create new department | Admin |
+| GET | `/api/auth/departments/{id}/` | Get department by ID | User |
+| PUT/PATCH | `/api/auth/departments/{id}/` | Update department | Admin |
+| DELETE | `/api/auth/departments/{id}/` | Delete department | Admin |
+| GET | `/api/auth/job-titles/` | List all job titles | User |
+| GET | `/api/auth/job-titles/?department={id}` | Filter job titles by department | User |
+| POST | `/api/auth/job-titles/` | Create new job title | Admin |
+| GET | `/api/auth/job-titles/{id}/` | Get job title by ID | User |
+| PUT/PATCH | `/api/auth/job-titles/{id}/` | Update job title | Admin |
+| DELETE | `/api/auth/job-titles/{id}/` | Delete job title | Admin |
+
 ---
 
 ## Authentication Endpoints
@@ -59,17 +74,24 @@ Content-Type: application/json
     "access": "eyJ0eXAiOiJKV1QiLCJhbGc...",
     "refresh": "eyJ0eXAiOiJKV1QiLCJhbGc...",
     "user": {
-      "id": 1,
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
       "email": "admin@gmail.com",
       "first_name": "Admin",
       "last_name": "User",
       "full_name": "Admin User",
       "avatar": null,
-      "roles": ["ADMIN"],
-      "primary_role": "ADMIN",
+      "role": "ADMIN",
+      "department": {
+        "id": "dept-uuid-123",
+        "name": "Administration"
+      },
+      "job_title": {
+        "id": "job-uuid-456",
+        "title": "System Administrator",
+        "department_id": "dept-uuid-123"
+      },
       "is_staff": true,
-      "is_superuser": true,
-      "groups": []
+      "is_superuser": true
     },
     "menus": [
       {
@@ -183,19 +205,19 @@ Authorization: Bearer {admin_token}
     "previous": null,
     "results": [
       {
-        "id": 1,
+        "id": "uuid-1",
         "email": "admin@gmail.com",
         "first_name": "Admin",
         "last_name": "User",
         "full_name": "Admin User",
-        "phone": "+1234567890",
+        "role": "ADMIN",
+        "department": "dept-uuid-123",
+        "job_title": "job-uuid-456",
         "is_active": true,
-        "is_staff": true,
-        "date_joined": "2025-01-15T10:30:00Z",
-        "last_login": "2025-12-03T08:45:00Z"
+        "is_staff": true
       },
       {
-        "id": 2,
+        "id": "uuid-2",
         "email": "user@example.com",
         "first_name": "John",
         "last_name": "Doe",

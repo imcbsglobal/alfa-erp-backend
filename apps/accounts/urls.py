@@ -5,11 +5,18 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 
-from .views import CustomTokenObtainPairView, UserViewSet
+from .views import (
+    CustomTokenObtainPairView,
+    UserViewSet,
+    DepartmentViewSet,
+    JobTitleViewSet
+)
 
 router = DefaultRouter()
 #  /api/auth/users/` — Admin-only create user 
 router.register(r'users', UserViewSet, basename='user')
+router.register(r'departments', DepartmentViewSet, basename='department')
+router.register(r'job-titles', JobTitleViewSet, basename='job-title')
 
 app_name = 'accounts'
 

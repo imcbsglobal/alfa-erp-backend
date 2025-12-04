@@ -4,151 +4,162 @@ Users can only be created by admin, no self-registration
 """
 import uuid
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
-from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.utils import timezone
 
 
+class Department(models.Model):
+    """Department model for organizing users"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=150, unique=True)
+    description = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'departments'
+        verbose_name = 'Department'
+        verbose_name_plural = 'Departments'
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class JobTitle(models.Model):
+    """Job Title model linked to departments"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    title = models.CharField(max_length=150)
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.CASCADE,
+        related_name='job_titles'
+    )
+    description = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'job_titles'
+        verbose_name = 'Job Title'
+        verbose_name_plural = 'Job Titles'
+        ordering = ['department', 'title']
+        unique_together = [['department', 'title']]
+
+    def __str__(self):
+        return f"{self.title} ({self.department.name})"
+
+
 class UserManager(BaseUserManager):
     """Custom user manager for email-based authentication"""
-    
+
     def create_user(self, email, password=None, **extra_fields):
         """Create and return a regular user"""
         if not email:
             raise ValueError('Email address is required')
-        
+
         email = self.normalize_email(email)
+
+        if "role" not in extra_fields:
+            extra_fields["role"] = User.Role.USER
+
         user = self.model(email=email, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
         return user
-    
+
     def create_superuser(self, email, password=None, **extra_fields):
         """Create and return a superuser"""
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
         extra_fields.setdefault('is_active', True)
-        extra_fields.setdefault('roles', [User.Role.ADMIN]) 
-        
-        if extra_fields.get('is_staff') is not True:
-            raise ValueError('Superuser must have is_staff=True')
-        if extra_fields.get('is_superuser') is not True:
-            raise ValueError('Superuser must have is_superuser=True')
-        
+        extra_fields.setdefault('role', User.Role.SUPERADMIN)
+
         return self.create_user(email, password, **extra_fields)
 
 
 class User(AbstractBaseUser, PermissionsMixin):
-    """
-    Custom User model
-    - Email as username field
-    - Admin creates all users
-    - No self-registration
-    """
-    
-    # Role choices for access control
+    """Custom User model using email as the username field"""
+
     class Role(models.TextChoices):
-        #admin,superadmin,user
         ADMIN = 'ADMIN', 'Admin'
-        
-        STORE = 'STORE', 'Store'
-        DELIVERY = 'DELIVERY', 'Delivery'
-        PURCHASE = 'PURCHASE', 'Purchase'
-        ACCOUNTS = 'ACCOUNTS', 'Accounts'
-        VIEWER = 'VIEWER', 'Viewer'
-    
-    # User identification
+        USER = 'USER', 'User'
+        SUPERADMIN = 'SUPERADMIN', 'Super Admin'
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
-    email = models.EmailField(
-        verbose_name='Email Address',
-        max_length=255,
-        unique=True,
-        db_index=True
+    email = models.EmailField(max_length=255, unique=True, db_index=True)
+
+    # Single role field
+    role = models.CharField(
+        max_length=20,
+        choices=Role.choices,
+        default=Role.USER,
+        help_text='Assigned role of the user'
     )
-    
-    # Role-based access control (multiple roles support)
-    roles = ArrayField(
-        models.CharField(max_length=20, choices=Role.choices),
-        default=list,
+
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
-        help_text='List of roles assigned to the user for access control'
+        related_name='users'
     )
-    
-    # Personal information
+    job_title = models.ForeignKey(
+        JobTitle,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='users'
+    )
+
     first_name = models.CharField(max_length=150, blank=True)
     last_name = models.CharField(max_length=150, blank=True)
     phone = models.CharField(max_length=20, blank=True, null=True)
-    # Avatar / profile photo
+
     avatar = models.ImageField(
         upload_to='avatars/%Y/%m/%d/',
         blank=True,
-        null=True,
-        help_text='Profile photo (optional)'
-    )
-    
-    # Status flags
-    is_active = models.BooleanField(
-        default=True,
-        help_text='Designates whether this user should be treated as active. Unselect this instead of deleting accounts.'
-    )
-    is_staff = models.BooleanField(
-        default=False,
-        help_text='Designates whether the user can log into the admin site.'
+        null=True
     )
 
-    
-    # Timestamps
+    is_active = models.BooleanField(default=True)
+    is_staff = models.BooleanField(default=False)
+
     date_joined = models.DateTimeField(default=timezone.now)
     last_login = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
-    # Tracking
+
     created_by = models.ForeignKey(
         'self',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='created_users',
-        help_text='Admin who created this user'
+        related_name='created_users'
     )
-    
+
     objects = UserManager()
-    
+
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = []  # Email is already required as USERNAME_FIELD
-    
+    REQUIRED_FIELDS = []
+
     class Meta:
         db_table = 'users'
         verbose_name = 'User'
         verbose_name_plural = 'Users'
         ordering = ['-date_joined']
-    
+
     def __str__(self):
         return self.email
-    
+
     def get_full_name(self):
-        """Return the first_name plus the last_name, with a space in between"""
         full_name = f'{self.first_name} {self.last_name}'.strip()
         return full_name or self.email
-    
+
     def get_short_name(self):
-        """Return the short name for the user"""
         return self.first_name or self.email.split('@')[0]
-    
+
     def has_role(self, role):
-        """Check if user has a specific role"""
-        return role in self.roles
-    
-    def has_any_role(self, *roles):
-        """Check if user has any of the specified roles"""
-        return any(role in self.roles for role in roles)
-    
-    def has_all_roles(self, *roles):
-        """Check if user has all of the specified roles"""
-        return all(role in self.roles for role in roles)
-    
-    @property
-    def primary_role(self):
-        """Return the first/primary role or VIEWER if no roles assigned"""
-        return self.roles[0] if self.roles else self.Role.VIEWER
+        return self.role == role

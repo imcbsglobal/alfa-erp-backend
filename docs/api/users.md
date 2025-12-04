@@ -59,22 +59,26 @@ Authorization: Bearer <access_token>
     "previous": null,
     "results": [
       {
-        "id": 1,
+        "id": "uuid-1",
         "email": "john@example.com",
         "first_name": "John",
         "last_name": "Doe",
         "full_name": "John Doe",
-        "roles": ["STORE"],
+        "role": "USER",
+        "department": "dept-uuid-sales",
+        "job_title": "job-uuid-sales-rep",
         "is_active": true,
         "is_staff": false
       },
       {
-        "id": 2,
+        "id": "uuid-2",
         "email": "jane@example.com",
         "first_name": "Jane",
         "last_name": "Smith",
         "full_name": "Jane Smith",
-        "roles": ["ADMIN", "ACCOUNTS"],
+        "role": "ADMIN",
+        "department": "dept-uuid-admin",
+        "job_title": "job-uuid-admin-mgr",
         "is_active": true,
         "is_staff": true
       }
@@ -147,7 +151,11 @@ Required (Any authenticated user)
     "full_name": "John Doe",
     "phone": "+1234567890",
     "avatar": "http://localhost:8000/media/avatars/2025/12/01/photo.jpg",
-    "roles": ["VIEWER"],
+    "role": "USER",
+    "department": "dept-uuid-123",
+    "department_name": "Sales",
+    "job_title": "job-uuid-456",
+    "job_title_name": "Sales Representative",
     "is_active": true,
     "is_staff": false,
     "date_joined": "2025-01-15T08:00:00Z",
@@ -206,14 +214,18 @@ Required
   "status_code": 200,
   "message": "Detail retrieved successfully",
   "data": {
-    "id": 5,
+    "id": "uuid-5",
     "email": "user@example.com",
     "first_name": "John",
     "last_name": "Doe",
     "full_name": "John Doe",
     "phone": "+1234567890",
     "avatar": null,
-    "roles": ["DELIVERY", "PURCHASE"],
+    "role": "USER",
+    "department": "dept-uuid-123",
+    "department_name": "Sales",
+    "job_title": "job-uuid-456",
+    "job_title_name": "Sales Manager",
     "is_active": true,
     "is_staff": false,
     "date_joined": "2025-01-15T08:00:00Z",
@@ -263,7 +275,9 @@ Content-Type: application/json
   "first_name": "Jane",
   "last_name": "Smith",
   "phone": "+9876543210",
-  "roles": ["STORE"],
+  "role": "USER",
+  "department": "dept-uuid-123",
+  "job_title": "job-uuid-456",
   "is_staff": false,
   "is_active": true
 }
@@ -275,9 +289,11 @@ Content-Type: application/json
 - `first_name` (string, optional): First name
 - `last_name` (string, optional): Last name
 - `phone` (string, optional): Phone number
+- `role` (string, optional): User role - `ADMIN`, `USER`, `SUPERADMIN` (default: `USER`)
+- `department` (UUID, optional): Department ID (must exist)
+- `job_title` (UUID, optional): Job Title ID (must exist and belong to the selected department)
 - `is_staff` (boolean, optional): Admin status (default: false)
 - `is_active` (boolean, optional): Active status (default: true)
-- `roles` (array, optional): Array of role codes (e.g., `["ADMIN", "ACCOUNTS"]`). Available roles: `ADMIN`, `STORE`, `DELIVERY`, `PURCHASE`, `ACCOUNTS`, `VIEWER`. Admins only can set this when creating users.
 
 ### Response
 
@@ -288,14 +304,18 @@ Content-Type: application/json
   "status_code": 201,
   "message": "Resource created successfully",
   "data": {
-    "id": 10,
+    "id": "uuid-10",
     "email": "newuser@example.com",
     "first_name": "Jane",
     "last_name": "Smith",
     "full_name": "Jane Smith",
     "phone": "+9876543210",
     "avatar": null,
-    "roles": ["STORE"],
+    "role": "USER",
+    "department": "dept-uuid-123",
+    "department_name": "Sales",
+    "job_title": "job-uuid-456",
+    "job_title_name": "Sales Representative",
     "is_active": true,
     "is_staff": false,
     "date_joined": "2025-12-02T11:00:00Z",
