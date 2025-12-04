@@ -2,6 +2,7 @@
 Custom User model for ALFA ERP Backend
 Users can only be created by admin, no self-registration
 """
+import uuid
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
@@ -57,6 +58,8 @@ class User(AbstractBaseUser, PermissionsMixin):
         VIEWER = 'VIEWER', 'Viewer'
     
     # User identification
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
     email = models.EmailField(
         verbose_name='Email Address',
         max_length=255,

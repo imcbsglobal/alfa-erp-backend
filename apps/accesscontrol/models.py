@@ -68,6 +68,41 @@ class MenuItem(models.Model):
         """Get child menu items"""
         return self.children.filter(is_active=True).order_by('order')
 
+    @staticmethod
+    def get_all_menu_structure():
+        """
+        Return the full hierarchical menu structure for all active menus.
+        Useful for admins who should receive access to every menu item on login.
+        """
+        root_menus = MenuItem.objects.filter(parent=None, is_active=True).order_by('order')
+        menu_structure = []
+
+        for menu in root_menus:
+            menu_data = {
+                'id': str(menu.id),
+                'name': menu.name,
+                'code': menu.code,
+                'icon': menu.icon,
+                'url': menu.url,
+                'order': menu.order,
+                'children': []
+            }
+
+            children = menu.get_children()
+            for child in children:
+                menu_data['children'].append({
+                    'id': str(child.id),
+                    'name': child.name,
+                    'code': child.code,
+                    'icon': child.icon,
+                    'url': child.url,
+                    'order': child.order
+                })
+
+            menu_structure.append(menu_data)
+
+        return menu_structure
+
 
 class UserMenu(models.Model):
     """

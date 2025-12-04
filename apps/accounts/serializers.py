@@ -36,10 +36,17 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         
         # Add menu structure based on user's directly assigned menus (no roles)
         try:
-            from apps.accesscontrol.models import UserMenu
-            
-            # Get menu structure directly from user's assigned menus
-            menu_structure = UserMenu.get_user_menu_structure(self.user)
+            from apps.accesscontrol.models import UserMenu, MenuItem
+
+            # If user is admin/staff or has ADMIN/SUPER_ADMIN role, return full menu tree
+            user_roles = getattr(self.user, 'roles', []) or []
+            is_admin_user = bool(self.user.is_staff or self.user.is_superuser or any(r in ['ADMIN', 'SUPER_ADMIN'] for r in user_roles))
+
+            if is_admin_user:
+                menu_structure = MenuItem.get_all_menu_structure()
+            else:
+                # Get menu structure directly from user's assigned menus
+                menu_structure = UserMenu.get_user_menu_structure(self.user)
             data['menus'] = menu_structure
                 
         except Exception as e:
