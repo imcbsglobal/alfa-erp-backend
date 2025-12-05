@@ -112,19 +112,23 @@ class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False)
     avatar = serializers.ImageField(required=False, allow_null=True)
     job_title_name = serializers.CharField(source='job_title.title', read_only=True)
-    
+    created_by = serializers.SerializerMethodField()
     class Meta:
         model = User
         fields = [
             'id', 'email', 'first_name', 'last_name', 'full_name',
             'phone', 'avatar', 'role', 'department',
             'job_title', 'job_title_name', 'is_active', 'is_staff', 'date_joined',
-            'last_login', 'password'
+            'last_login', 'password','created_by'
         ]
-        read_only_fields = ['id', 'date_joined', 'last_login', 'job_title_name']
+        read_only_fields = ['id', 'date_joined', 'last_login', 'job_title_name','created_by']
     
     def get_full_name(self, obj):
         return obj.get_full_name()
+    def get_created_by(self,obj):
+        if obj.created_by :
+            return obj.created_by.get_full_name()
+        return None
     
     def create(self, validated_data):
         """Create a new user (admin only)"""
