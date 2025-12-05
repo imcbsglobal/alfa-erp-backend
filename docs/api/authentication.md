@@ -70,9 +70,7 @@ Content-Type: application/json
     "user": {
       "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
       "email": "admin@gmail.com",
-      "first_name": "Admin",
-      "last_name": "User",
-      "full_name": "Admin User",
+      "name": "Admin User",
       "avatar": null,
       "role": "ADMIN",
       "department": "Administration",
@@ -197,26 +195,22 @@ Authorization: Bearer {admin_token}
       {
         "id": "uuid-1",
         "email": "admin@gmail.com",
-        "first_name": "Admin",
-        "last_name": "User",
-        "full_name": "Admin User",
+        "name": "Admin User",
         "role": "ADMIN",
         "department": "Administration",
-        "job_title": "job-uuid-456",
+        "job_title_name": "System Administrator",
         "is_active": true,
         "is_staff": true
       },
       {
         "id": "uuid-2",
         "email": "user@example.com",
-        "first_name": "John",
-        "last_name": "Doe",
-        "full_name": "John Doe",
-        "phone": "+0987654321",
+        "name": "John Doe",
+        "role": "USER",
+        "department": "Sales",
+        "job_title_name": "Sales Representative",
         "is_active": true,
-        "is_staff": false,
-        "date_joined": "2025-02-20T14:20:00Z",
-        "last_login": "2025-12-02T16:30:00Z"
+        "is_staff": false
       }
     ]
   }

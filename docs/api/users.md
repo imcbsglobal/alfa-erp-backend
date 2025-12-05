@@ -61,24 +61,20 @@ Authorization: Bearer <access_token>
       {
         "id": "uuid-1",
         "email": "john@example.com",
-        "first_name": "John",
-        "last_name": "Doe",
-        "full_name": "John Doe",
+        "name": "John Doe",
         "role": "USER",
         "department": "Sales",
-        "job_title": "job-uuid-sales-rep",
+        "job_title_name": "Sales Representative",
         "is_active": true,
         "is_staff": false
       },
       {
         "id": "uuid-2",
         "email": "jane@example.com",
-        "first_name": "Jane",
-        "last_name": "Smith",
-        "full_name": "Jane Smith",
+        "name": "Jane Smith",
         "role": "ADMIN",
         "department": "Administration",
-        "job_title": "job-uuid-admin-mgr",
+        "job_title_name": "Admin Manager",
         "is_active": true,
         "is_staff": true
       }
@@ -216,9 +212,7 @@ Required
   "data": {
     "id": "uuid-5",
     "email": "user@example.com",
-    "first_name": "John",
-    "last_name": "Doe",
-    "full_name": "John Doe",
+    "name": "John Doe",
     "phone": "+1234567890",
     "avatar": null,
     "role": "USER",
@@ -271,8 +265,7 @@ Content-Type: application/json
 {
   "email": "newuser@example.com",
   "password": "SecurePass123!",
-  "first_name": "Jane",
-  "last_name": "Smith",
+  "name": "Jane Smith",
   "phone": "+9876543210",
   "role": "USER",
   "department": "Sales",
@@ -285,8 +278,7 @@ Content-Type: application/json
 **Fields:**
 - `email` (string, required): User's email (must be unique)
 - `password` (string, required): User's password (min 8 characters)
-- `first_name` (string, optional): First name
-- `last_name` (string, optional): Last name
+- `name` (string, optional): Full name
 - `phone` (string, optional): Phone number
 - `role` (string, optional): User role - `ADMIN`, `USER`, `SUPERADMIN` (default: `USER`)
 - `department` (string, optional): Department name (e.g., "Sales", "HR", "IT")
@@ -305,9 +297,7 @@ Content-Type: application/json
   "data": {
     "id": "uuid-10",
     "email": "newuser@example.com",
-    "first_name": "Jane",
-    "last_name": "Smith",
-    "full_name": "Jane Smith",
+    "name": "Jane Smith",
     "phone": "+9876543210",
     "avatar": null,
     "role": "USER",
@@ -345,8 +335,7 @@ curl -X POST http://localhost:8000/api/auth/users/ \
   -d '{
     "email": "newuser@example.com",
     "password": "SecurePass123!",
-    "first_name": "Jane",
-    "last_name": "Smith"
+    "name": "Jane Smith"
   }'
 ```
 

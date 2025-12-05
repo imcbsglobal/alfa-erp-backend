@@ -66,6 +66,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     email = models.EmailField(max_length=255, unique=True, db_index=True)
+    name = models.CharField(max_length=150, blank=True)
 
     # Single role field
     role = models.CharField(
@@ -74,6 +75,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         default=Role.USER,
         help_text='Assigned role of the user'
     )
+    
 
     department = models.CharField(max_length=100, blank=True, null=True, help_text='Department name')
  
@@ -85,8 +87,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         related_name='users'
     )
 
-    first_name = models.CharField(max_length=150, blank=True)
-    last_name = models.CharField(max_length=150, blank=True)
+    # first_name = models.CharField(max_length=150, blank=True)
     phone = models.CharField(max_length=20, blank=True, null=True)
 
     avatar = models.ImageField(
@@ -125,11 +126,10 @@ class User(AbstractBaseUser, PermissionsMixin):
         return self.email
 
     def get_full_name(self):
-        full_name = f'{self.first_name} {self.last_name}'.strip()
-        return full_name or self.email
+        return self.name or self.email
 
     def get_short_name(self):
-        return self.first_name or self.email.split('@')[0]
+        return self.name or self.email.split('@')[0]
 
     def has_role(self, role):
         return self.role == role

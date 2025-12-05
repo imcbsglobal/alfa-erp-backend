@@ -13,14 +13,14 @@ User = get_user_model()
 class UserAdmin(BaseUserAdmin):
     """Custom admin for User model"""
     
-    list_display = ['email', 'first_name', 'last_name', 'role', 'department', 'job_title', 'is_active', 'is_staff', 'date_joined']
+    list_display = ['email', 'name', 'role', 'department', 'job_title', 'is_active', 'is_staff', 'date_joined']
     list_filter = ['is_active', 'is_staff', 'is_superuser', 'role', 'date_joined']
-    search_fields = ['email', 'first_name', 'last_name', 'department']
+    search_fields = ['email', 'name', 'department']
     ordering = ['-date_joined']
     
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
-        ('Personal Info', {'fields': ('first_name', 'last_name', 'phone', 'avatar')}),
+        ('Personal Info', {'fields': ('name', 'phone', 'avatar')}),
         ('Organization', {'fields': ('department', 'job_title')}),
         ('Role & Permissions', {'fields': ('role', 'is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
         ('Important Dates', {'fields': ('last_login', 'date_joined')}),
@@ -30,7 +30,7 @@ class UserAdmin(BaseUserAdmin):
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
-            'fields': ('email', 'password1', 'password2', 'first_name', 'last_name', 'department', 'job_title', 'role', 'is_staff', 'is_active'),
+            'fields': ('email', 'password1', 'password2', 'name', 'department', 'job_title', 'role', 'is_staff', 'is_active'),
         }),
     )
     

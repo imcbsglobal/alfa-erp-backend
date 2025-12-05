@@ -145,8 +145,7 @@ curl -X POST http://localhost:8000/api/auth/users/ \
   -d '{
     "email": "newuser@example.com",
     "password": "SecurePass123!",
-    "first_name": "John",
-    "last_name": "Doe"
+    "name": "John Doe"
   }'
 ```
 
