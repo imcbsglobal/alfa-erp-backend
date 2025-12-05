@@ -8,34 +8,10 @@ from django.db import models
 from django.utils import timezone
 
 
-class Department(models.Model):
-    """Department model for organizing users"""
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=150, unique=True)
-    description = models.TextField(blank=True, null=True)
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        db_table = 'departments'
-        verbose_name = 'Department'
-        verbose_name_plural = 'Departments'
-        ordering = ['name']
-
-    def __str__(self):
-        return self.name
-
-
 class JobTitle(models.Model):
-    """Job Title model linked to departments"""
+    """Job Title model for user positions"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    title = models.CharField(max_length=150)
-    department = models.ForeignKey(
-        Department,
-        on_delete=models.CASCADE,
-        related_name='job_titles'
-    )
+    title = models.CharField(max_length=150, unique=True)
     description = models.TextField(blank=True, null=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -45,11 +21,10 @@ class JobTitle(models.Model):
         db_table = 'job_titles'
         verbose_name = 'Job Title'
         verbose_name_plural = 'Job Titles'
-        ordering = ['department', 'title']
-        unique_together = [['department', 'title']]
+        ordering = ['title']
 
     def __str__(self):
-        return f"{self.title} ({self.department.name})"
+        return self.title
 
 
 class UserManager(BaseUserManager):
@@ -100,13 +75,8 @@ class User(AbstractBaseUser, PermissionsMixin):
         help_text='Assigned role of the user'
     )
 
-    department = models.ForeignKey(
-        Department,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='users'
-    )
+    department = models.CharField(max_length=100, blank=True, null=True, help_text='Department name')
+ 
     job_title = models.ForeignKey(
         JobTitle,
         on_delete=models.SET_NULL,

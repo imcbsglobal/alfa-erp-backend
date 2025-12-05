@@ -27,16 +27,10 @@
 | POST | `/api/auth/users/{id}/activate/` | Activate user account | Admin |
 | POST | `/api/auth/users/{id}/deactivate/` | Deactivate user account | Admin |
 
-### Department & Job Title Endpoints
+### Job Title Endpoints
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
-| GET | `/api/auth/departments/` | List all departments with job titles | User |
-| POST | `/api/auth/departments/` | Create new department | Admin |
-| GET | `/api/auth/departments/{id}/` | Get department by ID | User |
-| PUT/PATCH | `/api/auth/departments/{id}/` | Update department | Admin |
-| DELETE | `/api/auth/departments/{id}/` | Delete department | Admin |
 | GET | `/api/auth/job-titles/` | List all job titles | User |
-| GET | `/api/auth/job-titles/?department={id}` | Filter job titles by department | User |
 | POST | `/api/auth/job-titles/` | Create new job title | Admin |
 | GET | `/api/auth/job-titles/{id}/` | Get job title by ID | User |
 | PUT/PATCH | `/api/auth/job-titles/{id}/` | Update job title | Admin |
@@ -81,14 +75,10 @@ Content-Type: application/json
       "full_name": "Admin User",
       "avatar": null,
       "role": "ADMIN",
-      "department": {
-        "id": "dept-uuid-123",
-        "name": "Administration"
-      },
+      "department": "Administration",
       "job_title": {
         "id": "job-uuid-456",
-        "title": "System Administrator",
-        "department_id": "dept-uuid-123"
+        "title": "System Administrator"
       },
       "is_staff": true,
       "is_superuser": true
@@ -211,7 +201,7 @@ Authorization: Bearer {admin_token}
         "last_name": "User",
         "full_name": "Admin User",
         "role": "ADMIN",
-        "department": "dept-uuid-123",
+        "department": "Administration",
         "job_title": "job-uuid-456",
         "is_active": true,
         "is_staff": true

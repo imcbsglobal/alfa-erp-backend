@@ -26,10 +26,11 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'full_name': self.user.get_full_name(),
             'avatar': (self.user.avatar.url if self.user.avatar else None),
             'role': self.user.role,
-            'department': {
-                'id': str(self.user.department.id),
-                'name': self.user.department.name
-            } if self.user.department else None,
+            # 'department': {
+            #     'id': str(self.user.department.id),
+            #     'name': self.user.department.name
+            # } if self.user.department else None,
+            'department': self.user.department ,
             'job_title': {
                 'id': str(self.user.job_title.id),
                 'title': self.user.job_title.title,
@@ -66,42 +67,42 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 class JobTitleSerializer(serializers.ModelSerializer):
     """Serializer for JobTitle model"""
-    department_name = serializers.CharField(source='department.name', read_only=True)
     
     class Meta:
-        model = get_user_model().job_title.field.related_model
-        fields = ['id', 'title', 'department', 'department_name', 'description', 'is_active', 'created_at', 'updated_at']
+        from apps.accounts.models import JobTitle
+        model = JobTitle
+        fields = ['id', 'title', 'description', 'is_active', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 
-class DepartmentSerializer(serializers.ModelSerializer):
-    """Serializer for Department model with nested job titles"""
-    job_titles = JobTitleSerializer(many=True, read_only=True)
+# class DepartmentSerializer(serializers.ModelSerializer):
+#     """Serializer for Department model with nested job titles"""
+#     job_titles = JobTitleSerializer(many=True, read_only=True)
     
-    class Meta:
-        from apps.accounts.models import Department
-        model = Department
-        fields = ['id', 'name', 'description', 'is_active', 'job_titles', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'created_at', 'updated_at']
+#     class Meta:
+#         from apps.accounts.models import Department
+#         model = Department
+#         fields = ['id', 'name', 'description', 'is_active', 'job_titles', 'created_at', 'updated_at']
+#         read_only_fields = ['id', 'created_at', 'updated_at']
 
 
-class DepartmentListSerializer(serializers.ModelSerializer):
-    """Lightweight Department serializer for lists with job_titles array"""
-    job_titles = serializers.SerializerMethodField()
+# class DepartmentListSerializer(serializers.ModelSerializer):
+#     """Lightweight Department serializer for lists with job_titles array"""
+#     job_titles = serializers.SerializerMethodField()
     
-    class Meta:
-        from apps.accounts.models import Department
-        model = Department
-        fields = ['id', 'name', 'description', 'is_active', 'job_titles']
+#     class Meta:
+#         from apps.accounts.models import Department
+#         model = Department
+#         fields = ['id', 'name', 'description', 'is_active', 'job_titles']
     
-    def get_job_titles(self, obj):
-        """Return array of job titles under this department"""
-        return [{
-            'id': str(jt.id),
-            'title': jt.title,
-            'description': jt.description,
-            'is_active': jt.is_active
-        } for jt in obj.job_titles.filter(is_active=True)]
+#     def get_job_titles(self, obj):
+#         """Return array of job titles under this department"""
+#         return [{
+#             'id': str(jt.id),
+#             'title': jt.title,
+#             'description': jt.description,
+#             'is_active': jt.is_active
+#         } for jt in obj.job_titles.filter(is_active=True)]
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -110,18 +111,17 @@ class UserSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
     password = serializers.CharField(write_only=True, required=False)
     avatar = serializers.ImageField(required=False, allow_null=True)
-    department_name = serializers.CharField(source='department.name', read_only=True)
     job_title_name = serializers.CharField(source='job_title.title', read_only=True)
     
     class Meta:
         model = User
         fields = [
             'id', 'email', 'first_name', 'last_name', 'full_name',
-            'phone', 'avatar', 'role', 'department', 'department_name',
+            'phone', 'avatar', 'role', 'department',
             'job_title', 'job_title_name', 'is_active', 'is_staff', 'date_joined',
             'last_login', 'password'
         ]
-        read_only_fields = ['id', 'date_joined', 'last_login', 'department_name', 'job_title_name']
+        read_only_fields = ['id', 'date_joined', 'last_login', 'job_title_name']
     
     def get_full_name(self, obj):
         return obj.get_full_name()

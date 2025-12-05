@@ -20,11 +20,9 @@ from .serializers import (
     UserSerializer,
     UserListSerializer,
     ChangePasswordSerializer,
-    DepartmentSerializer,
-    DepartmentListSerializer,
     JobTitleSerializer
 )
-from .models import Department, JobTitle
+from .models import JobTitle
 
 User = get_user_model()
 
@@ -128,40 +126,13 @@ class UserViewSet(BaseModelViewSet):
         )
 
 
-class DepartmentViewSet(BaseModelViewSet):
-    """
-    ViewSet for Department management
-    - List all departments with their job titles
-    - Create, update, delete departments (admin only)
-    """
-    queryset = Department.objects.all()
-    serializer_class = DepartmentSerializer
-    permission_classes = [IsAuthenticated]
-    
-    def get_serializer_class(self):
-        """Use lightweight serializer for list view"""
-        if self.action == 'list':
-            return DepartmentListSerializer
-        return DepartmentSerializer
-    
-    def get_permissions(self):
-        """
-        - list, retrieve: Authenticated users
-        - create, update, destroy: Admin only
-        """
-        if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            return [IsAdminUser()]
-        return [IsAuthenticated()]
-
-
 class JobTitleViewSet(BaseModelViewSet):
     """
     ViewSet for JobTitle management
     - List all job titles
     - Create, update, delete job titles (admin only)
-    - Filter by department
     """
-    queryset = JobTitle.objects.select_related('department').all()
+    queryset = JobTitle.objects.all()
     serializer_class = JobTitleSerializer
     permission_classes = [IsAuthenticated]
     
@@ -173,11 +144,3 @@ class JobTitleViewSet(BaseModelViewSet):
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
             return [IsAdminUser()]
         return [IsAuthenticated()]
-    
-    def get_queryset(self):
-        """Allow filtering by department"""
-        queryset = super().get_queryset()
-        department_id = self.request.query_params.get('department', None)
-        if department_id:
-            queryset = queryset.filter(department_id=department_id)
-        return queryset

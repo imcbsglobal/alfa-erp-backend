@@ -65,7 +65,7 @@ Authorization: Bearer <access_token>
         "last_name": "Doe",
         "full_name": "John Doe",
         "role": "USER",
-        "department": "dept-uuid-sales",
+        "department": "Sales",
         "job_title": "job-uuid-sales-rep",
         "is_active": true,
         "is_staff": false
@@ -77,7 +77,7 @@ Authorization: Bearer <access_token>
         "last_name": "Smith",
         "full_name": "Jane Smith",
         "role": "ADMIN",
-        "department": "dept-uuid-admin",
+        "department": "Administration",
         "job_title": "job-uuid-admin-mgr",
         "is_active": true,
         "is_staff": true
@@ -222,8 +222,7 @@ Required
     "phone": "+1234567890",
     "avatar": null,
     "role": "USER",
-    "department": "dept-uuid-123",
-    "department_name": "Sales",
+    "department": "Sales",
     "job_title": "job-uuid-456",
     "job_title_name": "Sales Manager",
     "is_active": true,
@@ -276,7 +275,7 @@ Content-Type: application/json
   "last_name": "Smith",
   "phone": "+9876543210",
   "role": "USER",
-  "department": "dept-uuid-123",
+  "department": "Sales",
   "job_title": "job-uuid-456",
   "is_staff": false,
   "is_active": true
@@ -290,8 +289,8 @@ Content-Type: application/json
 - `last_name` (string, optional): Last name
 - `phone` (string, optional): Phone number
 - `role` (string, optional): User role - `ADMIN`, `USER`, `SUPERADMIN` (default: `USER`)
-- `department` (UUID, optional): Department ID (must exist)
-- `job_title` (UUID, optional): Job Title ID (must exist and belong to the selected department)
+- `department` (string, optional): Department name (e.g., "Sales", "HR", "IT")
+- `job_title` (UUID, optional): Job Title ID (must exist)
 - `is_staff` (boolean, optional): Admin status (default: false)
 - `is_active` (boolean, optional): Active status (default: true)
 
@@ -312,8 +311,7 @@ Content-Type: application/json
     "phone": "+9876543210",
     "avatar": null,
     "role": "USER",
-    "department": "dept-uuid-123",
-    "department_name": "Sales",
+    "department": "Sales",
     "job_title": "job-uuid-456",
     "job_title_name": "Sales Representative",
     "is_active": true,

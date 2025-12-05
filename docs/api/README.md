@@ -15,7 +15,7 @@ Most endpoints require JWT authentication. Include the access token in the Autho
 Authorization: Bearer <access_token>
 ```
 
-Get tokens via the [Login endpoint](./authentication.md#login). The login response includes user `role`, `department`, and `job_title` information.
+Get tokens via the [Login endpoint](./authentication.md#login). The login response includes user `role` (single value), `department` (text field), and `job_title` (object with id and title).
 
 ## Standard Response Format
 
@@ -113,17 +113,12 @@ GET /api/auth/users/?search=admin&ordering=email
 - [Deactivate User](./users.md#deactivate-user) - `POST /api/auth/users/{id}/deactivate/`
 - [Upload Avatar](./users.md#upload-avatar) - `PATCH /api/auth/users/{id}/`
 
-### Departments & Job Titles
-- [List Departments](./departments_job_titles.md#list-all-departments) - `GET /api/auth/departments/`
-- [Get Department](./departments_job_titles.md#get-department-by-id) - `GET /api/auth/departments/{id}/`
-- [Create Department](./departments_job_titles.md#create-department) - `POST /api/auth/departments/`
-- [Update Department](./departments_job_titles.md#update-department) - `PUT/PATCH /api/auth/departments/{id}/`
-- [Delete Department](./departments_job_titles.md#delete-department) - `DELETE /api/auth/departments/{id}/`
-- [List Job Titles](./departments_job_titles.md#list-all-job-titles) - `GET /api/auth/job-titles/`
-- [Get Job Title](./departments_job_titles.md#get-job-title-by-id) - `GET /api/auth/job-titles/{id}/`
-- [Create Job Title](./departments_job_titles.md#create-job-title) - `POST /api/auth/job-titles/`
-- [Update Job Title](./departments_job_titles.md#update-job-title) - `PUT/PATCH /api/auth/job-titles/{id}/`
-- [Delete Job Title](./departments_job_titles.md#delete-job-title) - `DELETE /api/auth/job-titles/{id}/`
+### Job Titles
+- [List Job Titles](./job_titles.md#list-all-job-titles) - `GET /api/auth/job-titles/`
+- [Get Job Title](./job_titles.md#get-job-title-by-id) - `GET /api/auth/job-titles/{id}/`
+- [Create Job Title](./job_titles.md#create-job-title) - `POST /api/auth/job-titles/`
+- [Update Job Title](./job_titles.md#update-job-title) - `PUT/PATCH /api/auth/job-titles/{id}/`
+- [Delete Job Title](./job_titles.md#delete-job-title) - `DELETE /api/auth/job-titles/{id}/`
 
 ## Quick Start Examples
 
@@ -140,7 +135,7 @@ curl -X GET http://localhost:8000/api/auth/users/me/ \
   -H "Authorization: Bearer <access_token>"
 ```
 
-Note: The returned user object includes a single `role` field (ADMIN, USER, or SUPERADMIN), along with `department` and `job_title` information.
+Note: The returned user object includes a single `role` field (ADMIN, USER, or SUPERADMIN), `department` as a text field, and `job_title` as a UUID reference.
 
 ### 3. Create New User (Admin Only)
 ```bash
