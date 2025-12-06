@@ -32,7 +32,7 @@ Django REST Framework backend for ALFA ERP system with JWT authentication and ad
 
 1. **Clone the repository**
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/imcbsglobal/alfa-erp-backend
    cd alfa-erp-backend
    ```
 

@@ -102,7 +102,7 @@ class UserSerializer(serializers.ModelSerializer):
     """Serializer for User model"""
     
     password = serializers.CharField(write_only=True, required=False)
-    avatar = serializers.ImageField(required=False, allow_null=True)
+    # avatar = serializers.ImageField(required=False, allow_null=True)
     job_title_name = serializers.CharField(source='job_title.title', read_only=True)
     created_by_name = serializers.SerializerMethodField()
     
@@ -135,6 +135,10 @@ class UserSerializer(serializers.ModelSerializer):
         if password:
             user.set_password(password)
             user.save()
+
+        # if avatar and hasattr(avatar, "name") and avatar.name:
+        #     user.avatar = avatar
+
         
         return user
     
@@ -159,10 +163,10 @@ class UserListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for user lists"""
     
     job_title_name = serializers.CharField(source='job_title.title', read_only=True)
-    
+    created_by_name = serializers.CharField(source='User.name',read_only=True)
     class Meta:
         model = User
-        fields = ['id', 'email', 'name', 'role', 'department', 'job_title_name', 'is_active', 'is_staff']
+        fields = ['id', 'email', 'name', 'role', 'department', 'job_title_name', 'is_active', 'is_staff','created_by','avatar']
 
 
 class ChangePasswordSerializer(serializers.Serializer):
