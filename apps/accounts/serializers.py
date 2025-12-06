@@ -163,10 +163,10 @@ class UserListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for user lists"""
     
     job_title_name = serializers.CharField(source='job_title.title', read_only=True)
-    created_by_name = serializers.CharField(source='User.name',read_only=True)
+    created_by_name = serializers.CharField(source='created_by.name', read_only=True)
     class Meta:
         model = User
-        fields = ['id', 'email', 'name', 'role', 'department', 'job_title_name', 'is_active', 'is_staff','created_by','avatar']
+        fields = ['id', 'email', 'name', 'role', 'department', 'job_title_name', 'is_active', 'is_staff','created_by_name','avatar']
 
 
 class ChangePasswordSerializer(serializers.Serializer):
