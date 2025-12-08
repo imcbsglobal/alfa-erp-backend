@@ -1,156 +1,61 @@
-# ALFA ERP Backend - Requirements
-# Python 3.10+
-
-# ============================================================================
-# CORE FRAMEWORK
-# ============================================================================
-
-# Django 5.x (latest stable)
-Django>=5.0
-
-# Django REST Framework (latest)
-djangorestframework>=3.14.0
-
-# JWT Authentication
-djangorestframework-simplejwt>=5.3.0
-
-# ============================================================================
-# DATABASE
-# ============================================================================
-
-# PostgreSQL adapter
-psycopg2-binary>=2.9.9
-
-# ============================================================================
-# CONFIGURATION & ENVIRONMENT
-# ============================================================================
-
-# Environment variable management
-django-environ>=0.11.2
-
-# Python decouple (alternative to django-environ)
-python-decouple>=3.8
-
-# Python dotenv
-python-dotenv>=1.0.0
-
-# ============================================================================
-# API & CORS
-# ============================================================================
-
-# CORS headers
-django-cors-headers>=4.3.1
-
-# API documentation
-drf-yasg>=1.21.7
-
-# ============================================================================
-# UTILITIES
-# ============================================================================
-
-# Timezone support
-pytz>=2024.1
-
-# Date utilities
-python-dateutil>=2.8.2
-
-# Requests for external API calls
-requests>=2.31.0
-
-# ============================================================================
-# FILE HANDLING
-# ============================================================================
-
-# Pillow for image handling
-Pillow>=10.2.0
-
-# Excel export
-openpyxl>=3.1.2
-
-# PDF generation
-reportlab>=4.0.9
-
-# ============================================================================
-# FILTERING & SEARCH
-# ============================================================================
-
-# Django filter for queryset filtering
-django-filter>=23.5
-
-# ============================================================================
-# CACHING & ASYNC TASKS
-# ============================================================================
-
-# Celery for async tasks
-celery>=5.3.6
-
-# Redis as Celery broker and cache backend
-redis>=5.0.1
-
-# Django Redis
-django-redis>=5.4.0
-
-# ============================================================================
-# STATIC FILES
-# ============================================================================
-
-# Whitenoise for static files in production
-whitenoise>=6.6.0
-
-# ============================================================================
-# DEVELOPMENT TOOLS
-# ============================================================================
-
-# Django extensions for development utilities
-django-extensions>=3.2.3
-
-# Debug toolbar
-django-debug-toolbar>=4.2.0
-
-# Code formatting
-black>=24.1.1
-isort>=5.13.2
-
-# Linting
-flake8>=7.0.0
-pylint>=3.0.3
-pylint-django>=2.5.5
-
-# ============================================================================
-# TESTING
-# ============================================================================
-
-# Testing
-pytest>=7.4.4
-pytest-django>=4.7.0
-pytest-cov>=4.1.0
-factory-boy>=3.3.0
-
-# Faker for test data
-Faker>=22.2.0
-
-# IPython for better shell
-ipython>=8.20.0
-
-# Watchdog for auto-reload
-watchdog>=4.0.0
-
-# ============================================================================
-# PRODUCTION (Optional - uncomment as needed)
-# ============================================================================
-
-# WSGI HTTP Server
-gunicorn>=21.2.0
-
-# Production-grade task queue
-gevent>=24.2.1
-
-# Monitoring and error tracking
-sentry-sdk>=1.40.0
-
-# AWS S3 storage (uncomment if using AWS)
-# boto3>=1.34.34
-# django-storages>=1.14.2
-
-# Database connection pooling (uncomment if needed)
-# django-db-geventpool>=4.0.1
+asgiref==3.10.0
+boto3==1.40.64
+botocore==1.40.64
+certifi==2025.11.12
+charset-normalizer==3.4.4
+Django==5.0.14
+django-cors-headers==4.9.0
+django-storages==1.14.6
+djangorestframework==3.16.1
+djangorestframework_simplejwt==5.5.1
+greenlet==3.2.4
+idna==3.11
+inflection==0.5.1
+iniconfig==2.3.0
+isort==6.1.0
+jmespath==1.0.1
+mccabe==0.7.0
+mypy_extensions==1.1.0
+packaging==25.0
+parso==0.8.5
+pathspec==0.12.1
+pillow==12.0.0
+platformdirs==4.5.0
+pluggy==1.6.0
+postgres==4.0
+psycopg==3.2.9
+psycopg-binary==3.2.9
+psycopg2==2.9.11
+psycopg2-binary==2.9.11
+psycopg2-pool==1.2
+pure_eval==0.2.3
+pycodestyle==2.14.0
+pycparser==2.23
+pyflakes==3.4.0
+Pygments==2.19.2
+PyJWT==2.10.1
+python-dateutil==2.9.0.post0
+python-decouple==3.8
+python-dotenv==1.2.1
+pytokens==0.3.0
+pytz==2025.2
+PyYAML==6.0.3
+redis==7.1.0
+reportlab==4.4.5
+requests==2.32.5
+s3transfer==0.14.0
+sentry-sdk==2.46.0
+six==1.17.0
+sqlparse==0.5.3
+tomlkit==0.13.3
+traitlets==5.14.3
+tzdata==2025.2
+tzlocal==5.3.1
+uritemplate==4.2.0
+urllib3==2.5.0
+vine==5.1.0
+watchdog==6.0.0
+wcwidth==0.2.14
+whitenoise==6.11.0
+zope.event==6.1
+zope.interface==8.1.1
