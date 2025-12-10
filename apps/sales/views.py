@@ -2,16 +2,44 @@
 
 import time
 import json
-from collections import deque
+import queue
+import logging
+from django.db import IntegrityError
+
 
 from django.http import StreamingHttpResponse
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 
-from .serializers import InvoiceImportSerializer
-from .events import invoice_events  # global queue for SSE events
+from .serializers import InvoiceImportSerializer, InvoiceListSerializer
+from .events import invoice_events  
+from .models import Invoice
+from rest_framework import generics
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.permissions import IsAuthenticatedOrReadOnly
 
+
+logger = logging.getLogger(__name__)
+
+
+# ===== Pagination =====
+class InvoiceListPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
+# ===== List Invoices API =====
+class InvoiceListView(generics.ListAPIView):
+    """
+    GET /api/sales/invoices/
+    List all invoices with pagination, includes customer, salesman, items
+    """
+    queryset = Invoice.objects.select_related('customer', 'salesman', 'created_user').prefetch_related('items').order_by('-created_at')
+    serializer_class = InvoiceListSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    pagination_class = InvoiceListPagination
 
 # -----------------------------------
 # DRF API View: Import Invoice
@@ -24,23 +52,56 @@ class ImportInvoiceView(APIView):
     def post(self, request):
         serializer = InvoiceImportSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        invoice = serializer.save()
-        
+        invoice_no = serializer.validated_data.get("invoice_no")
+
+        # If you want to disallow duplicates: check before save and return 409
+        existing = Invoice.objects.filter(invoice_no=invoice_no).first()
+        if existing:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Invoice with this invoice_no already exists.",
+                    "data": {"id": existing.id, "invoice_no": existing.invoice_no},
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        try:
+            invoice = serializer.save()
+        except IntegrityError:
+            # Race condition: another request created the invoice concurrently
+            existing = Invoice.objects.filter(invoice_no=invoice_no).first()
+            if existing:
+                return Response(
+                    {
+                        "success": False,
+                        "message": "Invoice with this invoice_no already exists (race).",
+                        "data": {"id": existing.id, "invoice_no": existing.invoice_no},
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+            # unexpected DB error — re-raise or return generic 500
+            logger.exception("IntegrityError on invoice save (unexpected)")
+            return Response(
+                {"success": False, "message": "Failed to save invoice due to DB error."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
         # Set created_user to the authenticated user
         if request.user and request.user.is_authenticated:
             invoice.created_user = request.user
             invoice.save()
 
-        # Calculate total amount from items
         total_amount = sum(item.quantity * item.mrp for item in invoice.items.all())
 
-        # Push event for SSE live updates
-        invoice_events.append({
-            "id": invoice.id,
-            "invoice_no": invoice.invoice_no,
-            "amount": str(total_amount),
-            "created_at": invoice.created_at.isoformat()
-        })
+        # Push full invoice payload to SSE queue (same format as list API)
+        try:
+            invoice_refreshed = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(id=invoice.id)
+            serializer = InvoiceListSerializer(invoice_refreshed)
+            invoice_events.put(serializer.data, block=False)
+            logger.debug("Invoice event queued: %s", invoice.invoice_no)
+        except Exception:
+            logger.exception("Failed to enqueue invoice event")
 
         return Response(
             {
@@ -56,26 +117,28 @@ class ImportInvoiceView(APIView):
         )
 
 
-# -----------------------------------
-# SSE Stream View: Live Invoice Updates
-# -----------------------------------
+
 def invoice_stream(request):
-    """
-    SSE endpoint that streams new invoices in real-time.
-    Frontend can connect using EventSource.
-    """
 
     def event_stream():
         while True:
-            if invoice_events:  # check for new events
-                event = invoice_events.popleft()
+            try:
+                # Wait up to 1 second for new event
+                event = invoice_events.get(timeout=1)
+
                 yield f"data: {json.dumps(event)}\n\n"
-            
-            time.sleep(0.5)  
+
+            except queue.Empty:
+                # Send heartbeat to keep connection alive
+                yield ": keep-alive\n\n"
+
+            time.sleep(0.2)
 
     response = StreamingHttpResponse(
         event_stream(),
-        content_type='text/event-stream'
+        content_type="text/event-stream"
     )
-    response['Cache-Control'] = 'no-cache'
+    response["Cache-Control"] = "no-cache"
+    response["X-Accel-Buffering"] = "no"
+
     return response

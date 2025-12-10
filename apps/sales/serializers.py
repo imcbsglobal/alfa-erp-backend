@@ -3,6 +3,51 @@
 from rest_framework import serializers
 from .models import Invoice, InvoiceItem, Customer, Salesman
 
+
+# ===== Serializers for list/detail views =====
+
+class InvoiceItemSerializer(serializers.ModelSerializer):
+    """Serializer for invoice line items"""
+    class Meta:
+        model = InvoiceItem
+        fields = ['id', 'name', 'item_code', 'quantity', 'mrp', 'shelf_location', 'remarks']
+
+
+class CustomerReadSerializer(serializers.ModelSerializer):
+    """Read-only serializer for customer in invoice responses"""
+    class Meta:
+        model = Customer
+        fields = ['code', 'name', 'area', 'address1', 'address2', 'phone1', 'phone2', 'email']
+
+
+class SalesmanReadSerializer(serializers.ModelSerializer):
+    """Read-only serializer for salesman"""
+    class Meta:
+        model = Salesman
+        fields = ['id', 'name', 'phone']
+
+
+class InvoiceListSerializer(serializers.ModelSerializer):
+    """Serializer for invoice list and detail with nested data"""
+    customer = CustomerReadSerializer(read_only=True)
+    salesman = SalesmanReadSerializer(read_only=True)
+    items = InvoiceItemSerializer(many=True, read_only=True)
+    total_amount = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Invoice
+        fields = [
+            'id', 'invoice_no', 'invoice_date', 'customer', 'salesman', 
+            'created_by', 'items', 'total_amount', 'remarks', 'created_at'
+        ]
+    
+    def get_total_amount(self, obj):
+        """Calculate total from items"""
+        return sum(item.quantity * item.mrp for item in obj.items.all())
+
+
+# ===== Serializers for import =====
+
 class CustomerSerializer(serializers.Serializer):
     """Serializer for customer data in invoice import (allows update or create)"""
     code = serializers.CharField(max_length=50)

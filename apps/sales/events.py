@@ -1,3 +1,3 @@
-from collections import deque
+import queue
 
-invoice_events = deque()
+invoice_events = queue.Queue()
