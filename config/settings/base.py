@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     # Local apps
     'apps.accounts',
     'apps.accesscontrol',
+    'apps.sales',
 ]
 
 MIDDLEWARE = [

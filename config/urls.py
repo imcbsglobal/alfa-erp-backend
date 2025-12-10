@@ -14,6 +14,8 @@ urlpatterns = [
     path('api/auth/', include('apps.accounts.urls')),
     # Access control endpoints (menus, assignments)
     path('api/access/', include('apps.accesscontrol.urls')),
+    
+    path('api/sales/',include('apps.sales.urls'))
 ]
 
 # Serve media files in development

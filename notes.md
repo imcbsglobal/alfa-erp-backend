@@ -196,3 +196,117 @@ If you want, I will generate:
 * **Frontend menu config example (React)**
 
 Just say **“Generate seed & matrix”** and I’ll create it.
+
+
+
+
+apps 
+🎯 Final Recommended Django App Structure
+1. accounts/
+
+Handles Users, Roles, Permissions (RBAC), Login/JWT
+
+2. core/
+
+Common utilities:
+
+BaseModel with timestamps
+
+AuditLog
+
+File exports
+
+Shared enums, choices
+
+Logging middleware
+
+3. inventory/
+
+Handles:
+
+Item
+
+ItemBatch
+
+Stock
+
+Warehouse
+
+4. sales/
+
+Handles:
+
+SalesOrder (Bill)
+
+SalesOrderItem
+
+Workflow state transitions
+
+Taking assignment (picker/packer/dispatcher)
+
+This app covers:
+✔ picking
+✔ packing
+✔ dispatch assignment
+✔ status logs
+✔ timeline & audit
+
+No need for separate apps for each stage.
+
+5. delivery/
+
+Handles what happens after packing:
+
+PackingList
+
+Delivery
+
+Delivery challan printing
+
+Courier tracking
+
+Dispatch view (mobile-friendly)
+
+6. purchase/
+
+Handles:
+
+Purchase Orders
+
+Suppliers
+
+PO import (V-Task)
+
+GRN & GRNItem
+
+PO splitting
+
+7. payments/
+
+Handles payment follow-up:
+
+PaymentFollowupCase
+
+FollowupEntry
+
+Call logs
+
+Reminder tasks
+
+8. reports/
+
+KPI dashboard
+
+Aggregated metrics
+
+CSV/Excel report endpoints
+
+9. integrations/
+
+Handles:
+
+V-TASK import mapping
+
+File processing via Celery
+
+Background jobs
