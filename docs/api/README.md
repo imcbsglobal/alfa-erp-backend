@@ -120,6 +120,10 @@ GET /api/auth/users/?search=admin&ordering=email
 - [Update Job Title](./job_titles.md#update-job-title) - `PUT/PATCH /api/auth/job-titles/{id}/`
 - [Delete Job Title](./job_titles.md#delete-job-title) - `DELETE /api/auth/job-titles/{id}/`
 
+### Sales
+- [Import Invoice](./sales.md#import-invoice) - `POST /api/sales/import/invoice/`
+- [Invoice Stream (SSE)](./sales.md#sse-invoice-stream) - `GET /api/sales/sse/invoices/`
+
 ## Quick Start Examples
 
 ### 1. Login and Get Token
