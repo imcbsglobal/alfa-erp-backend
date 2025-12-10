@@ -27,7 +27,8 @@ class Invoice(models.Model):
     invoice_no = models.CharField(max_length=100, unique=True)
     invoice_date = models.DateField()
     salesman = models.ForeignKey(Salesman, on_delete=models.SET_NULL, null=True)
-    created_user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="created_invoices")
+    created_by = models.CharField(max_length=150, blank=True, null=True, help_text="Username/identifier of person who created invoice")
+    created_user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_invoices")
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE)
     remarks = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -38,7 +39,7 @@ class Invoice(models.Model):
 
 class InvoiceItem(models.Model):
     invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name="items")
-    item_name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, help_text="Item/product name")
     item_code = models.CharField(max_length=100)
     quantity = models.IntegerField()
     mrp = models.FloatField()
@@ -46,4 +47,4 @@ class InvoiceItem(models.Model):
     remarks = models.TextField(blank=True, null=True)
 
     def __str__(self):
-        return f"{self.item_name} - {self.invoice.invoice_no}"
+        return f"{self.name} - {self.invoice.invoice_no}"

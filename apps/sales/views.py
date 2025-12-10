@@ -25,18 +25,32 @@ class ImportInvoiceView(APIView):
         serializer = InvoiceImportSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         invoice = serializer.save()
+        
+        # Set created_user to the authenticated user
+        if request.user and request.user.is_authenticated:
+            invoice.created_user = request.user
+            invoice.save()
+
+        # Calculate total amount from items
+        total_amount = sum(item.quantity * item.mrp for item in invoice.items.all())
 
         # Push event for SSE live updates
         invoice_events.append({
             "id": invoice.id,
-            "amount": str(invoice.amount),
+            "invoice_no": invoice.invoice_no,
+            "amount": str(total_amount),
             "created_at": invoice.created_at.isoformat()
         })
 
         return Response(
             {
                 "success": True,
-                "message": "Invoice imported successfully"
+                "message": "Invoice imported successfully",
+                "data": {
+                    "id": invoice.id,
+                    "invoice_no": invoice.invoice_no,
+                    "total_amount": total_amount
+                }
             },
             status=status.HTTP_201_CREATED
         )

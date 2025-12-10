@@ -43,35 +43,36 @@ Required (Bearer token - JWT)
 ### Request Body
 ```json
 {
-  "invoice_no": "INV-2025-0001",
-  "invoice_date": "2025-12-05",
-  "salesman": "John Merchant",
+  "invoice_no": "INV-10222",
+  "invoice_date": "2025-01-18",
+  "salesman": "Ajay",
+  "created_by": "admin",
   "customer": {
-    "code": "CUST-001",
-    "name": "ACME Corp",
-    "area": "North",
-    "address1": "123 Main St",
+    "code": "CUST-889",
+    "name": "LifeCare Pharmacy",
+    "area": "Kozhikode",
+    "address1": "Near Railway Station",
     "address2": "",
-    "phone1": "+123456789",
+    "phone1": "9876543210",
     "phone2": "",
-    "email": "contact@acme.test"
+    "email": "lifecare@shop.com"
   },
   "items": [
     {
-      "item_name": "Widget A",
-      "item_code": "WIDGET-A",
-      "quantity": 10,
-      "mrp": 12.5,
-      "shelf_location": "A-1",
+      "name": "Paracetamol 650mg",
+      "item_code": "PR650",
+      "quantity": 20,
+      "mrp": 3.50,
+      "shelf_location": "R-12",
       "remarks": ""
     },
     {
-      "item_name": "Gadget B",
-      "item_code": "GADGET-B",
-      "quantity": 2,
-      "mrp": 50.0,
-      "shelf_location": "B-7",
-      "remarks": "Urgent"
+      "name": "Otrivin Nasal Spray",
+      "item_code": "OTN10",
+      "quantity": 10,
+      "mrp": 85.00,
+      "shelf_location": "G-04",
+      "remarks": ""
     }
   ]
 }
@@ -83,7 +84,12 @@ Required (Bearer token - JWT)
 {
   "success": true,
   "status_code": 201,
-  "message": "Invoice imported successfully"
+  "message": "Invoice imported successfully",
+  "data": {
+    "id": 1,
+    "invoice_no": "INV-10222",
+    "total_amount": 920.0
+  }
 }
 ```
 
@@ -163,14 +169,17 @@ es.onerror = (err) => {
 **Invoice**
 - `invoice_no` (string, unique)
 - `invoice_date` (date)
-- `salesman` (FK)
-- `created_user` (FK)
-- `customer` (FK)
+- `salesman` (FK to Salesman)
+- `created_by` (string, optional) - Username/identifier from import payload
+- `created_user` (FK to User) - Authenticated user who imported (set automatically)
+- `customer` (FK to Customer)
 - `remarks` (text)
+- `created_at` (datetime, auto)
 
 **InvoiceItem**
 - `invoice` (FK)
-- `item_name`, `item_code`, `quantity`, `mrp`, `shelf_location`, `remarks`
+- `name` - Item/product name
+- `item_code`, `quantity`, `mrp`, `shelf_location`, `remarks`
 
 ---
 

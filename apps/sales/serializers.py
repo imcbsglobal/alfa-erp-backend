@@ -3,14 +3,20 @@
 from rest_framework import serializers
 from .models import Invoice, InvoiceItem, Customer, Salesman
 
-class CustomerSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Customer
-        fields = ["code", "name", "area", "address1", "address2", "phone1", "phone2", "email"]
+class CustomerSerializer(serializers.Serializer):
+    """Serializer for customer data in invoice import (allows update or create)"""
+    code = serializers.CharField(max_length=50)
+    name = serializers.CharField(max_length=255)
+    area = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    address1 = serializers.CharField(required=False, allow_blank=True)
+    address2 = serializers.CharField(required=False, allow_blank=True)
+    phone1 = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    phone2 = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    email = serializers.EmailField(required=False, allow_blank=True)
 
 
 class ItemSerializer(serializers.Serializer):
-    item_name = serializers.CharField()
+    name = serializers.CharField()
     item_code = serializers.CharField()
     quantity = serializers.IntegerField()
     mrp = serializers.FloatField()
@@ -22,6 +28,7 @@ class InvoiceImportSerializer(serializers.Serializer):
     invoice_no = serializers.CharField()
     invoice_date = serializers.DateField()
     salesman = serializers.CharField()
+    created_by = serializers.CharField(required=False, allow_blank=True)
     customer = CustomerSerializer()
     items = ItemSerializer(many=True)
 
