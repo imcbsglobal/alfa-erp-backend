@@ -193,7 +193,8 @@ SALES_IMPORT_API_KEY = os.getenv('SALES_IMPORT_API_KEY', 'WEDFBNPOIUFSDFTY')
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = os.getenv(
     'CORS_ALLOWED_ORIGINS',
-    'http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000'
+    'http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000',
+    'https://alfa.imcbs.com/'
 ).split(',')
 
 CORS_ALLOW_CREDENTIALS = True
