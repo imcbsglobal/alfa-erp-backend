@@ -24,7 +24,8 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'name': self.user.name,
             'avatar': (self.user.avatar.url if self.user.avatar else None),
             'role': self.user.role,
-            'department': self.user.department,
+            'department': self.user.department.name if self.user.department else None,
+            'department_id': str(self.user.department.id) if self.user.department else None,
             'job_title': {
                 'id': str(self.user.job_title.id),
                 'title': self.user.job_title.title
@@ -64,19 +65,29 @@ class JobTitleSerializer(serializers.ModelSerializer):
     class Meta:
         from apps.accounts.models import JobTitle
         model = JobTitle
-        fields = ['id', 'title', 'description', 'is_active', 'created_at', 'updated_at']
+        fields = ['id', 'title', 'description', 'is_active', 'department_id', 'department', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
+    from apps.accounts.models import Department
 
-# class DepartmentSerializer(serializers.ModelSerializer):
-#     """Serializer for Department model with nested job titles"""
-#     job_titles = JobTitleSerializer(many=True, read_only=True)
+    department = serializers.CharField(source='department.name', read_only=True)
+    department_id = serializers.PrimaryKeyRelatedField(
+        source='department',
+        queryset=Department.objects.all(),
+        required=False,
+        allow_null=True
+    )
+
+
+class DepartmentSerializer(serializers.ModelSerializer):
+    """Serializer for Department model with nested job titles"""
+    job_titles = JobTitleSerializer(many=True, read_only=True)
     
-#     class Meta:
-#         from apps.accounts.models import Department
-#         model = Department
-#         fields = ['id', 'name', 'description', 'is_active', 'job_titles', 'created_at', 'updated_at']
-#         read_only_fields = ['id', 'created_at', 'updated_at']
+    class Meta:
+        from apps.accounts.models import Department
+        model = Department
+        fields = ['id', 'name', 'description', 'is_active', 'job_titles', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
 
 # class DepartmentListSerializer(serializers.ModelSerializer):
@@ -105,12 +116,15 @@ class UserSerializer(serializers.ModelSerializer):
     # avatar = serializers.ImageField(required=False, allow_null=True)
     job_title_name = serializers.CharField(source='job_title.title', read_only=True)
     created_by_name = serializers.SerializerMethodField()
+    department = serializers.SerializerMethodField()
+    from apps.accounts.models import Department
+    department_id = serializers.PrimaryKeyRelatedField(source='department', queryset=Department.objects.all(), required=False, allow_null=True)
     
     class Meta:
         model = User
         fields = [
             'id', 'email', 'name',
-            'phone', 'avatar', 'role', 'department',
+            'phone', 'avatar', 'role', 'department', 'department_id',
             'job_title', 'job_title_name', 'is_active', 'is_staff', 'date_joined',
             'last_login', 'password', 'created_by_name'
         ]
@@ -119,6 +133,11 @@ class UserSerializer(serializers.ModelSerializer):
     def get_created_by_name(self, obj):
         if obj.created_by:
             return obj.created_by.get_full_name()
+        return None
+
+    def get_department(self, obj):
+        if obj.department:
+            return obj.department.name
         return None
     
     def create(self, validated_data):
@@ -164,9 +183,11 @@ class UserListSerializer(serializers.ModelSerializer):
     
     job_title_name = serializers.CharField(source='job_title.title', read_only=True)
     created_by_name = serializers.CharField(source='created_by.name', read_only=True)
+    department = serializers.CharField(source='department.name', read_only=True)
+    department_id = serializers.UUIDField(source='department.id', read_only=True)
     class Meta:
         model = User
-        fields = ['id', 'email', 'name', 'role', 'department', 'job_title_name', 'is_active', 'is_staff','created_by_name','avatar']
+        fields = ['id', 'email', 'name', 'role', 'department', 'department_id', 'job_title_name', 'is_active', 'is_staff','created_by_name','avatar']
 
 
 class ChangePasswordSerializer(serializers.Serializer):

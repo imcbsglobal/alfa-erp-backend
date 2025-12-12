@@ -9,8 +9,10 @@ from django.db import IntegrityError
 
 from django.http import StreamingHttpResponse
 from rest_framework.views import APIView
+from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 from rest_framework import status
+from django.conf import settings
 
 from .serializers import InvoiceImportSerializer, InvoiceListSerializer
 from .events import invoice_events  
@@ -55,11 +57,24 @@ class InvoiceDetailView(generics.RetrieveAPIView):
 # -----------------------------------
 # DRF API View: Import Invoice
 # -----------------------------------
+class HasAPIKeyOrAuthenticated(BasePermission):
+    """Permission that allows access if the request has a valid API key OR the user is authenticated via regular auth."""
+    def has_permission(self, request, view):
+        # If user is authenticated, allow
+        if getattr(request, 'user', None) and request.user.is_authenticated:
+            return True
+        # Otherwise, check X-API-KEY header
+        api_key = request.headers.get('X-API-KEY') or request.META.get('HTTP_X_API_KEY')
+        expected = getattr(settings, 'SALES_IMPORT_API_KEY', 'WEDFBNPOIUFSDFTY')
+        return api_key == expected
+
+
 class ImportInvoiceView(APIView):
     """
     API endpoint to import a new invoice.
     After saving, it pushes an event to the SSE queue for live updates.
     """
+    permission_classes = [HasAPIKeyOrAuthenticated]
     def post(self, request):
         serializer = InvoiceImportSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

@@ -185,6 +185,10 @@ SIMPLE_JWT = {
     'TOKEN_TYPE_CLAIM': 'token_type',
 }
 
+# API key used by external systems to import invoices.
+# IMPORTANT: Set this in your environment for production; the default below is insecure.
+SALES_IMPORT_API_KEY = os.getenv('SALES_IMPORT_API_KEY', 'WEDFBNPOIUFSDFTY')
+
 # CORS Settings
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = os.getenv(

@@ -154,6 +154,16 @@ Required (Bearer token - JWT)
 ```json
 {
   "invoice_no": "INV-10222",
+
+### Import Authentication (API key)
+
+This import endpoint supports a simple API key for external systems. The client must include the header:
+
+```
+X-API-KEY: <your-import-api-key>
+```
+
+Set the key on the server using the `SALES_IMPORT_API_KEY` environment variable (recommended) or in `config.settings.base.SALES_IMPORT_API_KEY` for development. The server will return `401 Unauthorized` if the key is missing or invalid.
   "invoice_date": "2025-01-18",
   "salesman": "Ajay",
   "created_by": "admin",

@@ -10,11 +10,13 @@ from .views import (
     UserViewSet,
     JobTitleViewSet
 )
+from .views import DepartmentViewSet
 
 router = DefaultRouter()
 #  /api/auth/users/` — Admin-only create user 
 router.register(r'users', UserViewSet, basename='user')
 router.register(r'job-titles', JobTitleViewSet, basename='job-title')
+router.register(r'departments', DepartmentViewSet, basename='department')
 
 app_name = 'accounts'
 

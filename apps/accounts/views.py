@@ -22,7 +22,8 @@ from .serializers import (
     ChangePasswordSerializer,
     JobTitleSerializer
 )
-from .models import JobTitle
+from .models import JobTitle, Department
+from .serializers import DepartmentSerializer
 
 User = get_user_model()
 
@@ -141,6 +142,25 @@ class JobTitleViewSet(BaseModelViewSet):
         - list, retrieve: Authenticated users
         - create, update, destroy: Admin only
         """
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            return [IsAdminUser()]
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        dept = self.request.query_params.get('department') if hasattr(self, 'request') else None
+        if dept:
+            return qs.filter(department_id=dept)
+        return qs
+
+
+class DepartmentViewSet(BaseModelViewSet):
+    """ViewSet for Department management"""
+    queryset = Department.objects.all()
+    serializer_class = DepartmentSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
             return [IsAdminUser()]
         return [IsAuthenticated()]

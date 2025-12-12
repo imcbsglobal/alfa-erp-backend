@@ -74,6 +74,7 @@ Content-Type: application/json
       "avatar": null,
       "role": "ADMIN",
       "department": "Administration",
+      "department_id": "dept-uuid-123",
       "job_title": {
         "id": "job-uuid-456",
         "title": "System Administrator"

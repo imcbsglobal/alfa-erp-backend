@@ -4,7 +4,7 @@ Admin configuration for accounts app
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth import get_user_model
-from .models import JobTitle
+from .models import JobTitle, Department
 
 User = get_user_model()
 
@@ -15,7 +15,7 @@ class UserAdmin(BaseUserAdmin):
     
     list_display = ['email', 'name', 'role', 'department', 'job_title', 'is_active', 'is_staff', 'date_joined']
     list_filter = ['is_active', 'is_staff', 'is_superuser', 'role', 'date_joined']
-    search_fields = ['email', 'name', 'department']
+    search_fields = ['email', 'name', 'department__name']
     ordering = ['-date_joined']
     
     fieldsets = (
@@ -40,7 +40,16 @@ class UserAdmin(BaseUserAdmin):
 @admin.register(JobTitle)
 class JobTitleAdmin(admin.ModelAdmin):
     """Admin for JobTitle model"""
-    list_display = ['title', 'is_active', 'created_at']
+    list_display = ['title', 'department', 'is_active', 'created_at']
+    list_filter = ['department', 'is_active', 'created_at']
+    search_fields = ['title', 'description', 'department__name']
+    ordering = ['department', 'title']
+
+
+@admin.register(Department)
+class DepartmentAdmin(admin.ModelAdmin):
+    """Admin for Department model"""
+    list_display = ['name', 'is_active', 'created_at']
     list_filter = ['is_active', 'created_at']
-    search_fields = ['title', 'description']
-    ordering = ['title']
+    search_fields = ['name', 'description']
+    ordering = ['name']
