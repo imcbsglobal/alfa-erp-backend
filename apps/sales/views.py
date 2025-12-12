@@ -41,6 +41,17 @@ class InvoiceListView(generics.ListAPIView):
     permission_classes = [IsAuthenticatedOrReadOnly]
     pagination_class = InvoiceListPagination
 
+
+# ===== Retrieve Invoice API =====
+class InvoiceDetailView(generics.RetrieveAPIView):
+    """
+    GET /api/sales/invoices/{id}/
+    Retrieve a single invoice by primary key with nested customer, salesman and items.
+    """
+    queryset = Invoice.objects.select_related('customer', 'salesman', 'created_user').prefetch_related('items')
+    serializer_class = InvoiceListSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
 # -----------------------------------
 # DRF API View: Import Invoice
 # -----------------------------------

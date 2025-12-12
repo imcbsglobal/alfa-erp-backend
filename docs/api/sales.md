@@ -108,6 +108,39 @@ curl -X GET "http://localhost:8000/api/sales/invoices/?page=1&page_size=20"
 
 ---
 
+## 2. Get Invoice by ID
+`GET /api/sales/invoices/{id}/`
+
+### Purpose
+Retrieve a single invoice by its primary key with nested details (customer, salesman, items).
+
+### Authentication
+Optional (IsAuthenticatedOrReadOnly) - public read access by default
+
+### Response
+**Success (200 OK)**
+```json
+{
+  "id": 31,
+  "invoice_no": "INV-77052",
+  "invoice_date": "2025-01-18",
+  "customer": { ... },
+  "salesman": { ... },
+  "created_by": "admin",
+  "items": [...],
+  "total_amount": 920.0,
+  "remarks": null,
+  "created_at": "2025-12-10T12:14:31.800134Z"
+}
+```
+
+### cURL example
+```bash
+curl -X GET "http://localhost:8000/api/sales/invoices/31/"
+```
+
+---
+
 ## 2. Import Invoice
 `POST /api/sales/import/invoice/`
 
