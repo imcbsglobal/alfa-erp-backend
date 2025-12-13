@@ -5,7 +5,7 @@ import json
 import queue
 import logging
 from django.db import IntegrityError
-
+from django.utils import timezone
 
 from django.http import StreamingHttpResponse
 from rest_framework.views import APIView
@@ -14,12 +14,24 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.conf import settings
 
-from .serializers import InvoiceImportSerializer, InvoiceListSerializer
+from .serializers import (
+    InvoiceImportSerializer, 
+    InvoiceListSerializer,
+    PickingSessionCreateSerializer,
+    PickingSessionReadSerializer,
+    CompletePickingSerializer,
+    PackingSessionCreateSerializer,
+    PackingSessionReadSerializer,
+    CompletePackingSerializer,
+    DeliverySessionCreateSerializer,
+    DeliverySessionReadSerializer,
+    CompleteDeliverySerializer,
+)
 from .events import invoice_events  
-from .models import Invoice
+from .models import Invoice, PickingSession, PackingSession, DeliverySession
 from rest_framework import generics
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import IsAuthenticatedOrReadOnly
+from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
 
 
 logger = logging.getLogger(__name__)
@@ -168,3 +180,335 @@ def invoice_stream(request):
     response["X-Accel-Buffering"] = "no"
 
     return response
+
+
+# ===== PICKING WORKFLOW =====
+
+class StartPickingView(APIView):
+    """
+    POST /api/sales/picking/start/
+    Start picking session - User scans their ID to begin picking
+    Body: {
+        "invoice_no": "INV-001",
+        "user_id": "uuid-of-user",
+        "notes": "Starting picking"
+    }
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        serializer = PickingSessionCreateSerializer(data=request.data)
+        
+        if not serializer.is_valid():
+            return Response({
+                "success": False,
+                "message": "Validation failed",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        picking_session = serializer.save()
+        
+        # Emit SSE event for invoice status change
+        try:
+            invoice = picking_session.invoice
+            invoice_refreshed = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(id=invoice.id)
+            invoice_data = InvoiceListSerializer(invoice_refreshed).data
+            invoice_events.put(invoice_data, block=False)
+        except Exception:
+            logger.exception("Failed to emit picking start event")
+        
+        response_serializer = PickingSessionReadSerializer(picking_session)
+        return Response({
+            "success": True,
+            "message": f"Picking started by {request.user.name}",
+            "data": response_serializer.data
+        }, status=status.HTTP_201_CREATED)
+
+
+class CompletePickingView(APIView):
+    """
+    POST /api/sales/picking/complete/
+    Complete picking - User scans their ID to confirm completion
+    Body: {
+        "invoice_no": "INV-001",
+        "user_id": "uuid-of-user",
+        "notes": "Picking completed"
+    }
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        serializer = CompletePickingSerializer(data=request.data)
+        
+        if not serializer.is_valid():
+            return Response({
+                "success": False,
+                "message": "Validation failed",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        validated_data = serializer.validated_data
+        picking_session = validated_data['picking_session']
+        invoice = validated_data['invoice']
+        notes = validated_data.get('notes', '')
+        
+        # Update picking session
+        picking_session.end_time = timezone.now()
+        picking_session.picking_status = "PICKED"
+        if notes:
+            picking_session.notes = (picking_session.notes or '') + f"\n{notes}"
+        picking_session.save()
+        
+        # Update invoice status
+        invoice.status = "PICKED"
+        invoice.save(update_fields=['status'])
+        
+        # Emit SSE event
+        try:
+            invoice_refreshed = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(id=invoice.id)
+            invoice_data = InvoiceListSerializer(invoice_refreshed).data
+            invoice_events.put(invoice_data, block=False)
+        except Exception:
+            logger.exception("Failed to emit picking complete event")
+        
+        response_serializer = PickingSessionReadSerializer(picking_session)
+        return Response({
+            "success": True,
+            "message": f"Picking completed for {invoice.invoice_no}",
+            "data": response_serializer.data
+        }, status=status.HTTP_200_OK)
+
+
+# ===== PACKING WORKFLOW =====
+
+class StartPackingView(APIView):
+    """
+    POST /api/sales/packing/start/
+    Start packing session - User scans their ID to begin packing
+    Body: {
+        "invoice_no": "INV-001",
+        "user_id": "uuid-of-user",
+        "notes": "Starting packing"
+    }
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        serializer = PackingSessionCreateSerializer(data=request.data)
+        
+        if not serializer.is_valid():
+            return Response({
+                "success": False,
+                "message": "Validation failed",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        validated_data = serializer.validated_data
+        invoice = validated_data['invoice']
+        user = validated_data['user']
+        notes = validated_data.get('notes', '')
+        
+        # Create packing session
+        packing_session = PackingSession.objects.create(
+            invoice=invoice,
+            packer=user,
+            start_time=timezone.now(),
+            packing_status="IN_PROGRESS",
+            notes=notes
+        )
+        
+        # Update invoice status
+        invoice.status = "PACKING"
+        invoice.save(update_fields=['status'])
+        
+        # Emit SSE event
+        try:
+            invoice_refreshed = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(id=invoice.id)
+            invoice_data = InvoiceListSerializer(invoice_refreshed).data
+            invoice_events.put(invoice_data, block=False)
+        except Exception:
+            logger.exception("Failed to emit packing start event")
+        
+        response_serializer = PackingSessionReadSerializer(packing_session)
+        return Response({
+            "success": True,
+            "message": f"Packing started by {user.name}",
+            "data": response_serializer.data
+        }, status=status.HTTP_201_CREATED)
+
+
+class CompletePackingView(APIView):
+    """
+    POST /api/sales/packing/complete/
+    Complete packing - User scans their ID to confirm completion
+    Body: {
+        "invoice_no": "INV-001",
+        "user_id": "uuid-of-user",
+        "notes": "Packing completed"
+    }
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        serializer = CompletePackingSerializer(data=request.data)
+        
+        if not serializer.is_valid():
+            return Response({
+                "success": False,
+                "message": "Validation failed",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        validated_data = serializer.validated_data
+        packing_session = validated_data['packing_session']
+        invoice = validated_data['invoice']
+        notes = validated_data.get('notes', '')
+        
+        # Update packing session
+        packing_session.end_time = timezone.now()
+        packing_session.packing_status = "PACKED"
+        if notes:
+            packing_session.notes = (packing_session.notes or '') + f"\n{notes}"
+        packing_session.save()
+        
+        # Update invoice status
+        invoice.status = "PACKED"
+        invoice.save(update_fields=['status'])
+        
+        # Emit SSE event
+        try:
+            invoice_refreshed = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(id=invoice.id)
+            invoice_data = InvoiceListSerializer(invoice_refreshed).data
+            invoice_events.put(invoice_data, block=False)
+        except Exception:
+            logger.exception("Failed to emit packing complete event")
+        
+        response_serializer = PackingSessionReadSerializer(packing_session)
+        return Response({
+            "success": True,
+            "message": f"Packing completed for {invoice.invoice_no}",
+            "data": response_serializer.data
+        }, status=status.HTTP_200_OK)
+
+
+# ===== DELIVERY WORKFLOW =====
+
+class StartDeliveryView(APIView):
+    """
+    POST /api/sales/delivery/start/
+    Start delivery session - User scans their ID (required for DIRECT/INTERNAL)
+    Body: {
+        "invoice_no": "INV-001",
+        "user_id": "uuid-of-user",  # Required for DIRECT/INTERNAL
+        "delivery_type": "DIRECT",  # DIRECT, COURIER, INTERNAL
+        "courier_name": "DHL",      # For COURIER type
+        "tracking_no": "TRK123",    # Optional
+        "notes": "Starting delivery"
+    }
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        serializer = DeliverySessionCreateSerializer(data=request.data)
+        
+        if not serializer.is_valid():
+            return Response({
+                "success": False,
+                "message": "Validation failed",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        validated_data = serializer.validated_data
+        invoice = validated_data['invoice']
+        user = validated_data.get('user')
+        delivery_type = validated_data['delivery_type']
+        courier_name = validated_data.get('courier_name', '')
+        tracking_no = validated_data.get('tracking_no', '')
+        notes = validated_data.get('notes', '')
+        
+        # Create delivery session
+        delivery_session = DeliverySession.objects.create(
+            invoice=invoice,
+            delivery_type=delivery_type,
+            assigned_to=user,
+            courier_name=courier_name,
+            tracking_no=tracking_no,
+            start_time=timezone.now(),
+            delivery_status="IN_TRANSIT",
+            notes=notes
+        )
+        
+        # Update invoice status
+        invoice.status = "DISPATCHED"
+        invoice.save(update_fields=['status'])
+        
+        # Emit SSE event
+        try:
+            invoice_refreshed = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(id=invoice.id)
+            invoice_data = InvoiceListSerializer(invoice_refreshed).data
+            invoice_events.put(invoice_data, block=False)
+        except Exception:
+            logger.exception("Failed to emit delivery start event")
+        
+        response_serializer = DeliverySessionReadSerializer(delivery_session)
+        return Response({
+            "success": True,
+            "message": f"Delivery started - {delivery_type}",
+            "data": response_serializer.data
+        }, status=status.HTTP_201_CREATED)
+
+
+class CompleteDeliveryView(APIView):
+    """
+    POST /api/sales/delivery/complete/
+    Complete delivery - User scans their ID to confirm delivery
+    Body: {
+        "invoice_no": "INV-001",
+        "user_id": "uuid-of-user",  # Optional for COURIER
+        "delivery_status": "DELIVERED",  # DELIVERED or IN_TRANSIT
+        "notes": "Delivered to customer"
+    }
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        serializer = CompleteDeliverySerializer(data=request.data)
+        
+        if not serializer.is_valid():
+            return Response({
+                "success": False,
+                "message": "Validation failed",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        validated_data = serializer.validated_data
+        delivery_session = validated_data['delivery_session']
+        invoice = validated_data['invoice']
+        delivery_status = validated_data.get('delivery_status', 'DELIVERED')
+        notes = validated_data.get('notes', '')
+        
+        # Update delivery session
+        delivery_session.end_time = timezone.now()
+        delivery_session.delivery_status = delivery_status
+        if notes:
+            delivery_session.notes = (delivery_session.notes or '') + f"\n{notes}"
+        delivery_session.save()
+        
+        # Update invoice status
+        invoice.status = "DELIVERED" if delivery_status == "DELIVERED" else "DISPATCHED"
+        invoice.save(update_fields=['status'])
+        
+        # Emit SSE event
+        try:
+            invoice_refreshed = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(id=invoice.id)
+            invoice_data = InvoiceListSerializer(invoice_refreshed).data
+            invoice_events.put(invoice_data, block=False)
+        except Exception:
+            logger.exception("Failed to emit delivery complete event")
+        
+        response_serializer = DeliverySessionReadSerializer(delivery_session)
+        return Response({
+            "success": True,
+            "message": f"Delivery {delivery_status.lower()} for {invoice.invoice_no}",
+            "data": response_serializer.data
+        }, status=status.HTTP_200_OK)

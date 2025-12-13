@@ -318,6 +318,234 @@ es.onerror = (err) => {
 
 ---
 
+## 4. Picking, Packing & Delivery Workflow ✅
+
+These endpoints implement the warehouse workflow using employee ID scanning at each stage. Authenticated users scan their ID (UUID) to start and/or complete jobs. Each endpoint validates invoice state and user identity and emits an SSE event to `/api/sales/sse/invoices/` when status changes.
+
+### Status Transition Summary
+- CREATED → IN_PROCESS (picking started)
+- IN_PROCESS → PICKED (picking completed)
+- PICKED → PACKING (packing started)
+- PACKING → PACKED (packing completed)
+- PACKED → DISPATCHED (delivery started)
+- DISPATCHED → DELIVERED (delivery completed)
+
+> Note: The server enforces sequential transitions and prevents duplicate sessions.
+
+---
+
+### 4.1 Start Picking
+`POST /api/sales/picking/start/`
+
+Purpose: Create a picking session and set invoice status to `IN_PROCESS` when a user scans their ID to begin picking.
+
+Authentication: Required (Bearer token)
+
+Request body:
+```json
+{
+  "invoice_no": "INV-001",
+  "notes": "Starting picking",
+  "user_id": "uuid-of-user",
+}
+```
+
+Success (201 Created):
+```json
+{
+  "success": true,
+  "message": "Picking started by John Doe",
+  "data": {
+    "id": 12,
+    "invoice": 31,
+    "invoice_no": "INV-001",
+    "picker": "uuid-of-picker",
+    "picker_name": "John Doe",
+    "start_time": "2025-12-10T12:30:00Z",
+    "picking_status": "PREPARING",
+    "notes": "Starting picking",
+    "duration_minutes": null
+  }
+}
+```
+
+Errors:
+- 400 Bad Request — validation errors (invoice not found, invalid status, or picking already exists)
+- 401 Unauthorized — missing/invalid token
+
+cURL example:
+```bash
+curl -X POST "http://localhost:8000/api/sales/picking/start/" \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"invoice_no":"INV-001","notes":"Starting picking"}'
+```
+
+Note on user: the `picker` is recorded from the scanned `user_id` that is provided in the request (`PickingSession.picker`) — the Start Picking endpoint accepts `user_id` in the request body and resolves it to a User record similar to Packing.
+
+---
+
+### 4.2 Complete Picking (ID scan)
+`POST /api/sales/picking/complete/`
+
+Purpose: User scans their ID to confirm picking completion. The system verifies the scanned UUID matches the user who started the picking session. Records `end_time`, sets `picking_status` to `PICKED`, and updates invoice status to `PICKED`.
+
+Request body:
+```json
+{
+  "invoice_no": "INV-001",
+  "user_id": "uuid-of-user",
+  "notes": "Picked all items"
+}
+```
+
+Success (200 OK):
+```json
+{
+  "success": true,
+  "message": "Picking completed for INV-001",
+  "data": {
+    "id": 12,
+    "invoice_no": "INV-001",
+    "picker": "uuid-of-picker",
+    "picker_name": "John Doe",
+    "start_time": "2025-12-10T12:30:00Z",
+    "end_time": "2025-12-10T12:45:00Z",
+    "picking_status": "PICKED",
+    "duration_minutes": 15.0
+  }
+}
+```
+
+Errors include:
+- 400 — invoice not found, no picking session, ID mismatch, or picking already completed
+
+---
+
+### 4.3 Start Packing
+`POST /api/sales/packing/start/`
+
+Purpose: Start a packing session. The invoice must be in `PICKED` status before packing begins.
+
+Request body:
+```json
+{
+  "invoice_no": "INV-001",
+  "user_id": "uuid-of-packer",
+  "notes": "Starting packing"
+}
+```
+
+Success (201 Created): returns `PackingSessionReadSerializer` with `packing_status` `IN_PROGRESS` and sets invoice status to `PACKING`.
+
+Errors:
+- 400 — invoice must be in PICKED state, duplicate packing session, invalid user ID
+
+Note on user: the `packer` is recorded from the scanned `user_id` provided in the request and stored in `PackingSession.packer`.
+
+---
+
+### 4.4 Complete Packing (ID scan)
+`POST /api/sales/packing/complete/`
+
+Purpose: User scans ID to complete packing; verifies same user started packing. Sets `packing_status` to `PACKED` and invoice status to `PACKED`.
+
+Request body:
+```json
+{
+  "invoice_no": "INV-001",
+  "user_id": "uuid-of-packer",
+  "notes": "Packed and ready"
+}
+```
+
+Success (200 OK): returns updated packing session with `end_time` and `duration_minutes`.
+
+---
+
+### 4.5 Start Delivery
+`POST /api/sales/delivery/start/`
+
+Purpose: Create a delivery session and set invoice status to `DISPATCHED`. Delivery has three types:
+- `DIRECT` — requires user ID scan (assigned delivery person)
+- `COURIER` — requires `courier_name` and is allowed without user_id
+- `INTERNAL` — requires user ID scan
+
+Request body examples:
+
+DIRECT / INTERNAL
+```json
+{
+  "invoice_no": "INV-001",
+  "user_id": "uuid-of-delivery-person",
+  "delivery_type": "DIRECT",
+  "notes": "Delivering to ABC shop"
+}
+```
+
+COURIER
+```json
+{
+  "invoice_no": "INV-001",
+  "delivery_type": "COURIER",
+  "courier_name": "DHL Express",
+  "tracking_no": "TRK-12345",
+  "notes": "Handed to courier"
+}
+```
+
+Success (201 Created): returns created `DeliverySession` and sets invoice status to `DISPATCHED`.
+
+Validation errors (400): invoice not in `PACKED` status, missing courier_name for COURIER, or missing user_id for DIRECT/INTERNAL.
+
+Note on user: for `DIRECT` and `INTERNAL` delivery types the endpoint requires a `user_id` and will set `DeliverySession.assigned_to` to that user; for `COURIER` the `assigned_to` may be left blank and `courier_name` is used instead.
+
+---
+
+### 4.6 Complete Delivery (ID scan / courier confirmation)
+`POST /api/sales/delivery/complete/`
+
+Purpose: Confirm delivery. For DIRECT/INTERNAL deliveries, the scanned `user_id` must match assigned delivery user. For COURIER deliveries, `user_id` is optional. Sets `delivery_status` (`DELIVERED` or `IN_TRANSIT`) and updates invoice status (`DELIVERED` when delivered).
+
+Request body:
+```json
+{
+  "invoice_no": "INV-001",
+  "user_id": "uuid-of-delivery-person",
+  "delivery_status": "DELIVERED",
+  "notes": "Delivered to counter"
+}
+```
+
+Success (200 OK): returns updated delivery session and invoice status.
+
+Errors:
+- 400 — invoice/delivery session not found, user ID mismatch for DIRECT/INTERNAL, or delivery already completed
+
+---
+
+### JavaScript / Client integration tips 💡
+- Use your barcode/QR scanner to read employee UUIDs and send them as `user_id` in requests above.
+- After each successful state transition the server emits an SSE event to `/api/sales/sse/invoices/` — listen with `EventSource` to update UI in real-time.
+
+Client example (axios + EventSource):
+```javascript
+// Start picking (scanner supplies user_id)
+await axios.post(`${API_BASE_URL}/sales/picking/start/`, { invoice_no: 'INV-001', user_id: '<uuid>' }, { headers: { Authorization: `Bearer ${token}`}});
+
+// Complete picking
+await axios.post(`${API_BASE_URL}/sales/picking/complete/`, { invoice_no: 'INV-001', user_id: '<uuid>' }, { headers: { Authorization: `Bearer ${token}`}});
+
+// Listen for invoice updates
+const es = new EventSource(`${API_BASE_URL}/sales/sse/invoices/`);
+es.onmessage = (evt) => {
+  const invoice = JSON.parse(evt.data);
+  // refresh UI for invoice.invoice_no
+}
+```
+
+---
+
 ## Data Model Overview
 **Salesman**
 - `name` (string)
