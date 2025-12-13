@@ -1,7 +1,8 @@
 # apps/sales/serializers.py
 
 from rest_framework import serializers
-from .models import Invoice, InvoiceItem, Customer, Salesman
+from .models import Invoice, InvoiceItem, Customer, Salesman,PickingSession,PackingSession
+from django.utils import timezone
 
 
 # ===== Serializers for list/detail views =====
@@ -99,3 +100,55 @@ class InvoiceImportSerializer(serializers.Serializer):
             InvoiceItem.objects.create(invoice=invoice, **item)
 
         return invoice
+
+
+#Picking
+class PickingSessionCreateSerializer(serializers.ModelSerializer):
+    invoice_no = serializers.CharField(write_only=True)
+
+    class Meta :
+        model =PickingSession
+        fields =[
+            'invoice_no',
+            'notes'
+        ]
+
+    def validate_invoice_no(self,value):
+        try :
+            invoice = Invoice.objects.get(invoice_no=value)
+        except Invoice.DoesNotExist:
+            raise serializers.ValidationError("Invoice no found!")
+        
+        if invoice.status not in ['CREATED','IN_PROCESS']:
+            raise serializers.ValidationError(
+                f"Invoice cannot be picked in '{invoice.status}' state."
+            )
+        # Prevent duplicate picking session
+        if hasattr(invoice, "pickingsession"):
+            raise serializers.ValidationError(
+                "Picking session already exists for this invoice."
+            )
+
+        return value
+    
+    def create(self, validated_data):
+        invoice_no = validated_data.pop("invoice_no")
+        invoice = Invoice.objects.get(invoice_no=invoice_no)
+
+        user = self.context["request"].user
+
+        picking_session = PickingSession.objects.create(
+            invoice=invoice,
+            picker=user,
+            start_time=timezone.now(),
+            picking_status="PREPARING",
+            **validated_data
+        )
+
+        # Update invoice status
+        invoice.status = "IN_PROCESS"
+        invoice.save(update_fields=["status"])
+
+        return picking_session
+
+

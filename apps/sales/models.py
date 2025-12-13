@@ -34,7 +34,7 @@ class Invoice(models.Model):
     status = models.CharField(
         max_length=20,
         choices=[
-            ("CREATED", "Created"),            # invoice/order created; waiting to be processed
+            ("`CREATED`", "Created"),            # invoice/order created; waiting to be processed
             ("IN_PROCESS", "In Process"),      # items being prepared/picked for the invoice
             ("PICKED", "Picked"),              # all items picked; ready for packing
             ("PACKING", "Packing"),            # packing in progress (bag/box preparation)
