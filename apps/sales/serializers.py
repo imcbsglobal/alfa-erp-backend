@@ -107,9 +107,9 @@ class InvoiceImportSerializer(serializers.Serializer):
 
 #Picking
 class PickingSessionCreateSerializer(serializers.Serializer):
-    """Start picking session - requires user ID scan (consistent with packing)"""
+    """Start picking session - requires user email scan"""
     invoice_no = serializers.CharField()
-    user_id = serializers.UUIDField(help_text="Scanned user ID")
+    email = serializers.EmailField()
     notes = serializers.CharField(required=False, allow_blank=True)
 
     def validate(self, data):
@@ -131,9 +131,9 @@ class PickingSessionCreateSerializer(serializers.Serializer):
 
         # Verify user
         try:
-            user = User.objects.get(id=data['user_id'])
+            user = User.objects.get(email=data['email'])
         except User.DoesNotExist:
-            raise serializers.ValidationError({"user_id": "User not found. Please scan a valid ID."})
+            raise serializers.ValidationError({"email": "User not found. Please scan a valid email."})
 
         data['invoice'] = invoice
         data['user'] = user
@@ -182,9 +182,9 @@ class PickingSessionReadSerializer(serializers.ModelSerializer):
 
 
 class CompletePickingSerializer(serializers.Serializer):
-    """Serializer to complete picking - requires user ID scan"""
+    """Serializer to complete picking - requires user email scan"""
     invoice_no = serializers.CharField()
-    user_id = serializers.UUIDField(help_text="Scanned user ID for verification")
+    email = serializers.EmailField(help_text="Scanned user email for verification")
     notes = serializers.CharField(required=False, allow_blank=True)
     
     def validate(self, data):
@@ -200,16 +200,16 @@ class CompletePickingSerializer(serializers.Serializer):
         except PickingSession.DoesNotExist:
             raise serializers.ValidationError({"invoice_no": "No picking session found for this invoice."})
         
-        # Verify user ID
+        # Verify user email
         try:
-            user = User.objects.get(id=data['user_id'])
+            user = User.objects.get(email=data['email'])
         except User.DoesNotExist:
-            raise serializers.ValidationError({"user_id": "User not found. Please scan a valid ID."})
+            raise serializers.ValidationError({"email": "User not found. Please scan a valid email."})
         
         # Verify it's the same user who started picking
-        if picking_session.picker and picking_session.picker.id != user.id:
+        if picking_session.picker and picking_session.picker.email != user.email:
             raise serializers.ValidationError({
-                "user_id": f"ID mismatch. This invoice was started by {picking_session.picker.name}. Please scan the correct ID."
+                "email": f"Email mismatch. This invoice was started by {picking_session.picker.name} ({picking_session.picker.email}). Please scan the correct email."
             })
         
         # Check picking status
@@ -225,9 +225,9 @@ class CompletePickingSerializer(serializers.Serializer):
 # ===== PACKING SERIALIZERS =====
 
 class PackingSessionCreateSerializer(serializers.Serializer):
-    """Start packing session - requires user ID scan"""
+    """Start packing session - requires user email scan"""
     invoice_no = serializers.CharField()
-    user_id = serializers.UUIDField(help_text="Scanned user ID")
+    email = serializers.EmailField(help_text="Scanned user email")
     notes = serializers.CharField(required=False, allow_blank=True)
     
     def validate(self, data):
@@ -249,9 +249,9 @@ class PackingSessionCreateSerializer(serializers.Serializer):
         
         # Verify user
         try:
-            user = User.objects.get(id=data['user_id'])
+            user = User.objects.get(email=data['email'])
         except User.DoesNotExist:
-            raise serializers.ValidationError({"user_id": "User not found. Please scan a valid ID."})
+            raise serializers.ValidationError({"email": "User not found. Please scan a valid email."})
         
         data['invoice'] = invoice
         data['user'] = user
@@ -281,9 +281,9 @@ class PackingSessionReadSerializer(serializers.ModelSerializer):
 
 
 class CompletePackingSerializer(serializers.Serializer):
-    """Complete packing - requires user ID scan"""
+    """Complete packing - requires user email scan"""
     invoice_no = serializers.CharField()
-    user_id = serializers.UUIDField(help_text="Scanned user ID for verification")
+    email = serializers.EmailField(help_text="Scanned user email for verification")
     notes = serializers.CharField(required=False, allow_blank=True)
     
     def validate(self, data):
@@ -301,14 +301,14 @@ class CompletePackingSerializer(serializers.Serializer):
         
         # Verify user
         try:
-            user = User.objects.get(id=data['user_id'])
+            user = User.objects.get(email=data['email'])
         except User.DoesNotExist:
-            raise serializers.ValidationError({"user_id": "User not found. Please scan a valid ID."})
+            raise serializers.ValidationError({"email": "User not found. Please scan a valid email."})
         
         # Verify same user
-        if packing_session.packer and packing_session.packer.id != user.id:
+        if packing_session.packer and packing_session.packer.email != user.email:
             raise serializers.ValidationError({
-                "user_id": f"ID mismatch. This invoice was started by {packing_session.packer.name}."
+                "email": f"Email mismatch. This invoice was started by {packing_session.packer.name} ({packing_session.packer.email})."
             })
         
         # Check status
@@ -324,9 +324,9 @@ class CompletePackingSerializer(serializers.Serializer):
 # ===== DELIVERY SERIALIZERS =====
 
 class DeliverySessionCreateSerializer(serializers.Serializer):
-    """Start delivery session - requires user ID scan (optional for courier)"""
+    """Start delivery session - requires user email scan (optional for courier)"""
     invoice_no = serializers.CharField()
-    user_id = serializers.UUIDField(required=False, allow_null=True, help_text="Scanned user ID (required for DIRECT/INTERNAL delivery)")
+    email = serializers.EmailField(required=False, allow_blank=True, help_text="Scanned user email (required for DIRECT/INTERNAL delivery)")
     delivery_type = serializers.ChoiceField(choices=['DIRECT', 'COURIER', 'INTERNAL'])
     courier_name = serializers.CharField(required=False, allow_blank=True)
     tracking_no = serializers.CharField(required=False, allow_blank=True)
@@ -350,17 +350,17 @@ class DeliverySessionCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError({"invoice_no": "Delivery session already exists for this invoice."})
         
         delivery_type = data.get('delivery_type')
-        user_id = data.get('user_id')
+        email = data.get('email')
         
-        # For DIRECT and INTERNAL, user_id is required
+        # For DIRECT and INTERNAL, email is required
         if delivery_type in ['DIRECT', 'INTERNAL']:
-            if not user_id:
-                raise serializers.ValidationError({"user_id": "User ID scan is required for DIRECT/INTERNAL delivery."})
+            if not email:
+                raise serializers.ValidationError({"email": "User email scan is required for DIRECT/INTERNAL delivery."})
             try:
-                user = User.objects.get(id=user_id)
+                user = User.objects.get(email=email)
                 data['user'] = user
             except User.DoesNotExist:
-                raise serializers.ValidationError({"user_id": "User not found. Please scan a valid ID."})
+                raise serializers.ValidationError({"email": "User not found. Please scan a valid email."})
         
         # For COURIER, courier_name is helpful
         if delivery_type == 'COURIER':
@@ -395,9 +395,9 @@ class DeliverySessionReadSerializer(serializers.ModelSerializer):
 
 
 class CompleteDeliverySerializer(serializers.Serializer):
-    """Complete delivery - requires user ID scan for verification"""
+    """Complete delivery - requires user email scan for verification"""
     invoice_no = serializers.CharField()
-    user_id = serializers.UUIDField(required=False, allow_null=True, help_text="Scanned user ID for verification")
+    email = serializers.EmailField(required=False, allow_blank=True, help_text="Scanned user email for verification")
     delivery_status = serializers.ChoiceField(choices=['DELIVERED', 'IN_TRANSIT'], default='DELIVERED')
     notes = serializers.CharField(required=False, allow_blank=True)
     
@@ -414,20 +414,20 @@ class CompleteDeliverySerializer(serializers.Serializer):
         except DeliverySession.DoesNotExist:
             raise serializers.ValidationError({"invoice_no": "No delivery session found for this invoice."})
         
-        # If user_id provided, verify
-        user_id = data.get('user_id')
-        if user_id:
+        # If email provided, verify
+        email = data.get('email')
+        if email:
             try:
-                user = User.objects.get(id=user_id)
+                user = User.objects.get(email=email)
                 # Verify same user for DIRECT/INTERNAL delivery
                 if delivery_session.delivery_type in ['DIRECT', 'INTERNAL']:
-                    if delivery_session.assigned_to and delivery_session.assigned_to.id != user.id:
+                    if delivery_session.assigned_to and delivery_session.assigned_to.email != user.email:
                         raise serializers.ValidationError({
-                            "user_id": f"ID mismatch. This delivery was assigned to {delivery_session.assigned_to.name}."
+                            "email": f"Email mismatch. This delivery was assigned to {delivery_session.assigned_to.name} ({delivery_session.assigned_to.email})."
                         })
                 data['user'] = user
             except User.DoesNotExist:
-                raise serializers.ValidationError({"user_id": "User not found. Please scan a valid ID."})
+                raise serializers.ValidationError({"email": "User not found. Please scan a valid email."})
         
         # Check status
         if delivery_session.delivery_status == "DELIVERED":
