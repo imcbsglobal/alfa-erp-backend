@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ALFA ERP - SSE Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .header h1 {
+            margin: 0 0 10px 0;
+        }
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .status.connected {
+            background-color: #10b981;
+            color: white;
+        }
+        .status.disconnected {
+            background-color: #ef4444;
+            color: white;
+        }
+        .status.connecting {
+            background-color: #f59e0b;
+            color: white;
+        }
+        button {
+            background-color: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #5568d3;
+        }
+        button:disabled {
+            background-color: #9ca3af;
+            cursor: not-allowed;
+        }
+        .events {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .event-item {
+            background: #f9fafb;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            animation: slideIn 0.3s ease-out;
+        }
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        .event-time {
+            color: #6b7280;
+            font-size: 12px;
+            margin-bottom: 5px;
+        }
+        .event-data {
+            font-family: 'Courier New', monospace;
+            background: #1f2937;
+            color: #10b981;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-size: 13px;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .stat-label {
+            color: #6b7280;
+            margin-top: 5px;
+            font-size: 14px;
+        }
+        input {
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 5px;
+            margin-right: 10px;
+            font-size: 14px;
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: inline-block;
+            width: 120px;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🚀 ALFA ERP - Server-Sent Events Test</h1>
+        <p>Real-time Invoice Updates Monitor</p>
+    </div>
+
+    <div class="controls">
+        <div class="input-group">
+            <label>SSE Endpoint:</label>
+            <input type="text" id="sseUrl" value="http://localhost:8000/api/sales/sse/invoices/" style="width: 400px;">
+        </div>
+        <button id="connectBtn" onclick="connect()">Connect</button>
+        <button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+        <button onclick="clearEvents()">Clear Events</button>
+        <span id="statusBadge" class="status disconnected">Disconnected</span>
+    </div>
+
+    <div class="stats">
+        <div class="stat-card">
+            <div class="stat-value" id="eventCount">0</div>
+            <div class="stat-label">Events Received</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="lastEventTime">Never</div>
+            <div class="stat-label">Last Event</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="connectionTime">00:00</div>
+            <div class="stat-label">Connected For</div>
+        </div>
+    </div>
+
+    <div class="events">
+        <h2>Live Events</h2>
+        <div id="eventList"></div>
+    </div>
+
+    <script>
+        let eventSource = null;
+        let eventCount = 0;
+        let connectionStartTime = null;
+        let connectionTimer = null;
+
+        function updateStatus(status, message) {
+            const badge = document.getElementById('statusBadge');
+            badge.className = `status ${status}`;
+            badge.textContent = message;
+        }
+
+        function updateConnectionTime() {
+            if (!connectionStartTime) return;
+            
+            const elapsed = Math.floor((Date.now() - connectionStartTime) / 1000);
+            const minutes = Math.floor(elapsed / 60);
+            const seconds = elapsed % 60;
+            document.getElementById('connectionTime').textContent = 
+                `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        function connect() {
+            const url = document.getElementById('sseUrl').value;
+            
+            if (eventSource) {
+                disconnect();
+            }
+
+            updateStatus('connecting', 'Connecting...');
+            console.log('Connecting to:', url);
+
+            eventSource = new EventSource(url);
+
+            eventSource.onopen = function() {
+                console.log('SSE Connection opened');
+                updateStatus('connected', 'Connected');
+                document.getElementById('connectBtn').disabled = true;
+                document.getElementById('disconnectBtn').disabled = false;
+                connectionStartTime = Date.now();
+                connectionTimer = setInterval(updateConnectionTime, 1000);
+            };
+
+            eventSource.onmessage = function(event) {
+                console.log('Message received:', event.data);
+                
+                try {
+                    const data = JSON.parse(event.data);
+                    addEvent(data);
+                    eventCount++;
+                    document.getElementById('eventCount').textContent = eventCount;
+                    
+                    const now = new Date();
+                    document.getElementById('lastEventTime').textContent = 
+                        now.toLocaleTimeString();
+                } catch (e) {
+                    console.error('Error parsing event data:', e);
+                    addEvent({ error: 'Failed to parse', raw: event.data });
+                }
+            };
+
+            eventSource.onerror = function(error) {
+                console.error('SSE Error:', error);
+                updateStatus('disconnected', 'Error / Disconnected');
+                document.getElementById('connectBtn').disabled = false;
+                document.getElementById('disconnectBtn').disabled = true;
+                
+                if (connectionTimer) {
+                    clearInterval(connectionTimer);
+                    connectionTimer = null;
+                }
+                
+                // EventSource automatically tries to reconnect
+                // To prevent this, we need to close it
+                if (eventSource.readyState === EventSource.CLOSED) {
+                    eventSource = null;
+                    connectionStartTime = null;
+                }
+            };
+        }
+
+        function disconnect() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+                updateStatus('disconnected', 'Disconnected');
+                document.getElementById('connectBtn').disabled = false;
+                document.getElementById('disconnectBtn').disabled = true;
+                connectionStartTime = null;
+                
+                if (connectionTimer) {
+                    clearInterval(connectionTimer);
+                    connectionTimer = null;
+                }
+                
+                console.log('Disconnected from SSE');
+            }
+        }
+
+        function addEvent(data) {
+            const eventList = document.getElementById('eventList');
+            const eventItem = document.createElement('div');
+            eventItem.className = 'event-item';
+            
+            const time = new Date().toLocaleTimeString();
+            eventItem.innerHTML = `
+                <div class="event-time">${time}</div>
+                <div class="event-data">${JSON.stringify(data, null, 2)}</div>
+            `;
+            
+            eventList.insertBefore(eventItem, eventList.firstChild);
+            
+            // Keep only last 50 events
+            while (eventList.children.length > 50) {
+                eventList.removeChild(eventList.lastChild);
+            }
+        }
+
+        function clearEvents() {
+            document.getElementById('eventList').innerHTML = '';
+            eventCount = 0;
+            document.getElementById('eventCount').textContent = '0';
+            document.getElementById('lastEventTime').textContent = 'Never';
+            console.log('Events cleared');
+        }
+
+        // Clean up on page unload
+        window.addEventListener('beforeunload', function() {
+            disconnect();
+        });
+
+        // Auto-connect on load (optional)
+        // window.addEventListener('load', connect);
+    </script>
+</body>
+</html>

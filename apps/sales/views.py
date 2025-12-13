@@ -2,7 +2,6 @@
 
 import time
 import json
-import queue
 import logging
 from django.db import IntegrityError
 from django.utils import timezone
@@ -13,6 +12,7 @@ from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 from rest_framework import status
 from django.conf import settings
+import django_eventstream
 
 from .serializers import (
     InvoiceImportSerializer, 
@@ -27,7 +27,7 @@ from .serializers import (
     DeliverySessionReadSerializer,
     CompleteDeliverySerializer,
 )
-from .events import invoice_events  
+from .events import INVOICE_CHANNEL
 from .models import Invoice, PickingSession, PackingSession, DeliverySession
 from rest_framework import generics
 from rest_framework.pagination import PageNumberPagination
@@ -132,14 +132,18 @@ class ImportInvoiceView(APIView):
 
         total_amount = sum(item.quantity * item.mrp for item in invoice.items.all())
 
-        # Push full invoice payload to SSE queue (same format as list API)
+        # Push full invoice payload to SSE using django-eventstream
         try:
             invoice_refreshed = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(id=invoice.id)
             serializer = InvoiceListSerializer(invoice_refreshed)
-            invoice_events.put(serializer.data, block=False)
-            logger.debug("Invoice event queued: %s", invoice.invoice_no)
+            django_eventstream.send_event(
+                INVOICE_CHANNEL,
+                'message',
+                serializer.data
+            )
+            logger.debug("Invoice event sent: %s", invoice.invoice_no)
         except Exception:
-            logger.exception("Failed to enqueue invoice event")
+            logger.exception("Failed to send invoice event")
 
         return Response(
             {
@@ -154,32 +158,8 @@ class ImportInvoiceView(APIView):
             status=status.HTTP_201_CREATED
         )
 
-
-
-def invoice_stream(request):
-
-    def event_stream():
-        while True:
-            try:
-                # Wait up to 1 second for new event
-                event = invoice_events.get(timeout=1)
-
-                yield f"data: {json.dumps(event)}\n\n"
-
-            except queue.Empty:
-                # Send heartbeat to keep connection alive
-                yield ": keep-alive\n\n"
-
-            time.sleep(0.2)
-
-    response = StreamingHttpResponse(
-        event_stream(),
-        content_type="text/event-stream"
-    )
-    response["Cache-Control"] = "no-cache"
-    response["X-Accel-Buffering"] = "no"
-
-    return response
+# SSE endpoint is now handled by django-eventstream
+# See urls.py for the eventstream path configuration
 
 
 # ===== PICKING WORKFLOW =====
@@ -213,7 +193,11 @@ class StartPickingView(APIView):
             invoice = picking_session.invoice
             invoice_refreshed = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(id=invoice.id)
             invoice_data = InvoiceListSerializer(invoice_refreshed).data
-            invoice_events.put(invoice_data, block=False)
+            django_eventstream.send_event(
+                INVOICE_CHANNEL,
+                'message',
+                invoice_data
+            )
         except Exception:
             logger.exception("Failed to emit picking start event")
         
@@ -267,7 +251,11 @@ class CompletePickingView(APIView):
         try:
             invoice_refreshed = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(id=invoice.id)
             invoice_data = InvoiceListSerializer(invoice_refreshed).data
-            invoice_events.put(invoice_data, block=False)
+            django_eventstream.send_event(
+                INVOICE_CHANNEL,
+                'message',
+                invoice_data
+            )
         except Exception:
             logger.exception("Failed to emit picking complete event")
         
@@ -325,7 +313,11 @@ class StartPackingView(APIView):
         try:
             invoice_refreshed = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(id=invoice.id)
             invoice_data = InvoiceListSerializer(invoice_refreshed).data
-            invoice_events.put(invoice_data, block=False)
+            django_eventstream.send_event(
+                INVOICE_CHANNEL,
+                'message',
+                invoice_data
+            )
         except Exception:
             logger.exception("Failed to emit packing start event")
         
@@ -379,7 +371,11 @@ class CompletePackingView(APIView):
         try:
             invoice_refreshed = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(id=invoice.id)
             invoice_data = InvoiceListSerializer(invoice_refreshed).data
-            invoice_events.put(invoice_data, block=False)
+            django_eventstream.send_event(
+                INVOICE_CHANNEL,
+                'message',
+                invoice_data
+            )
         except Exception:
             logger.exception("Failed to emit packing complete event")
         
@@ -446,7 +442,11 @@ class StartDeliveryView(APIView):
         try:
             invoice_refreshed = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(id=invoice.id)
             invoice_data = InvoiceListSerializer(invoice_refreshed).data
-            invoice_events.put(invoice_data, block=False)
+            django_eventstream.send_event(
+                INVOICE_CHANNEL,
+                'message',
+                invoice_data
+            )
         except Exception:
             logger.exception("Failed to emit delivery start event")
         
@@ -502,7 +502,11 @@ class CompleteDeliveryView(APIView):
         try:
             invoice_refreshed = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(id=invoice.id)
             invoice_data = InvoiceListSerializer(invoice_refreshed).data
-            invoice_events.put(invoice_data, block=False)
+            django_eventstream.send_event(
+                INVOICE_CHANNEL,
+                'message',
+                invoice_data
+            )
         except Exception:
             logger.exception("Failed to emit delivery complete event")
         

@@ -1,3 +1,2 @@
-import queue
-
-invoice_events = queue.Queue()
+# Django EventStream channel for invoice updates
+INVOICE_CHANNEL = 'invoices'

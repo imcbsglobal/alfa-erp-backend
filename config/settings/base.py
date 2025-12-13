@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'corsheaders',
     'storages',
+    'django_eventstream',
     
     # Local apps
     'apps.accounts',
@@ -68,6 +69,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'config.wsgi.application'
+ASGI_APPLICATION = 'config.asgi.application'
 
 # Database
 DATABASES = {
@@ -222,3 +224,7 @@ CORS_ALLOW_METHODS = [
 
 # Allowed hosts for production
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if os.getenv('ALLOWED_HOSTS') else ['*']
+
+# Django Eventstream Configuration
+EVENTSTREAM_ALLOW_ORIGIN = '*'  # Configure based on your needs
+EVENTSTREAM_ALLOW_CREDENTIALS = True
