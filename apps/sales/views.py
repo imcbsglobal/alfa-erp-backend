@@ -167,10 +167,10 @@ class ImportInvoiceView(APIView):
 class StartPickingView(APIView):
     """
     POST /api/sales/picking/start/
-    Start picking session - User scans their ID to begin picking
+    Start picking session - User scans their email to begin picking
     Body: {
         "invoice_no": "INV-001",
-        "user_id": "uuid-of-user",
+        "user_email": "john.doe@company.com",
         "notes": "Starting picking"
     }
     """
@@ -212,10 +212,10 @@ class StartPickingView(APIView):
 class CompletePickingView(APIView):
     """
     POST /api/sales/picking/complete/
-    Complete picking - User scans their ID to confirm completion
+    Complete picking - User scans their email to confirm completion
     Body: {
         "invoice_no": "INV-001",
-        "user_id": "uuid-of-user",
+        "user_email": "john.doe@company.com",
         "notes": "Picking completed"
     }
     """
@@ -272,10 +272,10 @@ class CompletePickingView(APIView):
 class StartPackingView(APIView):
     """
     POST /api/sales/packing/start/
-    Start packing session - User scans their ID to begin packing
+    Start packing session - User scans their email to begin packing
     Body: {
         "invoice_no": "INV-001",
-        "user_id": "uuid-of-user",
+        "user_email": "jane.smith@company.com",
         "notes": "Starting packing"
     }
     """
@@ -332,10 +332,10 @@ class StartPackingView(APIView):
 class CompletePackingView(APIView):
     """
     POST /api/sales/packing/complete/
-    Complete packing - User scans their ID to confirm completion
+    Complete packing - User scans their email to confirm completion
     Body: {
         "invoice_no": "INV-001",
-        "user_id": "uuid-of-user",
+        "user_email": "jane.smith@company.com",
         "notes": "Packing completed"
     }
     """
@@ -392,10 +392,10 @@ class CompletePackingView(APIView):
 class StartDeliveryView(APIView):
     """
     POST /api/sales/delivery/start/
-    Start delivery session - User scans their ID (required for DIRECT/INTERNAL)
+    Start delivery session - User scans their email (required for DIRECT/INTERNAL)
     Body: {
         "invoice_no": "INV-001",
-        "user_id": "uuid-of-user",  # Required for DIRECT/INTERNAL
+        "user_email": "driver@company.com",  # Required for DIRECT/INTERNAL
         "delivery_type": "DIRECT",  # DIRECT, COURIER, INTERNAL
         "courier_name": "DHL",      # For COURIER type
         "tracking_no": "TRK123",    # Optional
@@ -461,10 +461,10 @@ class StartDeliveryView(APIView):
 class CompleteDeliveryView(APIView):
     """
     POST /api/sales/delivery/complete/
-    Complete delivery - User scans their ID to confirm delivery
+    Complete delivery - User scans their email to confirm delivery
     Body: {
         "invoice_no": "INV-001",
-        "user_id": "uuid-of-user",  # Optional for COURIER
+        "user_email": "driver@company.com",  # Optional for COURIER
         "delivery_status": "DELIVERED",  # DELIVERED or IN_TRANSIT
         "notes": "Delivered to customer"
     }
