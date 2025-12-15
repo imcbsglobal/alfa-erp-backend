@@ -197,14 +197,18 @@ python manage.py collectstatic --noinput
 ### 9. Run Development Server
 
 ```bash
-uvicorn config.asgi:application \
-   --reload \
-   --timeout-graceful-shutdown 1
+python -m uvicorn config.asgi:application --reload --timeout-graceful-shutdown 1
 ```
+
+```bash
+uvicorn config.asgi:application  --reload --timeout-graceful-shutdown 1
 ```
+
+```bash
 uvicorn config.asgi:application --host 0.0.0.0 --port 8000
 
 ```
+
 Server starts at: `http://localhost:8000`
 
 Test endpoints:
