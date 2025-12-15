@@ -179,3 +179,11 @@ class User(AbstractBaseUser, PermissionsMixin):
         Usage: `user.has_any_role(User.Role.PACKER, User.Role.PICKER)`
         """
         return self.role in roles
+
+    def is_admin_or_superadmin(self):
+        """Check if user is admin, superadmin, or Django staff/superuser."""
+        return (
+            self.is_staff or 
+            self.is_superuser or 
+            self.role in [User.Role.ADMIN, User.Role.SUPERADMIN]
+        )

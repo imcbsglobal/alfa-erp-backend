@@ -37,23 +37,24 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         # Include Django groups (if any) for backward compatibility
         data['user']['groups'] = list(self.user.groups.values_list('name', flat=True))
         
-        # Add menu structure based on user's directly assigned menus (no roles)
+        # Add menu structure based on user's role and assigned menus
         try:
             from apps.accesscontrol.models import UserMenu, MenuItem
 
-            # If user is admin/staff or has ADMIN/SUPERADMIN role, return full menu tree
-            user_role = getattr(self.user, 'role', 'USER')
-            is_admin_user = bool(self.user.is_staff or self.user.is_superuser or user_role in ['ADMIN', 'SUPERADMIN'])
-
-            if is_admin_user:
+            # ADMIN/SUPERADMIN get all menus; others get only assigned menus
+            if self.user.is_admin_or_superadmin():
                 menu_structure = MenuItem.get_all_menu_structure()
             else:
-                # Get menu structure directly from user's assigned menus
+                # Get menu structure from user's direct menu assignments
                 menu_structure = UserMenu.get_user_menu_structure(self.user)
+            
             data['menus'] = menu_structure
                 
         except Exception as e:
-            # Fallback if accesscontrol app is not available
+            # Fallback if accesscontrol app is not available or error occurs
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.exception("Failed to load menu structure for user %s", self.user.email)
             data['menus'] = []
         
         return data
