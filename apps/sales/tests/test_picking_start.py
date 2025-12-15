@@ -34,7 +34,7 @@ class PickingStartTests(TestCase):
         ps = PickingSession.objects.get(invoice=self.invoice)
         self.assertEqual(ps.picker.id, picker.id)
         self.invoice.refresh_from_db()
-        self.assertEqual(self.invoice.status, "IN_PROCESS")
+        self.assertEqual(self.invoice.status, "PENDING")
 
     def test_start_picking_invalid_user_returns_400(self):
         actor = User.objects.create_user(email="actor2@example.com", password="pass")

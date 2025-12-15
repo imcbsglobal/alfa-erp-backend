@@ -16,7 +16,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='invoice',
             name='status',
-            field=models.CharField(choices=[('CREATED', 'Created'), ('IN_PROCESS', 'In Process'), ('PICKED', 'Picked'), ('PACKING', 'Packing'), ('PACKED', 'Packed'), ('DISPATCHED', 'Dispatched'), ('DELIVERED', 'Delivered')], default='CREATED', max_length=20),
+            field=models.CharField(choices=[('CREATED', 'Created'), ('PENDING', 'In Process'), ('PICKED', 'Picked'), ('PACKING', 'Packing'), ('PACKED', 'Packed'), ('DISPATCHED', 'Dispatched'), ('DELIVERED', 'Delivered')], default='CREATED', max_length=20),
         ),
         migrations.CreateModel(
             name='DeliverySession',

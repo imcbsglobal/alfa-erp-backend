@@ -14,7 +14,7 @@ class InvoiceItemSerializer(serializers.ModelSerializer):
     """Serializer for invoice line items"""
     class Meta:
         model = InvoiceItem
-        fields = ['id', 'name', 'item_code', 'quantity', 'mrp', 'shelf_location', 'remarks']
+        fields = ['id', 'name', 'item_code', 'quantity', 'mrp', 'shelf_location', 'remarks','batch_no','expiry_date']
 
 
 class CustomerReadSerializer(serializers.ModelSerializer):
@@ -41,7 +41,7 @@ class InvoiceListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Invoice
         fields = [
-            'id', 'invoice_no', 'invoice_date', 'customer', 'salesman', 
+            'id', 'invoice_no', 'invoice_date', 'customer','status', 'salesman', 
             'created_by', 'items', 'total_amount', 'remarks', 'created_at'
         ]
     
@@ -71,7 +71,8 @@ class ItemSerializer(serializers.Serializer):
     mrp = serializers.FloatField()
     shelf_location = serializers.CharField(max_length=50, allow_blank=True)
     remarks = serializers.CharField(required=False, allow_blank=True)
-
+    batch_no = serializers.CharField(required=False, allow_blank=True)
+    expiry_date = serializers.DateField(required=False, allow_null=True)
 
 class InvoiceImportSerializer(serializers.Serializer):
     invoice_no = serializers.CharField()
@@ -120,7 +121,7 @@ class PickingSessionCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError({"invoice_no": "Invoice not found."})
 
         # Check invoice status
-        if invoice.status not in ['CREATED', 'IN_PROCESS']:
+        if invoice.status not in ['CREATED', 'PENDING']:
             raise serializers.ValidationError({
                 "invoice_no": f"Invoice cannot be picked in '{invoice.status}' state."
             })
@@ -153,7 +154,7 @@ class PickingSessionCreateSerializer(serializers.Serializer):
         )
 
         # Update invoice status
-        invoice.status = "IN_PROCESS"
+        invoice.status = "PENDING"
         invoice.save(update_fields=["status"])
 
         return picking_session

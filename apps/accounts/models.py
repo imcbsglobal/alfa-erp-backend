@@ -89,6 +89,12 @@ class User(AbstractBaseUser, PermissionsMixin):
         ADMIN = 'ADMIN', 'Admin'
         USER = 'USER', 'User'
         SUPERADMIN = 'SUPERADMIN', 'Super Admin'
+        # Operational roles for warehouse / logistics
+        PICKER = 'PICKER', 'Picker'  # Handles picking items from warehouse
+        PACKER = 'PACKER', 'Packer'  # Handles packing picked items
+        DRIVER = 'DRIVER', 'Driver'  # Handles delivery / transport
+        BILLING = 'BILLING', 'Billing'  # Handles invoicing / billing tasks
+        
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
@@ -166,3 +172,10 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def has_role(self, role):
         return self.role == role
+
+    def has_any_role(self, *roles):
+        """Return True if user role matches any of the provided roles.
+
+        Usage: `user.has_any_role(User.Role.PACKER, User.Role.PICKER)`
+        """
+        return self.role in roles

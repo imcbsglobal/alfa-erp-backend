@@ -3,7 +3,7 @@
 import time
 import json
 import logging
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from django.http import StreamingHttpResponse
@@ -92,17 +92,66 @@ class ImportInvoiceView(APIView):
         serializer.is_valid(raise_exception=True)
         invoice_no = serializer.validated_data.get("invoice_no")
 
-        # If you want to disallow duplicates: check before save and return 409
+        # If invoice exists, update it (replace items, update customer/salesman/fields)
         existing = Invoice.objects.filter(invoice_no=invoice_no).first()
         if existing:
-            return Response(
-                {
-                    "success": False,
-                    "message": "Invoice with this invoice_no already exists.",
-                    "data": {"id": existing.id, "invoice_no": existing.invoice_no},
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
+            try:
+                with transaction.atomic():
+                    data = serializer.validated_data
+                    customer_data = data.get('customer')
+                    items_data = data.get('items', [])
+                    salesman_name = data.get('salesman')
+
+                    # Upsert salesman and customer
+                    from .models import Salesman, Customer, InvoiceItem
+
+                    salesman, _ = Salesman.objects.get_or_create(name=salesman_name)
+                    customer, _ = Customer.objects.update_or_create(
+                        code=customer_data['code'],
+                        defaults=customer_data
+                    )
+
+                    # Update invoice fields
+                    existing.invoice_date = data.get('invoice_date')
+                    existing.salesman = salesman
+                    existing.customer = customer
+                    existing.created_by = data.get('created_by')
+                    existing.remarks = data.get('remarks', existing.remarks)
+                    if request.user and request.user.is_authenticated:
+                        existing.created_user = request.user
+                    existing.save()
+
+                    # Replace items: delete existing and recreate
+                    InvoiceItem.objects.filter(invoice=existing).delete()
+                    for item in items_data:
+                        InvoiceItem.objects.create(invoice=existing, **item)
+
+                    total_amount = sum(item['quantity'] * item['mrp'] for item in items_data)
+
+                    # Emit SSE event for updated invoice
+                    try:
+                        invoice_refreshed = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(id=existing.id)
+                        serializer_out = InvoiceListSerializer(invoice_refreshed)
+                        django_eventstream.send_event(
+                            INVOICE_CHANNEL,
+                            'message',
+                            serializer_out.data
+                        )
+                        logger.debug("Invoice update event sent: %s", existing.invoice_no)
+                    except Exception:
+                        logger.exception("Failed to send invoice update event")
+
+                    return Response(
+                        {
+                            "success": True,
+                            "message": "Invoice updated successfully",
+                            "data": {"id": existing.id, "invoice_no": existing.invoice_no, "total_amount": total_amount}
+                        },
+                        status=status.HTTP_200_OK,
+                    )
+            except Exception:
+                logger.exception("Failed to update existing invoice")
+                return Response({"success": False, "message": "Failed to update existing invoice."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         try:
             invoice = serializer.save()
@@ -187,7 +236,12 @@ class StartPickingView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
         
         picking_session = serializer.save()
-        
+
+                # Update invoice status
+        invoice = picking_session.invoice
+        invoice.status = "PICKING"
+        invoice.save(update_fields=['status'])
+
         # Emit SSE event for invoice status change
         try:
             invoice = picking_session.invoice
@@ -246,6 +300,7 @@ class CompletePickingView(APIView):
         # Update invoice status
         invoice.status = "PICKED"
         invoice.save(update_fields=['status'])
+        
         
         # Emit SSE event
         try:

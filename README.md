@@ -359,12 +359,12 @@ The system implements a complete warehouse fulfillment workflow with user verifi
 ### Workflow States
 
 ```
-CREATED → IN_PROCESS → PICKED → PACKING → PACKED → DISPATCHED → DELIVERED
+CREATED → PENDING → PICKED → PACKING → PACKED → DISPATCHED → DELIVERED
 ```
 
 ### Workflow Steps
 
-1. **Picking** (`IN_PROCESS` → `PICKED`)
+1. **Picking** (`PENDING` → `PICKED`)
    - User scans email to start picking session
    - System tracks picker, start time, and session notes
    - User scans email again to complete (verified against starter)

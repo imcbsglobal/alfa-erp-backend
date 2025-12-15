@@ -323,8 +323,8 @@ es.onerror = (err) => {
 These endpoints implement the warehouse workflow using employee email scanning at each stage. Authenticated users scan their email (from QR code or barcode) to start and/or complete jobs. Each endpoint validates invoice state and user identity and emits an SSE event to `/api/sales/sse/invoices/` when status changes.
 
 ### Status Transition Summary
-- CREATED → IN_PROCESS (picking started)
-- IN_PROCESS → PICKED (picking completed)
+- CREATED → PENDING (picking started)
+- PENDING → PICKED (picking completed)
 - PICKED → PACKING (packing started)
 - PACKING → PACKED (packing completed)
 - PACKED → DISPATCHED (delivery started)
@@ -337,7 +337,7 @@ These endpoints implement the warehouse workflow using employee email scanning a
 ### 4.1 Start Picking
 `POST /api/sales/picking/start/`
 
-Purpose: Create a picking session and set invoice status to `IN_PROCESS` when a user scans their email to begin picking.
+Purpose: Create a picking session and set invoice status to `PENDING` when a user scans their email to begin picking.
 
 Authentication: Required (Bearer token)
 

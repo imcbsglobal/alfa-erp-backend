@@ -34,15 +34,15 @@ class Invoice(models.Model):
     status = models.CharField(
         max_length=20,
         choices=[
-            ("CREATED", "Created"),            # invoice/order created; waiting to be processed
-            ("IN_PROCESS", "In Process"),      # items being prepared/picked for the invoice
+            ("PENDING", "Pending"),            # invoice/order created; waiting to be processed
+            ("PICKING", "Picking"),            # packing in progress (bag/box preparation)
             ("PICKED", "Picked"),              # all items picked; ready for packing
             ("PACKING", "Packing"),            # packing in progress (bag/box preparation)
             ("PACKED", "Packed"),              # packing completed; ready for dispatch
             ("DISPATCHED", "Dispatched"),      # left the store / handed to delivery person
             ("DELIVERED", "Delivered"),        # delivered to customer / order completed
         ],
-        default="CREATED"
+        default="PENDING"
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -57,6 +57,8 @@ class InvoiceItem(models.Model):
     quantity = models.IntegerField()
     mrp = models.FloatField()
     shelf_location = models.CharField(max_length=50, blank=True)
+    batch_no = models.CharField(max_length=100, blank=True, null=True)
+    expiry_date = models.DateField(blank=True, null=True)
     remarks = models.TextField(blank=True, null=True)
 
     def __str__(self):
