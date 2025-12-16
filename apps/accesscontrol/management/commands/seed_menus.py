@@ -1,433 +1,164 @@
-# from django.core.management.base import BaseCommand
-# from apps.accesscontrol.models import MenuItem, UserMenu
-
-# class Command(BaseCommand):
-#     help = 'Seed menu items for direct user assignment'
-
-#     def handle(self, *args, **options):
-#         self.stdout.write("Starting menu seeding...")
-
-#         # Clear data
-#         UserMenu.objects.all().delete()
-#         MenuItem.objects.all().delete()
-#         self.stdout.write("  ✓ Cleared existing menus and assignments")
-
-#         # Dashboard
-#         dashboard = MenuItem.objects.create(
-#             name="Dashboard",
-#             code="dashboard",
-#             icon="dashboard",
-#             url="/dashboard",
-#             order=1
-#         )
-#         self.stdout.write("  ✓ Dashboard menu created")
-
-#         # Delivery Management (parent)
-#         delivery = MenuItem.objects.create(
-#             name="Delivery Management",
-#             code="delivery",
-#             icon="local_shipping",
-#             url="/delivery",
-#             order=2
-#         )
-
-#         MenuItem.objects.create(
-#             name="Bills",
-#             code="delivery_bills",
-#             icon="receipt",
-#             url="/delivery/bills",
-#             parent=delivery,
-#             order=1
-#         )
-#         MenuItem.objects.create(
-#             name="Picking",
-#             code="delivery_picking",
-#             icon="inventory",
-#             url="/delivery/picking",
-#             parent=delivery,
-#             order=2
-#         )
-#         MenuItem.objects.create(
-#             name="Packing",
-#             code="delivery_packing",
-#             icon="inventory_2",
-#             url="/delivery/packing",
-#             parent=delivery,
-#             order=3
-#         )
-#         MenuItem.objects.create(
-#             name="Delivery Tasks",
-#             code="delivery_tasks",
-#             icon="local_shipping",
-#             url="/delivery/tasks",
-#             parent=delivery,
-#             order=4
-#         )
-
-#         self.stdout.write("  ✓ Delivery Management menus created")
-
-#         # Purchase Management
-#         purchase = MenuItem.objects.create(
-#             name="Purchase Management",
-#             code="purchase",
-#             icon="shopping_cart",
-#             url="/purchase",
-#             order=3
-#         )
-#         MenuItem.objects.create(
-#             name="Orders",
-#             code="purchase_orders",
-#             icon="list_alt",
-#             url="/purchase/orders",
-#             parent=purchase,
-#             order=1
-#         )
-#         MenuItem.objects.create(
-#             name="Vendors",
-#             code="purchase_vendors",
-#             icon="business",
-#             url="/purchase/vendors",
-#             parent=purchase,
-#             order=2
-#         )
-#         MenuItem.objects.create(
-#             name="Invoices",
-#             code="purchase_invoices",
-#             icon="description",
-#             url="/purchase/invoices",
-#             parent=purchase,
-#             order=3
-#         )
-#         self.stdout.write("  ✓ Purchase Management menus created")
-
-#         # Payment Follow-up
-#         payment = MenuItem.objects.create(
-#             name="Payment Follow-up",
-#             code="payment",
-#             icon="payment",
-#             url="/payment",
-#             order=4
-#         )
-#         MenuItem.objects.create(
-#             name="Outstanding",
-#             code="payment_outstanding",
-#             icon="account_balance",
-#             url="/payment/outstanding",
-#             parent=payment,
-#             order=1
-#         )
-#         MenuItem.objects.create(
-#             name="Follow-ups",
-#             code="payment_followups",
-#             icon="event_note",
-#             url="/payment/followups",
-#             parent=payment,
-#             order=2
-#         )
-#         self.stdout.write("  ✓ Payment Follow-up menus created")
-
-#         # Reports
-#         MenuItem.objects.create(
-#             name="Reports",
-#             code="reports",
-#             icon="assessment",
-#             url="/reports",
-#             order=5
-#         )
-#         self.stdout.write("  ✓ Reports menu created")
-
-#         # User Management (parent)
-#         user_mgmt = MenuItem.objects.create(
-#             name="User Management",
-#             code="users",
-#             icon="people",
-#             url="/user-management",
-#             order=6
-#         )
-#         MenuItem.objects.create(
-#             name="User List",
-#             code="user_list",
-#             icon="people",
-#             url="/user-management",
-#             parent=user_mgmt,
-#             order=1
-#         )
-#         MenuItem.objects.create(
-#             name="User Control",
-#             code="user_control",
-#             icon="settings",
-#             url="/user-control",
-#             parent=user_mgmt,
-#             order=2
-#         )
-#         MenuItem.objects.create(
-#             name="Add User",
-#             code="add_user",
-#             icon="person_add",
-#             url="/add-user",
-#             parent=user_mgmt,
-#             order=3
-#         )
-#         self.stdout.write("  ✓ User Management menu created")
-
-#         # Master (parent)
-#         master = MenuItem.objects.create(
-#             name="Master",
-#             code="master",
-#             icon="folder",
-#             url="/master/job-title",
-#             order=7
-#         )
-#         MenuItem.objects.create(
-#             name="Job Title",
-#             code="job_title",
-#             icon="work",
-#             url="/master/job-title",
-#             parent=master,
-#             order=1
-#         )
-#         self.stdout.write("  ✓ Master menu created")
-
-#         # Settings
-#         MenuItem.objects.create(
-#             name="Settings",
-#             code="settings",
-#             icon="settings",
-#             url="/settings",
-#             order=8
-#         )
-#         self.stdout.write("  ✓ Settings menu created")
-
-#         total = MenuItem.objects.count()
-#         self.stdout.write(self.style.SUCCESS(f"\n✔ Menu seeding completed! Created {total} menu items"))
-#         self.stdout.write("\nNext steps:")
-#         self.stdout.write("  1. Go to Django Admin: /admin/")
-#         self.stdout.write("  2. Access Control → User menus")
-#         self.stdout.write("  3. Assign menus to users directly (no roles)")
-
 from django.core.management.base import BaseCommand
 from apps.accesscontrol.models import MenuItem, UserMenu
 
+
 class Command(BaseCommand):
-    help = 'Seed menu items for direct user assignment'
+    help = 'Seed menu items matching frontend menuConfig.js exactly'
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--clear',
+            action='store_true',
+            help='Clear existing menus before seeding',
+        )
 
     def handle(self, *args, **options):
-        self.stdout.write("Starting menu seeding...")
+        self.stdout.write(self.style.WARNING('🚀 Starting menu seeding...'))
 
-        # Clear existing data
-        UserMenu.objects.all().delete()
-        MenuItem.objects.all().delete()
-        self.stdout.write("  ✓ Cleared existing menus and assignments")
+        # Clear existing data if requested
+        if options.get('clear'):
+            UserMenu.objects.all().delete()
+            MenuItem.objects.all().delete()
+            self.stdout.write(self.style.WARNING('  ✓ Cleared existing menus and assignments'))
 
         # ========================================
-        # 1. DASHBOARD
+        # 1. DASHBOARD (Single)
         # ========================================
-        dashboard = MenuItem.objects.create(
-            name="Dashboard",
+        dashboard, _ = MenuItem.objects.update_or_create(
             code="dashboard",
-            icon="dashboard",
-            url="/dashboard",
-            order=1
+            defaults={
+                'name': "Dashboard",
+                'icon': "HomeIcon",
+                'url': "/dashboard",
+                'order': 1,
+                'is_active': True,
+                'parent': None,
+            }
         )
         self.stdout.write("  ✓ Dashboard menu created")
 
         # ========================================
-        # 2. USER MANAGEMENT (Parent Menu)
+        # 2. HISTORY (Single)
         # ========================================
-        user_mgmt = MenuItem.objects.create(
-            name="User Management",
-            code="user_management",
-            icon="people",
-            url="/user-management",
-            order=2
+        history, _ = MenuItem.objects.update_or_create(
+            code="history",
+            defaults={
+                'name': "History",
+                'icon': "ListIcon",
+                'url': "/history",
+                'order': 2,
+                'is_active': True,
+                'parent': None,
+            }
+        )
+        self.stdout.write("  ✓ History menu created")
+
+        # ========================================
+        # 3. INVOICE (Dropdown with 1 child)
+        # ========================================
+        # Parent dropdown - use first submenu path as default
+        invoice, _ = MenuItem.objects.update_or_create(
+            code="invoice",
+            defaults={
+                'name': "Invoice",
+                'icon': "InvoiceIcon",
+                'url': "/invoices",  # Use submenu path since parent has no direct path
+                'order': 3,
+                'is_active': True,
+                'parent': None,
+            }
         )
 
-        # User Management Submenus
-        MenuItem.objects.create(
-            name="User List",
+        invoice_list, _ = MenuItem.objects.update_or_create(
+            code="invoice_list",
+            defaults={
+                'name': "Invoice List",
+                'icon': "ListIcon",
+                'url': "/invoices",
+                'parent': invoice,
+                'order': 1,
+                'is_active': True,
+            }
+        )
+        self.stdout.write("  ✓ Invoice menus created")
+
+        # ========================================
+        # 4. USER MANAGEMENT (Dropdown with 2 children)
+        # ========================================
+        user_mgmt, _ = MenuItem.objects.update_or_create(
+            code="user-management",
+            defaults={
+                'name': "User Management",
+                'icon': "UsersIcon",
+                'url': "/user-management",  # Use first submenu path
+                'order': 4,
+                'is_active': True,
+                'parent': None,
+            }
+        )
+
+        user_list, _ = MenuItem.objects.update_or_create(
             code="user_list",
-            icon="people",
-            url="/user-management",
-            parent=user_mgmt,
-            order=1
+            defaults={
+                'name': "User List",
+                'icon': "UsersIcon",
+                'url': "/user-management",
+                'parent': user_mgmt,
+                'order': 1,
+                'is_active': True,
+            }
         )
-        MenuItem.objects.create(
-            name="User Control",
+        user_control, _ = MenuItem.objects.update_or_create(
             code="user_control",
-            icon="settings",
-            url="/user-control",
-            parent=user_mgmt,
-            order=2
-        )
-        MenuItem.objects.create(
-            name="Add User",
-            code="add_user",
-            icon="person_add",
-            url="/add-user",
-            parent=user_mgmt,
-            order=3
+            defaults={
+                'name': "User Control",
+                'icon': "CogIcon",
+                'url': "/user-control",
+                'parent': user_mgmt,
+                'order': 2,
+                'is_active': True,
+            }
         )
         self.stdout.write("  ✓ User Management menus created")
 
         # ========================================
-        # 3. MASTER (Parent Menu)
+        # 5. MASTER (Dropdown with 2 children)
         # ========================================
-        master = MenuItem.objects.create(
-            name="Master",
+        master, _ = MenuItem.objects.update_or_create(
             code="master",
-            icon="tune",
-            url="/master/job-title",
-            order=3
+            defaults={
+                'name': "Master",
+                'icon': "TuneOutlinedIcon",
+                'url': "/master/job-title",  # Use first submenu path
+                'order': 5,
+                'is_active': True,
+                'parent': None,
+            }
         )
 
-        # Master Submenus
-        MenuItem.objects.create(
-            name="Job Title",
+        job_title, _ = MenuItem.objects.update_or_create(
             code="job_title",
-            icon="work",
-            url="/master/job-title",
-            parent=master,
-            order=1
+            defaults={
+                'name': "Job Title",
+                'icon': "BriefcaseIcon",
+                'url': "/master/job-title",
+                'parent': master,
+                'order': 1,
+                'is_active': True,
+            }
+        )
+        department, _ = MenuItem.objects.update_or_create(
+            code="department",
+            defaults={
+                'name': "Department",
+                'icon': "BuildingIcon",
+                'url': "/master/department",
+                'parent': master,
+                'order': 2,
+                'is_active': True,
+            }
         )
         self.stdout.write("  ✓ Master menus created")
-
-        # ========================================
-        # 4. DELIVERY MANAGEMENT (Parent Menu)
-        # ========================================
-        delivery = MenuItem.objects.create(
-            name="Delivery Management",
-            code="delivery_management",
-            icon="local_shipping",
-            url="/delivery",
-            order=4
-        )
-
-        # Delivery Management Submenus
-        MenuItem.objects.create(
-            name="Bills",
-            code="delivery_bills",
-            icon="receipt",
-            url="/delivery/bills",
-            parent=delivery,
-            order=1
-        )
-        MenuItem.objects.create(
-            name="Picking",
-            code="delivery_picking",
-            icon="inventory",
-            url="/delivery/picking",
-            parent=delivery,
-            order=2
-        )
-        MenuItem.objects.create(
-            name="Packing",
-            code="delivery_packing",
-            icon="inventory_2",
-            url="/delivery/packing",
-            parent=delivery,
-            order=3
-        )
-        MenuItem.objects.create(
-            name="Delivery Tasks",
-            code="delivery_tasks",
-            icon="local_shipping",
-            url="/delivery/tasks",
-            parent=delivery,
-            order=4
-        )
-        self.stdout.write("  ✓ Delivery Management menus created")
-
-        # ========================================
-        # 5. PURCHASE MANAGEMENT (Parent Menu)
-        # ========================================
-        purchase = MenuItem.objects.create(
-            name="Purchase Management",
-            code="purchase_management",
-            icon="shopping_cart",
-            url="/purchase",
-            order=5
-        )
-
-        # Purchase Management Submenus
-        MenuItem.objects.create(
-            name="Orders",
-            code="purchase_orders",
-            icon="list_alt",
-            url="/purchase/orders",
-            parent=purchase,
-            order=1
-        )
-        MenuItem.objects.create(
-            name="Vendors",
-            code="purchase_vendors",
-            icon="business",
-            url="/purchase/vendors",
-            parent=purchase,
-            order=2
-        )
-        MenuItem.objects.create(
-            name="Invoices",
-            code="purchase_invoices",
-            icon="description",
-            url="/purchase/invoices",
-            parent=purchase,
-            order=3
-        )
-        self.stdout.write("  ✓ Purchase Management menus created")
-
-        # ========================================
-        # 6. PAYMENT FOLLOW-UP (Parent Menu)
-        # ========================================
-        payment = MenuItem.objects.create(
-            name="Payment Follow-up",
-            code="payment_followup",
-            icon="payment",
-            url="/payment",
-            order=6
-        )
-
-        # Payment Follow-up Submenus
-        MenuItem.objects.create(
-            name="Outstanding",
-            code="payment_outstanding",
-            icon="account_balance",
-            url="/payment/outstanding",
-            parent=payment,
-            order=1
-        )
-        MenuItem.objects.create(
-            name="Follow-ups",
-            code="payment_followups",
-            icon="event_note",
-            url="/payment/followups",
-            parent=payment,
-            order=2
-        )
-        self.stdout.write("  ✓ Payment Follow-up menus created")
-
-        # ========================================
-        # 7. REPORTS (Single Menu)
-        # ========================================
-        MenuItem.objects.create(
-            name="Reports",
-            code="reports",
-            icon="assessment",
-            url="/reports",
-            order=7
-        )
-        self.stdout.write("  ✓ Reports menu created")
-
-        # ========================================
-        # 8. SETTINGS (Single Menu)
-        # ========================================
-        MenuItem.objects.create(
-            name="Settings",
-            code="settings",
-            icon="settings",
-            url="/settings",
-            order=8
-        )
-        self.stdout.write("  ✓ Settings menu created")
 
         # ========================================
         # Summary
@@ -436,16 +167,35 @@ class Command(BaseCommand):
         parent_menus = MenuItem.objects.filter(parent__isnull=True).count()
         child_menus = MenuItem.objects.filter(parent__isnull=False).count()
         
-        self.stdout.write(self.style.SUCCESS(f"\n✔ Menu seeding completed successfully!"))
+        self.stdout.write(self.style.SUCCESS(f"\n{'='*60}"))
+        self.stdout.write(self.style.SUCCESS("✔ MENU SEEDING COMPLETED SUCCESSFULLY!"))
+        self.stdout.write(self.style.SUCCESS(f"{'='*60}"))
         self.stdout.write(f"  • Total menu items: {total}")
         self.stdout.write(f"  • Parent menus: {parent_menus}")
         self.stdout.write(f"  • Child menus: {child_menus}")
         
-        self.stdout.write("\n" + "="*60)
+        self.stdout.write(f"\n{'='*60}")
+        self.stdout.write("MENU STRUCTURE (matches menuConfig.js):")
+        self.stdout.write(f"{'='*60}")
+        self.stdout.write("1. Dashboard (single) → /dashboard")
+        self.stdout.write("2. History (single) → /history")
+        self.stdout.write("3. Invoice (dropdown)")
+        self.stdout.write("   └─ Invoice List → /invoices")
+        self.stdout.write("4. User Management (dropdown)")
+        self.stdout.write("   ├─ User List → /user-management")
+        self.stdout.write("   └─ User Control → /user-control")
+        self.stdout.write("5. Master (dropdown)")
+        self.stdout.write("   ├─ Job Title → /master/job-title")
+        self.stdout.write("   └─ Department → /master/department")
+        self.stdout.write(f"{'='*60}")
+        
+        self.stdout.write(f"\n{'='*60}")
         self.stdout.write("NEXT STEPS:")
-        self.stdout.write("="*60)
-        self.stdout.write("1. Go to Django Admin panel: http://your-domain/admin/")
-        self.stdout.write("2. Navigate to: Access Control → User menus")
-        self.stdout.write("3. Assign menus to users individually")
-        self.stdout.write("4. Users will see only their assigned menus in the sidebar")
-        self.stdout.write("="*60)
+        self.stdout.write(f"{'='*60}")
+        self.stdout.write("1. SUPERADMIN/ADMIN: Get all menus automatically")
+        self.stdout.write("2. Other roles: Assign menus via Django Admin")
+        self.stdout.write("   • Access: /admin/accesscontrol/usermenu/")
+        self.stdout.write("   • Assign specific menus to users")
+        self.stdout.write("3. Login response includes 'menus' array")
+        self.stdout.write("4. Frontend renders menus from login data")
+        self.stdout.write(f"{'='*60}\n")
