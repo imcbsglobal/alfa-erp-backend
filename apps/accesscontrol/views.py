@@ -11,8 +11,7 @@ from .models import UserMenu, MenuItem
 from .serializers import (
     MenuItemSerializer, 
     UserMenuSerializer,
-    AssignMenuSerializer,
-    UnassignMenuSerializer
+    AssignMenuSerializer
 )
 
 User = get_user_model()
@@ -64,12 +63,13 @@ class AllMenusView(APIView):
 
 class AssignMenusView(APIView):
     """
-    Assign menus to a user (Admin only)
+    Assign user's menu assignments (Admin only)
+    Frontend sends complete list of selected menus, backend syncs to match
     """
     permission_classes = [IsAuthenticated, IsAdminUser]
     
     def post(self, request):
-        """Assign multiple menus to a user"""
+        """Assign user's menu assignments to match the provided list"""
         serializer = AssignMenuSerializer(data=request.data)
         
         if not serializer.is_valid():
@@ -86,30 +86,35 @@ class AssignMenusView(APIView):
             user = User.objects.get(id=user_id)
             assigned_by = request.user
             
-            assigned_menus = []
-            skipped_menus = []
-            
             with transaction.atomic():
-                for menu_id in menu_ids:
+                # Get current assignments
+                current_assignments = UserMenu.objects.filter(user=user).select_related('menu')
+                current_menu_ids = set(str(um.menu.id) for um in current_assignments)
+                requested_menu_ids = set(str(mid) for mid in menu_ids)
+                
+                # Determine what to add and what to remove
+                to_add = requested_menu_ids - current_menu_ids
+                to_remove = current_menu_ids - requested_menu_ids
+                
+                # Remove assignments not in the new list
+                removed_count = 0
+                if to_remove:
+                    removed_count = UserMenu.objects.filter(
+                        user=user,
+                        menu_id__in=to_remove
+                    ).delete()[0]
+                
+                # Add new assignments
+                added_menus = []
+                for menu_id in to_add:
                     menu = MenuItem.objects.get(id=menu_id)
-                    
-                    # Check if already assigned
-                    if UserMenu.objects.filter(user=user, menu=menu).exists():
-                        skipped_menus.append({
-                            'id': str(menu.id),
-                            'name': menu.name,
-                            'reason': 'Already assigned'
-                        })
-                        continue
-                    
-                    # Create new assignment
                     user_menu = UserMenu.objects.create(
                         user=user,
                         menu=menu,
                         assigned_by=assigned_by,
                         is_active=True
                     )
-                    assigned_menus.append({
+                    added_menus.append({
                         'id': str(user_menu.id),
                         'menu_id': str(menu.id),
                         'menu_name': menu.name,
@@ -123,13 +128,13 @@ class AssignMenusView(APIView):
                         'email': user.email,
                         'full_name': user.get_full_name()
                     },
-                    'assigned': assigned_menus,
-                    'skipped': skipped_menus,
-                    'total_assigned': len(assigned_menus),
-                    'total_skipped': len(skipped_menus)
+                    'added': added_menus,
+                    'removed_count': removed_count,
+                    'total_added': len(added_menus),
+                    'total_menus': len(menu_ids)
                 },
-                message=f'Successfully assigned {len(assigned_menus)} menu(s) to {user.email}',
-                status_code=status.HTTP_201_CREATED
+                message=f'Successfully synced menus for {user.email}. Added {len(added_menus)}, removed {removed_count}',
+                status_code=status.HTTP_200_OK
             )
             
         except User.DoesNotExist:
@@ -144,78 +149,7 @@ class AssignMenusView(APIView):
             )
         except Exception as e:
             return error_response(
-                message='Failed to assign menus',
-                errors={'detail': str(e)},
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-
-class UnassignMenusView(APIView):
-    """
-    Unassign menus from a user (Admin only)
-    """
-    permission_classes = [IsAuthenticated, IsAdminUser]
-    
-    def post(self, request):
-        """Unassign multiple menus from a user"""
-        serializer = UnassignMenuSerializer(data=request.data)
-        
-        if not serializer.is_valid():
-            return error_response(
-                message='Validation failed',
-                errors=serializer.errors,
-                status_code=status.HTTP_400_BAD_REQUEST
-            )
-        
-        user_id = serializer.validated_data['user_id']
-        menu_ids = serializer.validated_data['menu_ids']
-        
-        try:
-            user = User.objects.get(id=user_id)
-            
-            unassigned_menus = []
-            not_found_menus = []
-            
-            with transaction.atomic():
-                for menu_id in menu_ids:
-                    try:
-                        user_menu = UserMenu.objects.get(user=user, menu_id=menu_id)
-                        menu_name = user_menu.menu.name
-                        user_menu.delete()
-                        
-                        unassigned_menus.append({
-                            'menu_id': str(menu_id),
-                            'menu_name': menu_name
-                        })
-                    except UserMenu.DoesNotExist:
-                        not_found_menus.append({
-                            'menu_id': str(menu_id),
-                            'reason': 'Not assigned to user'
-                        })
-            
-            return success_response(
-                data={
-                    'user': {
-                        'id': str(user.id),
-                        'email': user.email,
-                        'full_name': user.get_full_name()
-                    },
-                    'unassigned': unassigned_menus,
-                    'not_found': not_found_menus,
-                    'total_unassigned': len(unassigned_menus),
-                    'total_not_found': len(not_found_menus)
-                },
-                message=f'Successfully unassigned {len(unassigned_menus)} menu(s) from {user.email}'
-            )
-            
-        except User.DoesNotExist:
-            return error_response(
-                message='User not found',
-                status_code=status.HTTP_404_NOT_FOUND
-            )
-        except Exception as e:
-            return error_response(
-                message='Failed to unassign menus',
+                message='Failed to sync menus',
                 errors={'detail': str(e)},
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

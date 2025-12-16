@@ -11,8 +11,8 @@ Complete menu-based access control system for ALFA ERP. Menus are returned durin
 
 ### Role-Based Menu Access
 
-- **ADMIN / SUPERADMIN**: Automatically receive ALL menus in the system
-- **Other Roles** (PICKER, PACKER, DRIVER, BILLING, USER): Receive only menus assigned by admin
+- **SUPERADMIN**: Receives **empty menus array** (frontend uses menuConfig.js)
+- **All Other Roles** (ADMIN, PICKER, PACKER, DRIVER, BILLING, USER): Receive only menus assigned by admin via database
 
 ### Menu Structure
 
@@ -42,7 +42,7 @@ Login endpoint that returns JWT tokens, user information, and accessible menus.
 }
 ```
 
-**Response (200 OK) - ADMIN/SUPERADMIN:**
+**Response (200 OK) - SUPERADMIN:**
 ```json
 {
   "success": true,
@@ -54,25 +54,47 @@ Login endpoint that returns JWT tokens, user information, and accessible menus.
     "user": {
       "id": "7a2750ff-dee3-4697-8b38-67e20d15df79",
       "email": "admin@gmail.com",
-      "name": "Admin User",
-      "avatar": "https://example.com/avatar.jpg",
-      "role": "ADMIN",
+      "name": "Super Admin",
+      "avatar": null,
+      "role": "SUPERADMIN",
       "department": "Operations",
       "department_id": "uuid",
       "job_title": {
         "id": "uuid",
         "title": "Manager"
       },
-      "is_staff": false,
-      "is_superuser": false,
+      "is_staff": true,
+      "is_superuser": true,
       "groups": []
+    },
+    "menus": []
+  }
+}
+```
+
+**Response (200 OK) - ADMIN/Other Roles (Assigned Menus):**
+```json
+{
+  "success": true,
+  "status_code": 200,
+  "message": "Login successful",
+  "data": {
+    "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "user": {
+      "id": "uuid",
+      "email": "admin@example.com",
+      "name": "Admin User",
+      "role": "ADMIN",
+      "is_staff": false,
+      "is_superuser": false
     },
     "menus": [
       {
         "id": "3ba6bb7a-162e-4e07-a8b5-ea4acbd84f8a",
         "name": "Dashboard",
         "code": "dashboard",
-        "icon": "dashboard",
+        "icon": "home",
         "url": "/dashboard",
         "order": 1,
         "children": []
@@ -81,7 +103,7 @@ Login endpoint that returns JWT tokens, user information, and accessible menus.
         "id": "a3e2f800-1df2-4d7d-9fba-7378fcb9f2f0",
         "name": "User Management",
         "code": "user_management",
-        "icon": "people",
+        "icon": "users",
         "url": "/user-management",
         "order": 2,
         "children": [
@@ -89,7 +111,7 @@ Login endpoint that returns JWT tokens, user information, and accessible menus.
             "id": "3fe93123-98e2-465d-86c4-ab8452e9f168",
             "name": "User List",
             "code": "user_list",
-            "icon": "people",
+            "icon": "users",
             "url": "/user-management",
             "order": 1
           },
@@ -97,157 +119,11 @@ Login endpoint that returns JWT tokens, user information, and accessible menus.
             "id": "c3f8d255-0961-41ec-8970-052abb02a232",
             "name": "User Control",
             "code": "user_control",
-            "icon": "settings",
+            "icon": "cog",
             "url": "/user-control",
             "order": 2
-          },
-          {
-            "id": "4302cd10-bc58-4e74-8d96-3727a8ae680c",
-            "name": "Add User",
-            "code": "add_user",
-            "icon": "person_add",
-            "url": "/add-user",
-            "order": 3
           }
         ]
-      },
-      {
-        "id": "c9bed12e-3b20-4dc3-9554-67ef922ee1dc",
-        "name": "Master",
-        "code": "master",
-        "icon": "tune",
-        "url": "/master/job-title",
-        "order": 3,
-        "children": [
-          {
-            "id": "9fcec07f-9823-43fc-9b03-3195f6a70988",
-            "name": "Job Title",
-            "code": "job_title",
-            "icon": "work",
-            "url": "/master/job-title",
-            "order": 1
-          }
-        ]
-      },
-      {
-        "id": "a90d8fda-f0dd-4237-9daa-721124614293",
-        "name": "Delivery Management",
-        "code": "delivery_management",
-        "icon": "local_shipping",
-        "url": "/delivery",
-        "order": 4,
-        "children": [
-          {
-            "id": "6d22d3e2-0daf-451c-9b94-d4edf7e5c8a4",
-            "name": "Bills",
-            "code": "delivery_bills",
-            "icon": "receipt",
-            "url": "/delivery/bills",
-            "order": 1
-          },
-          {
-            "id": "5d05bb3c-41ca-4a05-81dc-db1eb9f8a47f",
-            "name": "Picking",
-            "code": "delivery_picking",
-            "icon": "inventory",
-            "url": "/delivery/picking",
-            "order": 2
-          },
-          {
-            "id": "8d356a03-be4b-470d-99ba-5f1c56bb155b",
-            "name": "Packing",
-            "code": "delivery_packing",
-            "icon": "inventory_2",
-            "url": "/delivery/packing",
-            "order": 3
-          },
-          {
-            "id": "88de3c8c-a35c-42ec-8060-5aeb033d7afd",
-            "name": "Delivery Tasks",
-            "code": "delivery_tasks",
-            "icon": "local_shipping",
-            "url": "/delivery/tasks",
-            "order": 4
-          }
-        ]
-      },
-      {
-        "id": "36257e80-6969-4be6-9c5f-c4db755903f7",
-        "name": "Purchase Management",
-        "code": "purchase_management",
-        "icon": "shopping_cart",
-        "url": "/purchase",
-        "order": 5,
-        "children": [
-          {
-            "id": "9ed6ffed-7311-4e3a-af24-562315a618fc",
-            "name": "Orders",
-            "code": "purchase_orders",
-            "icon": "list_alt",
-            "url": "/purchase/orders",
-            "order": 1
-          },
-          {
-            "id": "36208166-446c-42c2-a9c8-19c02bca66ee",
-            "name": "Vendors",
-            "code": "purchase_vendors",
-            "icon": "business",
-            "url": "/purchase/vendors",
-            "order": 2
-          },
-          {
-            "id": "05aff752-5de4-422f-b0fe-67946c6d62ca",
-            "name": "Invoices",
-            "code": "purchase_invoices",
-            "icon": "description",
-            "url": "/purchase/invoices",
-            "order": 3
-          }
-        ]
-      },
-      {
-        "id": "feb8cb09-53b3-46a3-8cf7-0a3607280c1b",
-        "name": "Payment Follow-up",
-        "code": "payment_followup",
-        "icon": "payment",
-        "url": "/payment",
-        "order": 6,
-        "children": [
-          {
-            "id": "84afeb3d-b0c4-4887-a2e4-c91a26688655",
-            "name": "Outstanding",
-            "code": "payment_outstanding",
-            "icon": "account_balance",
-            "url": "/payment/outstanding",
-            "order": 1
-          },
-          {
-            "id": "2334a784-5aaf-4be5-9e5a-06303abcbe35",
-            "name": "Follow-ups",
-            "code": "payment_followups",
-            "icon": "event_note",
-            "url": "/payment/followups",
-            "order": 2
-          }
-        ]
-      },
-      {
-        "id": "cf7f1889-02ff-43ff-ba3e-17f4fa2cfa01",
-        "name": "Reports",
-        "code": "reports",
-        "icon": "assessment",
-        "url": "/reports",
-        "order": 7,
-        "children": []
-      },
-      {
-        "id": "68c27648-0344-4d9f-aa80-3d95fa8f89ce",
-        "name": "Settings",
-        "code": "settings",
-        "icon": "settings",
-        "url": "/settings",
-        "order": 8,
-        "children": []
       }
     ]
   }
@@ -274,19 +150,19 @@ Login endpoint that returns JWT tokens, user information, and accessible menus.
     "menus": [
       {
         "id": "a90d8fda-f0dd-4237-9daa-721124614293",
-        "name": "Delivery Management",
-        "code": "delivery_management",
-        "icon": "local_shipping",
-        "url": "/delivery",
-        "order": 4,
+        "name": "Invoice",
+        "code": "invoice",
+        "icon": "invoice",
+        "url": "/invoices",
+        "order": 3,
         "children": [
           {
             "id": "5d05bb3c-41ca-4a05-81dc-db1eb9f8a47f",
-            "name": "Picking",
-            "code": "delivery_picking",
-            "icon": "inventory",
-            "url": "/delivery/picking",
-            "order": 2
+            "name": "Invoice List",
+            "code": "invoice_list",
+            "icon": "list",
+            "url": "/invoices",
+            "order": 1
           }
         ]
       }
@@ -469,10 +345,16 @@ Authorization: Bearer {admin_token}
 
 ---
 
-### 4. Assign Menus to User
+### 4. Sync User Menu Assignments
 `POST /api/access-control/admin/assign-menus/`
 
-Assign menus to a specific user.
+Sync user's menu assignments. Frontend sends the **complete list** of checked/selected menu IDs. Backend automatically adds new selections and removes unchecked ones.
+
+**How it works:**
+- Admin checks/unchecks menu checkboxes in frontend
+- Frontend sends ALL currently checked menu IDs
+- Backend syncs: removes menus not in list, adds new menus
+- User sees changes on next login
 
 **Headers:**
 ```
@@ -491,40 +373,26 @@ Content-Type: application/json
 }
 ```
 
-### 4. Assign Menus to User
-`POST /api/access-control/admin/assign-menus/`
-
-Assign menus to a specific user. User will see these menus on next login.
-
-**Headers:**
-```
-Authorization: Bearer {admin_token}
-Content-Type: application/json
-```
-
-**Request Body:**
+**Request Body (Remove all menus):**
 ```json
 {
   "user_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "menu_ids": [
-    "cc17dc82-a37d-423a-bd21-ff659780ed93",
-    "8f9e1234-b567-89ab-cdef-0123456789ab"
-  ]
+  "menu_ids": []
 }
 ```
 
-**Response (201 Created):**
+**Response (200 OK):**
 ```json
 {
   "success": true,
-  "message": "Successfully assigned 2 menu(s) to user@example.com",
+  "message": "Successfully synced menus for user@example.com. Added 2, removed 1",
   "data": {
     "user": {
       "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
       "email": "user@example.com",
       "full_name": "John Doe"
     },
-    "assigned": [
+    "added": [
       {
         "id": "xyz-123-abc",
         "menu_id": "cc17dc82-a37d-423a-bd21-ff659780ed93",
@@ -534,99 +402,20 @@ Content-Type: application/json
       {
         "id": "xyz-456-def",
         "menu_id": "8f9e1234-b567-89ab-cdef-0123456789ab",
-        "menu_name": "Delivery Management",
-        "menu_code": "delivery_management"
+        "menu_name": "Invoice",
+        "menu_code": "invoice"
       }
     ],
-    "skipped": [],
-    "total_assigned": 2,
-    "total_skipped": 0
+    "removed_count": 1,
+    "total_added": 2,
+    "total_menus": 2
   }
 }
 ```
 
 ---
 
-### 5. Unassign Menus from User
-`POST /api/access-control/admin/unassign-menus/`
-
-Remove menu assignments from a user.
-
-**Headers:**
-```
-Authorization: Bearer {admin_token}
-Content-Type: application/json
-```
-
-**Request Body:**
-```json
-{
-  "user_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "menu_ids": [
-    "cc17dc82-a37d-423a-bd21-ff659780ed93"
-  ]
-}
-```
-
-### 5. Unassign Menus from User
-`POST /api/access-control/admin/unassign-menus/`
-
-Remove menu assignments from a user. User will lose access on next login.
-
-**Headers:**
-```
-Authorization: Bearer {admin_token}
-Content-Type: application/json
-```
-
-**Request Body:**
-```json
-{
-  "user_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "menu_ids": [
-    "cc17dc82-a37d-423a-bd21-ff659780ed93"
-  ]
-}
-```
-
-**Response (200 OK):**
-
-```json
-{
-  "success": true,
-  "message": "Successfully unassigned 1 menu(s) from user@example.com",
-  "data": {
-    "user": {
-      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-      "email": "user@example.com",
-      "full_name": "John Doe"
-    },
-    "unassigned": [
-      {
-        "menu_id": "cc17dc82-a37d-423a-bd21-ff659780ed93",
-        "menu_name": "Dashboard"
-      }
-    ],
-    "not_found": [],
-    "total_unassigned": 1,
-    "total_not_found": 0
-  }
-}
-```
-
----
-
-### 6. Get User's Menu Assignments
-`GET /api/access-control/admin/users/{user_id}/menus/`
-
-View all menus assigned to a specific user.
-
-**Headers:**
-```
-Authorization: Bearer {admin_token}
-```
-
-### 6. Get User's Menu Assignments
+### 5. Get User's Menu Assignments
 `GET /api/access-control/admin/users/{user_id}/menus/`
 
 View all menus assigned to a specific user (admin only).

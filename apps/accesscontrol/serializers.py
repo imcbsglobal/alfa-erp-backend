@@ -38,13 +38,13 @@ class UserMenuSerializer(serializers.ModelSerializer):
 
 
 class AssignMenuSerializer(serializers.Serializer):
-    """Serializer for assigning menus to a user"""
+    """Serializer for syncing user's menu assignments"""
     user_id = serializers.UUIDField(required=True)
     menu_ids = serializers.ListField(
         child=serializers.UUIDField(),
         required=True,
-        allow_empty=False,
-        help_text="List of menu IDs to assign to the user"
+        allow_empty=True,
+        help_text="Complete list of menu IDs that should be assigned to the user. Any existing assignments not in this list will be removed."
     )
     
     def validate_user_id(self, value):
@@ -58,6 +58,9 @@ class AssignMenuSerializer(serializers.Serializer):
     
     def validate_menu_ids(self, value):
         """Validate all menu IDs exist"""
+        if not value:  # Empty list is valid (removes all menus)
+            return value
+            
         existing_menus = MenuItem.objects.filter(id__in=value).values_list('id', flat=True)
         existing_menus = set(str(menu_id) for menu_id in existing_menus)
         requested_menus = set(str(menu_id) for menu_id in value)
@@ -67,24 +70,4 @@ class AssignMenuSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 f"Invalid menu IDs: {', '.join(invalid_menus)}"
             )
-        return value
-
-
-class UnassignMenuSerializer(serializers.Serializer):
-    """Serializer for unassigning menus from a user"""
-    user_id = serializers.UUIDField(required=True)
-    menu_ids = serializers.ListField(
-        child=serializers.UUIDField(),
-        required=True,
-        allow_empty=False,
-        help_text="List of menu IDs to unassign from the user"
-    )
-    
-    def validate_user_id(self, value):
-        """Validate user exists"""
-        from django.contrib.auth import get_user_model
-        User = get_user_model()
-        
-        if not User.objects.filter(id=value).exists():
-            raise serializers.ValidationError("User not found")
         return value
