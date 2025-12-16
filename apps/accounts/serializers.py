@@ -41,9 +41,9 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         try:
             from apps.accesscontrol.models import UserMenu, MenuItem
 
-            # ADMIN/SUPERADMIN get empty array (frontend uses menuConfig.js)
-            # Other roles get only their assigned menus from DB
-            if self.user.is_superadmin():
+            # Only SUPERADMIN gets empty array (frontend uses menuConfig.js)
+            # All other roles (including ADMIN) get their assigned menus from DB
+            if self.user.role == 'SUPERADMIN':
                 menu_structure = []
             else:
                 # Get menu structure from user's direct menu assignments
