@@ -235,6 +235,28 @@ class StartPickingView(APIView):
                 "errors": serializer.errors
             }, status=status.HTTP_400_BAD_REQUEST)
         
+        # Check if this user already has any active picking session
+        user_email = request.data.get('user_email')
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        user = User.objects.filter(email=user_email).first()
+        
+        if user:
+            existing_session = PickingSession.objects.filter(
+                picker=user,
+                picking_status='PENDING'
+            ).select_related('invoice').first()
+            
+            if existing_session:
+                return Response({
+                    "success": False,
+                    "message": f"You already have an active picking session for {existing_session.invoice.invoice_no}",
+                    "data": {
+                        "invoice_no": existing_session.invoice.invoice_no,
+                        "started_at": existing_session.start_time
+                    }
+                }, status=status.HTTP_409_CONFLICT)
+        
         picking_session = serializer.save()
 
                 # Update invoice status
@@ -350,6 +372,22 @@ class StartPackingView(APIView):
         invoice = validated_data['invoice']
         user = validated_data['user']
         notes = validated_data.get('notes', '')
+        
+        # Check if this user already has any active packing session
+        existing_session = PackingSession.objects.filter(
+            packer=user,
+            packing_status='IN_PROGRESS'
+        ).select_related('invoice').first()
+        
+        if existing_session:
+            return Response({
+                "success": False,
+                "message": f"You already have an active packing session for {existing_session.invoice.invoice_no}",
+                "data": {
+                    "invoice_no": existing_session.invoice.invoice_no,
+                    "started_at": existing_session.start_time
+                }
+            }, status=status.HTTP_409_CONFLICT)
         
         # Create packing session
         packing_session = PackingSession.objects.create(
