@@ -80,6 +80,8 @@ Optional (IsAuthenticatedOrReadOnly) - public read access by default
           "item_code": "PR650",
           "quantity": 20,
           "mrp": 3.50,
+          "company_name": "Sun Pharma",
+          "packing": "10x10 Tablets",
           "shelf_location": "R-12",
           "remarks": ""
         },
@@ -89,6 +91,8 @@ Optional (IsAuthenticatedOrReadOnly) - public read access by default
           "item_code": "OTN10",
           "quantity": 10,
           "mrp": 85.00,
+          "company_name": "Novartis",
+          "packing": "10ml Bottle",
           "shelf_location": "G-04",
           "remarks": ""
         }
@@ -183,6 +187,8 @@ Set the key on the server using the `SALES_IMPORT_API_KEY` environment variable 
       "item_code": "PR650",
       "quantity": 20,
       "mrp": 3.50,
+      "company_name": "Sun Pharma",
+      "packing": "10x10 Tablets",
       "shelf_location": "R-12",
       "remarks": ""
     },
@@ -191,6 +197,8 @@ Set the key on the server using the `SALES_IMPORT_API_KEY` environment variable 
       "item_code": "OTN10",
       "quantity": 10,
       "mrp": 85.00,
+      "company_name": "Novartis",
+      "packing": "10ml Bottle",
       "shelf_location": "G-04",
       "remarks": ""
     }
@@ -276,6 +284,8 @@ Example payload (JSON):
       "item_code": "PR650",
       "quantity": 20,
       "mrp": 3.50,
+      "company_name": "Sun Pharma",
+      "packing": "10x10 Tablets",
       "shelf_location": "R-12",
       "remarks": ""
     },
@@ -285,6 +295,8 @@ Example payload (JSON):
       "item_code": "OTN10",
       "quantity": 10,
       "mrp": 85.00,
+      "company_name": "Novartis",
+      "packing": "10ml Bottle",
       "shelf_location": "G-04",
       "remarks": ""
     }
@@ -574,7 +586,7 @@ es.onmessage = (evt) => {
 **InvoiceItem**
 - `invoice` (FK)
 - `name` - Item/product name
-- `item_code`, `quantity`, `mrp`, `shelf_location`, `remarks`
+- `item_code`, `quantity`, `mrp`, `company_name`, `packing`, `shelf_location`, `remarks`
 
 ---
 

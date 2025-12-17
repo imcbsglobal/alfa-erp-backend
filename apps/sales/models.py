@@ -56,6 +56,8 @@ class InvoiceItem(models.Model):
     item_code = models.CharField(max_length=100)
     quantity = models.IntegerField()
     mrp = models.FloatField()
+    company_name = models.CharField(max_length=100, blank=True)
+    packing = models.CharField(max_length=50, blank=True)
     shelf_location = models.CharField(max_length=50, blank=True)
     batch_no = models.CharField(max_length=100, blank=True, null=True)
     expiry_date = models.DateField(blank=True, null=True)

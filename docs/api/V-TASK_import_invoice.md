@@ -47,6 +47,8 @@ Sample Payload
       "item_code": "PR650",
       "quantity": 20,
       "mrp": 3.50,
+      "company_name": "Sun Pharma",
+      "packing": "10x10 Tablets",
       "shelf_location": "R-12",
       "remarks": ""
     },
@@ -55,6 +57,8 @@ Sample Payload
       "item_code": "OTN10",
       "quantity": 10,
       "mrp": 85.00,
+      "company_name": "Novartis",
+      "packing": "10ml Bottle",
       "shelf_location": "G-04",
       "remarks": ""
     }
