@@ -80,6 +80,17 @@ class Command(BaseCommand):
                 'is_active': True,
             }
         )
+        invoice_list, _ = MenuItem.objects.update_or_create(
+            code="my_assigned_bills",
+            defaults={
+                'name': "My Assigned Bills",
+                'icon': "ListIcon",
+                'url': "/invoices/my",
+                'parent': invoice,
+                'order': 2,
+                'is_active': True,
+            }
+        )
         self.stdout.write("  ✓ Invoice menus created")
 
         # ========================================

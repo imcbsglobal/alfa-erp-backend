@@ -49,11 +49,61 @@ class InvoiceListView(generics.ListAPIView):
     """
     GET /api/sales/invoices/
     List all invoices with pagination, includes customer, salesman, items
+    
+    Query Parameters:
+    - status: Filter by invoice status (PENDING, PICKING, PICKED, PACKING, PACKED, DISPATCHED, DELIVERED)
+    - user: Filter by created_user ID (invoices created by specific user)
+    - created_by: Filter by created_by string field (username/identifier)
+    - worker: Filter by worker email (picker/packer/delivery person who worked on the invoice)
+    
+    Examples:
+    - /api/sales/invoices/?status=PENDING
+    - /api/sales/invoices/?status=PICKING&status=PACKING (multiple values)
+    - /api/sales/invoices/?user=5
+    - /api/sales/invoices/?created_by=admin
+    - /api/sales/invoices/?worker=zain@gmail.com (invoices worked on by this user)
+    - /api/sales/invoices/?status=PICKED&worker=zain@gmail.com (invoices picked by this user)
     """
-    queryset = Invoice.objects.select_related('customer', 'salesman', 'created_user').prefetch_related('items').order_by('-created_at')
     serializer_class = InvoiceListSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
     pagination_class = InvoiceListPagination
+    
+    def get_queryset(self):
+        queryset = Invoice.objects.select_related('customer', 'salesman', 'created_user').prefetch_related('items').order_by('-created_at')
+        
+        # Filter by status (supports multiple values: ?status=PENDING&status=PICKING)
+        status_list = self.request.query_params.getlist('status')
+        if status_list:
+            queryset = queryset.filter(status__in=status_list)
+        
+        # Filter by created_user ID
+        user_id = self.request.query_params.get('user')
+        if user_id:
+            queryset = queryset.filter(created_user_id=user_id)
+        
+        # Filter by created_by string field
+        created_by = self.request.query_params.get('created_by')
+        if created_by:
+            queryset = queryset.filter(created_by__icontains=created_by)
+        
+        # Filter by worker email (picker/packer/delivery person)
+        worker_email = self.request.query_params.get('worker')
+        if worker_email:
+            from django.db.models import Q
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            
+            # Find user by email
+            worker = User.objects.filter(email=worker_email).first()
+            if worker:
+                # Filter invoices where this user is picker, packer, or delivery person
+                queryset = queryset.filter(
+                    Q(pickingsession__picker=worker) |
+                    Q(packingsession__packer=worker) |
+                    Q(deliverysession__delivery_user=worker)
+                ).distinct()
+        
+        return queryset
 
 
 # ===== Retrieve Invoice API =====
@@ -65,6 +115,146 @@ class InvoiceDetailView(generics.RetrieveAPIView):
     queryset = Invoice.objects.select_related('customer', 'salesman', 'created_user').prefetch_related('items')
     serializer_class = InvoiceListSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
+
+
+# ===== My Active Picking Task API =====
+class MyActivePickingView(APIView):
+    """
+    GET /api/sales/picking/active/
+    Returns the current active picking task for the authenticated user.
+    Since a user can only work on one task at a time, this returns their current picking invoice (if any).
+    
+    Authentication: Required (Bearer token)
+    
+    Query Parameters:
+    - user: User ID (UUID) or email to check (admin/staff only)
+    - user_email: Alias for user parameter
+    
+    Response:
+    - If user has an active picking task: Returns invoice details with session info
+    - If no active task: Returns {"success": true, "message": "No active picking task", "data": null}
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+
+        target_user = request.user
+        user_param = request.query_params.get('user')
+        user_email_param = request.query_params.get('user_email')
+
+        requested = None
+        if user_email_param:
+            requested = User.objects.filter(email=user_email_param).first()
+        elif user_param:
+            if '@' in user_param:
+                requested = User.objects.filter(email=user_param).first()
+            else:
+                requested = User.objects.filter(id=user_param).first()
+
+        if requested and requested != request.user:
+            if not (request.user and request.user.is_authenticated and request.user.is_admin_or_superadmin()):
+                return Response({
+                    "success": False,
+                    "message": "Permission denied to view other user's task."
+                }, status=status.HTTP_403_FORBIDDEN)
+            target_user = requested
+
+        # Check for active picking session
+        picking_session = PickingSession.objects.filter(
+            picker=target_user,
+            picking_status='PREPARING'
+        ).select_related('invoice__customer', 'invoice__salesman').prefetch_related('invoice__items').first()
+
+        if picking_session:
+            invoice_data = InvoiceListSerializer(picking_session.invoice).data
+            return Response({
+                "success": True,
+                "message": f"Active picking task found for {target_user.email}",
+                "data": {
+                    "task_type": "PICKING",
+                    "session_id": picking_session.id,
+                    "start_time": picking_session.start_time,
+                    "invoice": invoice_data
+                }
+            }, status=status.HTTP_200_OK)
+
+        return Response({
+            "success": True,
+            "message": "No active picking task",
+            "data": None
+        }, status=status.HTTP_200_OK)
+
+
+# ===== My Active Packing Task API =====
+class MyActivePackingView(APIView):
+    """
+    GET /api/sales/packing/active/
+    Returns the current active packing task for the authenticated user.
+    Since a user can only work on one task at a time, this returns their current packing invoice (if any).
+    
+    Authentication: Required (Bearer token)
+    
+    Query Parameters:
+    - user: User ID (UUID) or email to check (admin/staff only)
+    - user_email: Alias for user parameter
+    
+    Response:
+    - If user has an active packing task: Returns invoice details with session info
+    - If no active task: Returns {"success": true, "message": "No active packing task", "data": null}
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+
+        target_user = request.user
+        user_param = request.query_params.get('user')
+        user_email_param = request.query_params.get('user_email')
+
+        requested = None
+        if user_email_param:
+            requested = User.objects.filter(email=user_email_param).first()
+        elif user_param:
+            if '@' in user_param:
+                requested = User.objects.filter(email=user_param).first()
+            else:
+                requested = User.objects.filter(id=user_param).first()
+
+        if requested and requested != request.user:
+            if not (request.user and request.user.is_authenticated and request.user.is_admin_or_superadmin()):
+                return Response({
+                    "success": False,
+                    "message": "Permission denied to view other user's task."
+                }, status=status.HTTP_403_FORBIDDEN)
+            target_user = requested
+
+        # Check for active packing session
+        packing_session = PackingSession.objects.filter(
+            packer=target_user,
+            packing_status='IN_PROGRESS'
+        ).select_related('invoice__customer', 'invoice__salesman').prefetch_related('invoice__items').first()
+
+        if packing_session:
+            invoice_data = InvoiceListSerializer(packing_session.invoice).data
+            return Response({
+                "success": True,
+                "message": f"Active packing task found for {target_user.email}",
+                "data": {
+                    "task_type": "PACKING",
+                    "session_id": packing_session.id,
+                    "start_time": packing_session.start_time,
+                    "invoice": invoice_data
+                }
+            }, status=status.HTTP_200_OK)
+
+        return Response({
+            "success": True,
+            "message": "No active packing task",
+            "data": None
+        }, status=status.HTTP_200_OK)
 
 # -----------------------------------
 # DRF API View: Import Invoice
@@ -244,7 +434,7 @@ class StartPickingView(APIView):
         if user:
             existing_session = PickingSession.objects.filter(
                 picker=user,
-                picking_status='PENDING'
+                picking_status='PREPARING'
             ).select_related('invoice').first()
             
             if existing_session:

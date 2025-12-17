@@ -44,6 +44,36 @@ Optional (IsAuthenticatedOrReadOnly) - public read access by default
 ### Query Parameters
 - `page` (integer, optional): Page number (default: 1)
 - `page_size` (integer, optional): Items per page (default: 20, max: 100)
+- `status` (string, optional): Filter by invoice status. Can specify multiple times for OR filtering
+  - Valid values: `PENDING`, `PICKING`, `PICKED`, `PACKING`, `PACKED`, `DISPATCHED`, `DELIVERED`
+  - Examples: `?status=PENDING` or `?status=PICKING&status=PACKING`
+- `user` (integer, optional): Filter by created_user ID (invoices created by specific authenticated user)
+- `created_by` (string, optional): Filter by created_by field (username/identifier, case-insensitive contains match)
+- `worker` (string, optional): Filter by worker email - shows invoices where this user was the picker, packer, or delivery person
+
+### Examples
+```bash
+# Get all pending invoices
+GET /api/sales/invoices/?status=PENDING
+
+# Get invoices that are either picking or packing
+GET /api/sales/invoices/?status=PICKING&status=PACKING
+
+# Get invoices created by user ID 5
+GET /api/sales/invoices/?user=5
+
+# Get invoices created by username containing "admin"
+GET /api/sales/invoices/?created_by=admin
+
+# Get invoices picked by zain@gmail.com
+GET /api/sales/invoices/?worker=zain@gmail.com
+
+# Get picked invoices worked on by zain@gmail.com
+GET /api/sales/invoices/?status=PICKED&worker=zain@gmail.com
+
+# Combine filters: pending invoices created by admin, page 2
+GET /api/sales/invoices/?status=PENDING&created_by=admin&page=2
+```
 
 ### Response
 **Success (200 OK):**
@@ -145,7 +175,210 @@ curl -X GET "http://localhost:8000/api/sales/invoices/31/"
 
 ---
 
-## 2. Import Invoice
+## 3. My Active Picking Task
+`GET /api/sales/picking/active/`
+
+### Purpose
+Get the current active picking task for the authenticated user. Since a user can only work on one task at a time (enforced by the system), this returns their current picking invoice if they have an active picking session.
+
+**Use Case:** When a picker opens the app, call this endpoint to check if they have an unfinished picking task.
+
+### Authentication
+Required (Bearer token)
+
+### Query Parameters
+- `user` (string, optional): Look up by user ID (UUID) or email. If present and the requester is an admin/superadmin/staff, returns the specified user's active picking task.
+- `user_email` (string, optional): Alias for `user` (email address preferred).
+
+### Permissions
+- If the request asks for another user's active task (via `user` or `user_email`), the caller must be an admin/superadmin/staff (checked via `User.is_admin_or_superadmin()`).
+
+### Response
+
+**Active Picking Task (200 OK)**
+```json
+{
+  "success": true,
+  "message": "Active picking task found for zain@gmail.com",
+  "data": {
+    "task_type": "PICKING",
+    "session_id": 42,
+    "start_time": "2025-12-17T10:30:00Z",
+    "invoice": {
+      "id": 31,
+      "invoice_no": "INV-77052",
+      "invoice_date": "2025-01-18",
+      "status": "PICKING",
+      "customer": {
+        "code": "CUST-889",
+        "name": "LifeCare Pharmacy",
+        "area": "Kozhikode",
+        "address1": "Near Railway Station",
+        "phone1": "9876543210"
+      },
+      "items": [
+        {
+          "id": 45,
+          "name": "Paracetamol 650mg",
+          "item_code": "PR650",
+          "quantity": 20,
+          "shelf_location": "R-12"
+        }
+      ],
+      "total_amount": 920.0
+    }
+  }
+}
+```
+
+**No Active Picking Task (200 OK)**
+```json
+{
+  "success": true,
+  "message": "No active picking task",
+  "data": null
+}
+```
+
+### cURL example
+```bash
+curl -X GET "http://localhost:8000/api/sales/picking/active/" \
+  -H "Authorization: Bearer <access_token>"
+
+# Admin checking another user's active picking task
+curl -X GET "http://localhost:8000/api/sales/picking/active/?user_email=zain@gmail.com" \
+  -H "Authorization: Bearer <admin_token>"
+```
+
+---
+
+## 4. My Active Packing Task
+`GET /api/sales/packing/active/`
+
+### Purpose
+Get the current active packing task for the authenticated user. Since a user can only work on one task at a time (enforced by the system), this returns their current packing invoice if they have an active packing session.
+
+**Use Case:** When a packer opens the app, call this endpoint to check if they have an unfinished packing task.
+
+### Authentication
+Required (Bearer token)
+
+### Query Parameters
+- `user` (string, optional): Look up by user ID (UUID) or email. If present and the requester is an admin/superadmin/staff, returns the specified user's active packing task.
+- `user_email` (string, optional): Alias for `user` (email address preferred).
+
+### Permissions
+- If the request asks for another user's active task (via `user` or `user_email`), the caller must be an admin/superadmin/staff (checked via `User.is_admin_or_superadmin()`).
+
+### Response
+
+**Active Packing Task (200 OK)**
+```json
+{
+  "success": true,
+  "message": "Active packing task found for sara@gmail.com",
+  "data": {
+    "task_type": "PACKING",
+    "session_id": 58,
+    "start_time": "2025-12-17T11:15:00Z",
+    "invoice": {
+      "id": 45,
+      "invoice_no": "INV-77099",
+      "invoice_date": "2025-01-18",
+      "status": "PACKING",
+      "customer": { ... },
+      "items": [...],
+      "total_amount": 1250.0
+    }
+  }
+}
+```
+
+**No Active Packing Task (200 OK)**
+```json
+{
+  "success": true,
+  "message": "Active packing task found",
+  "data": {
+    "task_type": "PACKING",
+    "session_id": 58,
+    "start_time": "2025-12-17T11:15:00Z",
+    "invoice": { ... }
+  }
+}
+```
+
+**No Active Packing Task (200 OK)**
+```json
+{
+  "success": true,
+  "message": "No active packing task",
+  "data": null
+}
+```
+
+### cURL example
+```bash
+curl -X GET "http://localhost:8000/api/sales/packing/active/" \
+  -H "Authorization: Bearer <access_token>"
+
+# Admin checking another user's active packing task
+curl -X GET "http://localhost:8000/api/sales/packing/active/?user_email=sara@gmail.com" \
+  -H "Authorization: Bearer <admin_token>"
+```
+
+### Frontend Integration Example
+```javascript
+// Picker app: Check for active picking task on app launch
+async function checkActivePickingTask() {
+  try {
+    const response = await api.get('/sales/picking/active/');
+    
+    if (response.data.data) {
+      const { invoice } = response.data.data;
+      // User has unfinished picking work, navigate to it
+      navigateTo(`/picking/${invoice.invoice_no}`);
+    } else {
+      // No active task, show available invoices to pick
+      navigateTo('/picking/dashboard');
+    }
+  } catch (error) {
+    console.error('Error checking active picking task:', error);
+  }
+}
+
+// Packer app: Check for active packing task on app launch
+async function checkActivePackingTask() {
+  try {
+    const response = await api.get('/sales/packing/active/');
+    
+    if (response.data.data) {
+      const { invoice } = response.data.data;
+      // User has unfinished packing work, navigate to it
+      navigateTo(`/packing/${invoice.invoice_no}`);
+    } else {
+      // No active task, show picked invoices ready for packing
+      navigateTo('/packing/dashboard');
+    }
+  } catch (error) {
+    console.error('Error checking active packing task:', error);
+  }
+}
+
+// Admin dashboard: Check any user's active task
+async function checkUserActiveTask(userEmail, taskType) {
+  const endpoint = taskType === 'PICKING' 
+    ? '/sales/picking/active/' 
+    : '/sales/packing/active/';
+  
+  const response = await api.get(`${endpoint}?user_email=${userEmail}`);
+  return response.data.data; // null if no active task
+}
+```
+
+---
+
+## 4. Import Invoice
 `POST /api/sales/import/invoice/`
 
 ### Purpose
@@ -241,7 +474,7 @@ curl -X POST "http://localhost:8000/api/sales/import/invoice/" \
 
 ---
 
-## 3. SSE: Invoice Stream
+## 5. SSE: Invoice Stream
 `GET /api/sales/sse/invoices/`
 
 ### Purpose
@@ -328,9 +561,57 @@ es.onerror = (err) => {
 - Because Django's `StreamingHttpResponse` is synchronous, it is recommended to run this under a server that supports streaming well, such as `gunicorn` or `daphne` (if you're using ASGI/WebSocket alternatives).
 - For production-scalability, prefer WebSockets (Django Channels) or a Redis-backed pub/sub for event delivery — SSE with an in-memory queue is not shared across multiple instances.
 
+### Status-Based Filtering for SSE ⚠️
+**Current Implementation Review:**
+The SSE endpoint (`/api/sales/sse/invoices/`) uses `django-eventstream` which broadcasts all invoice events to a single channel. It does **not support per-connection query parameter filtering** (e.g., `?status=PENDING`).
+
+**Recommended Approaches:**
+
+1. **Client-Side Filtering (Simple & Recommended):**
+   ```javascript
+   const es = new EventSource('http://localhost:8000/api/sales/sse/invoices/');
+   es.onmessage = (evt) => {
+     const invoice = JSON.parse(evt.data);
+     // Filter on client side based on your needs
+     if (invoice.status === 'PENDING' || invoice.status === 'PICKING') {
+       updateUI(invoice);
+     }
+   };
+   ```
+
+2. **Use REST API with Polling for Filtered Data:**
+   For status-specific views, use the filtered list endpoint with periodic polling:
+   ```javascript
+   // Poll every 5 seconds for pending invoices
+   setInterval(() => {
+     fetch('/api/sales/invoices/?status=PENDING')
+       .then(r => r.json())
+       .then(data => updateDashboard(data.results));
+   }, 5000);
+   ```
+
+3. **Hybrid Approach (SSE + REST):**
+   - Use SSE for real-time notifications of any change
+   - On receiving SSE event, fetch filtered data from REST API
+   - Best balance of real-time updates and filtered data
+   ```javascript
+   const es = new EventSource('http://localhost:8000/api/sales/sse/invoices/');
+   es.onmessage = () => {
+     // Any invoice changed, refresh filtered view
+     fetch('/api/sales/invoices/?status=PENDING')
+       .then(r => r.json())
+       .then(data => updatePendingInvoices(data.results));
+   };
+   ```
+
+4. **Advanced: Multiple Channels (Requires Custom Implementation):**
+   - Modify backend to send events to status-specific channels: `invoices-pending`, `invoices-picking`, etc.
+   - Connect to specific channels: `/api/sales/sse/invoices-pending/`
+   - Requires custom eventstream configuration and changes to event emission logic
+
 ---
 
-## 4. Picking, Packing & Delivery Workflow ✅
+## 6. Picking, Packing & Delivery Workflow ✅
 
 These endpoints implement the warehouse workflow using employee email scanning at each stage. Authenticated users scan their email (from QR code or barcode) to start and/or complete jobs. Each endpoint validates invoice state and user identity and emits an SSE event to `/api/sales/sse/invoices/` when status changes.
 

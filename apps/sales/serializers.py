@@ -14,7 +14,7 @@ class InvoiceItemSerializer(serializers.ModelSerializer):
     """Serializer for invoice line items"""
     class Meta:
         model = InvoiceItem
-        fields = ['id', 'name', 'item_code', 'quantity', 'mrp', 'company_name', 'packing', 'shelf_location', 'remarks', 'batch_no', 'expiry_date','company_name','packing']
+        fields = ['id', 'name', 'item_code', 'quantity', 'mrp', 'company_name', 'packing', 'shelf_location', 'remarks', 'batch_no', 'expiry_date']
 
 
 class CustomerReadSerializer(serializers.ModelSerializer):

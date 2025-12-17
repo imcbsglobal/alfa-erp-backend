@@ -5,6 +5,8 @@ from .views import (
     ImportInvoiceView, 
     InvoiceListView, 
     InvoiceDetailView,
+    MyActivePickingView,
+    MyActivePackingView,
     StartPickingView,
     CompletePickingView,
     StartPackingView,
@@ -23,9 +25,11 @@ urlpatterns = [
     
     # Picking workflow
     path("picking/start/", StartPickingView.as_view(), name="picking-start"),
+    path("picking/active/", MyActivePickingView.as_view(), name="picking-active"),
     path("picking/complete/", CompletePickingView.as_view(), name="picking-complete"),
     
     # Packing workflow
+    path("packing/active/", MyActivePackingView.as_view(), name="packing-active"),
     path("packing/start/", StartPackingView.as_view(), name="packing-start"),
     path("packing/complete/", CompletePackingView.as_view(), name="packing-complete"),
     
