@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>PharmaPick ERP - Prototype</title>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- React Router -->
+    <script src="https://unpkg.com/history@5/umd/history.development.js"></script>
+    <script src="https://unpkg.com/react-router@6.3.0/umd/react-router.development.js"></script>
+    <script src="https://unpkg.com/react-router-dom@6.3.0/umd/react-router-dom.development.js"></script>
+    
+    <!-- Babel -->
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    
+    <!-- Google Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#136dec",
+                        "primary-dark": "#0b4cb4",
+                        "background-light": "#f6f7f8",
+                        "background-dark": "#101822",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.fill, .material-symbols-outlined.filled {
+            font-variation-settings: 'FILL' 1;
+        }
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cfd9e7; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #9ca3af; 
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-[#0d131b] dark:text-white h-screen overflow-hidden font-display">
+    <div id="root" class="h-full"></div>
+
+    <script type="text/babel">
+        // Global Declarations
+        const { useState, useEffect } = React;
+        const { createRoot } = ReactDOM;
+        const { MemoryRouter, Routes, Route, Link, useNavigate, useLocation } = ReactRouterDOM;
+
+        // --- Common Components ---
+
+        const NavigationLink = ({ to, label, icon, active, filled }) => {
+            const baseClasses = "flex items-center gap-3 px-3 py-3 rounded-lg transition-colors";
+            const activeClasses = "bg-primary/10 text-primary font-bold";
+            const inactiveClasses = "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium";
+            
+            return (
+                <Link to={to} className={`${baseClasses} ${active ? activeClasses : inactiveClasses} group`}>
+                    <span className={`material-symbols-outlined text-2xl ${active || filled ? 'fill' : ''}`}>{icon}</span>
+                    <span className="text-sm">{label}</span>
+                </Link>
+            );
+        };
+
+        const Sidebar = ({ activePage }) => {
+            return (
+                <aside className="w-64 bg-white dark:bg-slate-900 border-r border-[#e7ecf3] dark:border-slate-800 flex flex-col flex-shrink-0 hidden md:flex transition-all h-full">
+                    <div className="p-6 flex items-center gap-3">
+                        <div className="bg-center bg-no-repeat bg-cover rounded-full size-10 shrink-0 shadow-sm" 
+                             style={{backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuAtgbgAa4fab3cy4J615vqKRnS9QqnASfoeDAFvHzg5Weo_3CFfrCitHC7QjUOZGg4iv_LHAtGp-7LZf_XBlOrnmoRd7uMVeNXSUv-EopCe5nO0zTlhJytzONH2HoCh_UZuucxtRI53IlIVeKbJp6B5F1t7VQHtgxfAcXJZnb1MWYoG83YIw7UTNLzaRqrcJ4LWAGMtYdY5HDNTR5AucBUZBH_EWK-WcNnBceWIYkHKRei5m_C9Ka9CPpnnfODpYR3jLsTnPL4oV2Fa")'}}></div>
+                        <div className="flex flex-col">
+                            <h1 className="text-base font-bold leading-tight">PharmaPick</h1>
+                            <p className="text-[#4c6c9a] dark:text-slate-400 text-xs font-medium">Warehouse A</p>
+                        </div>
+                    </div>
+                    <nav className="flex-1 px-4 flex flex-col gap-2 overflow-y-auto">
+                        <NavigationLink to="/" label="Picking Floor" icon="assignment" active={activePage === 'picking-floor'} />
+                        <NavigationLink to="/picking-order" label="Order Items" icon="inventory_2" active={activePage === 'picking-order'} />
+                        <NavigationLink to="/performance" label="My Performance" icon="analytics" active={activePage === 'performance'} />
+                        <NavigationLink to="/packing-session" label="Packing Station" icon="inventory_2" active={activePage === 'packing-session'} filled={activePage === 'packing-session'} />
+                        <NavigationLink to="/packing-process" label="Process Invoice" icon="package_2" active={activePage === 'packing-process'} />
+                    </nav>
+                    <div className="p-4 border-t border-[#e7ecf3] dark:border-slate-800 mt-auto">
+                        <a className="flex items-center gap-3 px-3 py-3 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" href="#">
+                            <span className="material-symbols-outlined text-2xl">settings</span>
+                            <span className="text-sm font-medium">Settings</span>
+                        </a>
+                        <div className="flex items-center gap-3 mt-4 px-3">
+                            <div className="size-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center overflow-hidden">
+                                <span className="material-symbols-outlined text-slate-500 dark:text-slate-300 text-xl">person</span>
+                            </div>
+                            <div>
+                                <p className="text-sm font-bold leading-none">John Doe</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">ID: 442</p>
+                            </div>
+                        </div>
+                    </div>
+                </aside>
+            );
+        };
+
+        // --- Screens ---
+
+        // Screen 1: Available Orders
+        const PickingFloor = () => {
+            const navigate = useNavigate();
+
+            return (
+                <div className="flex h-screen overflow-hidden">
+                    <Sidebar activePage="picking-floor" />
+                    <main className="flex-1 flex flex-col h-full overflow-hidden relative">
+                        <header className="h-16 flex items-center justify-between px-6 bg-white dark:bg-slate-900 border-b border-[#e7ecf3] dark:border-slate-800 shrink-0">
+                            <div className="flex items-center gap-4">
+                                <button className="md:hidden p-2 -ml-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
+                                    <span className="material-symbols-outlined">menu</span>
+                                </button>
+                                <h2 className="text-lg font-bold tracking-tight">Available Orders</h2>
+                            </div>
+                            <div className="flex gap-3">
+                                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-100 dark:bg-green-900/30 border border-green-200 dark:border-green-800">
+                                    <span className="material-symbols-outlined text-green-700 dark:text-green-400 text-lg fill">wifi</span>
+                                    <span className="text-xs font-bold text-green-700 dark:text-green-400 uppercase tracking-wide">Online</span>
+                                </div>
+                                <button className="flex items-center justify-center size-9 rounded-lg bg-[#e7ecf3] dark:bg-slate-800 text-[#0d131b] dark:text-white hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                                    <span className="material-symbols-outlined text-xl">sync</span>
+                                </button>
+                            </div>
+                        </header>
+                        <div className="flex-1 overflow-y-auto p-4 lg:p-8">
+                            <div className="max-w-7xl mx-auto h-full flex flex-col lg:flex-row gap-6 lg:gap-8">
+                                <section className="flex-1 flex flex-col gap-4 min-w-0">
+                                    <div className="flex items-baseline justify-between mb-2">
+                                        <div className="flex flex-col gap-1">
+                                            <h3 className="text-3xl font-black tracking-tight text-[#0d131b] dark:text-white">Ready to Pick</h3>
+                                            <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">1 Active Order Assigned • High Priority</p>
+                                        </div>
+                                    </div>
+                                    <article className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden relative group">
+                                        <div className="h-1.5 w-full bg-primary absolute top-0 left-0"></div>
+                                        <div className="p-6 md:p-8 flex flex-col gap-6">
+                                            <div className="flex flex-wrap justify-between items-start gap-4">
+                                                <div className="flex flex-col gap-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="px-2 py-1 rounded text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 uppercase tracking-wider">Invoice</span>
+                                                        <span className="px-2 py-1 rounded text-xs font-bold bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 uppercase tracking-wider flex items-center gap-1">
+                                                            <span className="material-symbols-outlined text-sm">warning</span> Urgent
+                                                        </span>
+                                                    </div>
+                                                    <h1 className="text-4xl md:text-5xl font-black text-[#0d131b] dark:text-white tracking-tight leading-none">#INV-998</h1>
+                                                    <p className="text-lg text-slate-500 dark:text-slate-400 font-medium">City Pharmacy - Downtown Branch</p>
+                                                </div>
+                                                <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-700 flex flex-col items-center min-w-[100px]">
+                                                    <span className="text-3xl font-black text-primary">14</span>
+                                                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Items</span>
+                                                </div>
+                                            </div>
+                                            <hr className="border-slate-100 dark:border-slate-800"/>
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                                                    <div className="flex items-center gap-2 mb-1 text-slate-500 dark:text-slate-400">
+                                                        <span className="material-symbols-outlined text-lg">scale</span>
+                                                        <span className="text-xs font-bold uppercase">Weight</span>
+                                                    </div>
+                                                    <p className="font-bold text-[#0d131b] dark:text-white">4.2 kg</p>
+                                                </div>
+                                                <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                                                    <div className="flex items-center gap-2 mb-1 text-slate-500 dark:text-slate-400">
+                                                        <span className="material-symbols-outlined text-lg">ac_unit</span>
+                                                        <span className="text-xs font-bold uppercase">Storage</span>
+                                                    </div>
+                                                    <p className="font-bold text-[#0d131b] dark:text-white">Refrigerated</p>
+                                                </div>
+                                                <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                                                    <div className="flex items-center gap-2 mb-1 text-slate-500 dark:text-slate-400">
+                                                        <span className="material-symbols-outlined text-lg">schedule</span>
+                                                        <span className="text-xs font-bold uppercase">Cutoff</span>
+                                                    </div>
+                                                    <p className="font-bold text-[#0d131b] dark:text-white">14:00 PM</p>
+                                                </div>
+                                                <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                                                    <div className="flex items-center gap-2 mb-1 text-slate-500 dark:text-slate-400">
+                                                        <span className="material-symbols-outlined text-lg">timer</span>
+                                                        <span className="text-xs font-bold uppercase">Est. Time</span>
+                                                    </div>
+                                                    <p className="font-bold text-[#0d131b] dark:text-white">12 mins</p>
+                                                </div>
+                                            </div>
+                                            <div className="mt-2">
+                                                <button onClick={() => navigate('/picking-order')} className="w-full h-16 bg-primary hover:bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-500/30 flex items-center justify-center gap-3 transition-all active:scale-[0.98]">
+                                                    <span className="material-symbols-outlined text-3xl fill">play_arrow</span>
+                                                    <span className="text-xl font-bold tracking-wide">START PICKING</span>
+                                                </button>
+                                                <p className="text-center text-xs text-slate-400 mt-3 font-medium">Pressing Start will lock this order to your device</p>
+                                            </div>
+                                        </div>
+                                    </article>
+                                </section>
+                                <aside className="w-full lg:w-96 flex flex-col gap-4 shrink-0">
+                                    <div className="flex items-center justify-between mb-2 lg:mt-1">
+                                        <h3 className="text-lg font-bold text-[#0d131b] dark:text-white flex items-center gap-2">
+                                            <span className="material-symbols-outlined text-slate-400">history</span>
+                                            Recent Completed List
+                                        </h3>
+                                        <span className="text-xs font-bold bg-slate-200 dark:bg-slate-700 px-2 py-1 rounded text-slate-600 dark:text-slate-300">Today</span>
+                                    </div>
+                                    <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
+                                        <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                            <span>Completed Orders</span>
+                                            <span>Status</span>
+                                        </div>
+                                        {/* Mock List Items */}
+                                        <div className="p-4 group hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-default select-none">
+                                            <div className="flex justify-between items-start mb-1">
+                                                <span className="font-bold text-slate-800 dark:text-slate-200">#INV-2024-999</span>
+                                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 uppercase">Done</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-sm text-slate-500 dark:text-slate-400">
+                                                <span>General Pharma Ltd.</span>
+                                                <span className="font-semibold text-slate-700 dark:text-slate-300">8 Items</span>
+                                            </div>
+                                            <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
+                                                <span className="material-symbols-outlined text-sm">check_circle</span> Completed: 2m ago
+                                            </div>
+                                        </div>
+                                         <div className="p-4 group hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-default select-none">
+                                            <div className="flex justify-between items-start mb-1">
+                                                <span className="font-bold text-slate-800 dark:text-slate-200">#INV-2024-1000</span>
+                                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 uppercase">Done</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-sm text-slate-500 dark:text-slate-400">
+                                                <span>MediCare Hub</span>
+                                                <span className="font-semibold text-slate-700 dark:text-slate-300">22 Items</span>
+                                            </div>
+                                            <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
+                                                <span className="material-symbols-outlined text-sm">check_circle</span> Completed: 15m ago
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30">
+                                        <div className="flex gap-3">
+                                            <div className="bg-blue-100 dark:bg-blue-900/40 p-2 rounded-lg h-fit text-primary">
+                                                <span className="material-symbols-outlined text-xl">info</span>
+                                            </div>
+                                            <div>
+                                                <h4 className="text-sm font-bold text-primary mb-1">Queue Rules</h4>
+                                                <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                                                    You must complete the active order before starting the next one. Priority items (Red) will automatically jump to the top of your queue.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </aside>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            );
+        };
+
+        // Screen 2: Picking Order List
+        const PickingOrder = () => {
+             const navigate = useNavigate();
+
+            return (
+                <div className="flex h-screen overflow-hidden">
+                    <Sidebar activePage="picking-order" />
+                    <div className="flex-1 flex flex-col overflow-hidden relative min-w-0">
+                        <div className="flex-none bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-40 sticky top-0 shadow-sm">
+                            <div className="w-full px-6 py-4">
+                                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                                    <div className="flex flex-col gap-1.5 min-w-0">
+                                        <div className="flex items-center gap-3">
+                                            <h1 className="text-xl md:text-2xl font-black text-slate-900 dark:text-white truncate leading-none">A Store</h1>
+                                            <span className="px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[11px] font-bold uppercase tracking-wider">Credit</span>
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
+                                            <div className="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border border-slate-200 dark:border-slate-700 font-mono text-xs">
+                                                #AABB-0015
+                                            </div>
+                                            <span className="text-slate-300 dark:text-slate-700">|</span>
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="material-symbols-outlined text-[16px]">calendar_today</span>
+                                                Jan 18, 2025
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3 flex-none mt-2 lg:mt-0">
+                                        <div className="hidden xl:flex flex-col items-end mr-3 border-r border-slate-200 dark:border-slate-700 pr-5">
+                                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Total</span>
+                                            <span className="text-sm font-bold text-slate-900 dark:text-white">4 Items</span>
+                                        </div>
+                                        <button className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors bg-white dark:bg-slate-800">
+                                            <span className="material-symbols-outlined text-[20px]">pause_circle</span>
+                                            <span className="hidden md:inline">Pause</span>
+                                        </button>
+                                        <button onClick={() => navigate('/packing-session')} className="flex items-center gap-2 px-5 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white font-bold text-sm shadow-md shadow-blue-500/20 transition-all active:scale-[0.98]">
+                                            <span className="material-symbols-outlined text-[20px]">check_circle</span>
+                                            <span>Complete Picking</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="w-full px-6 py-2.5 bg-slate-50 dark:bg-slate-800/40 border-t border-slate-200 dark:border-slate-800">
+                                <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Area:</span>
+                                        <span className="font-medium text-slate-800 dark:text-slate-200">Kalpetta</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Address:</span>
+                                        <span className="font-medium text-slate-800 dark:text-slate-200 truncate max-w-[200px] md:max-w-none">Opposite Bus Stand</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <main className="flex-1 overflow-y-auto bg-background-light dark:bg-background-dark p-6">
+                            <div className="flex flex-col gap-4 h-full">
+                                <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden flex-1 flex flex-col">
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left text-sm whitespace-nowrap">
+                                            <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                                                <tr>
+                                                    <th className="px-6 py-4 font-semibold text-slate-500 dark:text-slate-400 w-24">Shelf Loc</th>
+                                                    <th className="px-4 py-4 font-semibold text-slate-500 dark:text-slate-400 w-24">Item Code</th>
+                                                    <th className="px-4 py-4 font-semibold text-slate-500 dark:text-slate-400 min-w-[280px]">Medicine Information</th>
+                                                    <th className="px-4 py-4 font-semibold text-slate-500 dark:text-slate-400">Batch / Expiry</th>
+                                                    <th className="px-4 py-4 font-semibold text-slate-500 dark:text-slate-400 text-center w-24">Required</th>
+                                                    <th className="px-6 py-4 font-semibold text-slate-500 dark:text-slate-400 w-32 text-right">Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                                {/* Active Row */}
+                                                <tr className="bg-blue-50/30 dark:bg-blue-900/10 border-l-4 border-l-primary hover:bg-blue-50/60 dark:hover:bg-blue-900/20 transition-colors">
+                                                    <td className="px-6 py-4 align-top">
+                                                        <div className="inline-flex items-center justify-center px-3 py-1.5 rounded bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 font-mono font-bold text-sm shadow-sm">R-15</div>
+                                                    </td>
+                                                    <td className="px-4 py-4 align-top"><span className="font-mono text-slate-600 dark:text-slate-400 font-medium">NSC20</span></td>
+                                                    <td className="px-4 py-4 align-top">
+                                                        <div className="flex flex-col gap-1.5">
+                                                            <span className="text-base font-bold text-slate-900 dark:text-white">Nasoclear Saline Spray</span>
+                                                            <div className="flex items-center gap-2 text-xs text-slate-500">
+                                                                <span className="font-medium text-slate-700 dark:text-slate-300">Sun Pharma</span>
+                                                                <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                                                                <span className="text-orange-600 font-medium bg-orange-50 dark:bg-orange-900/20 px-2 py-0.5 rounded border border-orange-100 dark:border-orange-900/30">10x10 Tablets</span>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-4 align-top">
+                                                        <div className="flex flex-col gap-1.5">
+                                                            <span className="text-sm font-medium text-slate-700 dark:text-slate-300 font-mono">BATCH-NSC-1124</span>
+                                                            <span className="text-xs text-red-600 font-bold flex items-center gap-1 bg-red-50 dark:bg-red-900/20 px-1.5 py-0.5 rounded w-fit">Exp: 2026-08-31</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-4 text-center align-top">
+                                                        <div className="inline-block bg-white dark:bg-slate-800 px-3 py-1 rounded border border-slate-200 dark:border-slate-700 text-lg font-bold text-slate-900 dark:text-white shadow-sm">12</div>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-right align-top">
+                                                        <label className="inline-flex items-center cursor-pointer select-none">
+                                                            <input className="sr-only peer" type="checkbox"/>
+                                                            <div className="px-4 py-2 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 peer-checked:bg-primary peer-checked:border-primary peer-checked:hover:bg-primary-dark text-slate-600 dark:text-slate-300 peer-checked:text-white rounded-lg font-bold text-sm transition-all flex items-center gap-2 shadow-sm">
+                                                                <span className="material-symbols-outlined text-[18px]">check</span>
+                                                                <span>Mark</span>
+                                                            </div>
+                                                        </label>
+                                                    </td>
+                                                </tr>
+                                                 {/* Pending Row */}
+                                                <tr className="group hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-l-4 border-l-transparent">
+                                                    <td className="px-6 py-4 align-top">
+                                                        <div className="inline-flex items-center justify-center px-3 py-1.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-mono font-bold text-sm">G-06</div>
+                                                    </td>
+                                                    <td className="px-4 py-4 align-top"><span className="font-mono text-slate-600 dark:text-slate-400 font-medium">CAL650</span></td>
+                                                    <td className="px-4 py-4 align-top">
+                                                        <div className="flex flex-col gap-1.5">
+                                                            <span className="text-base font-bold text-slate-900 dark:text-white group-hover:text-primary transition-colors">Calpol 650 Tablet</span>
+                                                            <div className="flex items-center gap-2 text-xs text-slate-500">
+                                                                <span>Innov Pharma</span>
+                                                                <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                                                                <span className="text-slate-600 font-medium bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">10x10 Tablets</span>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-4 align-top">
+                                                        <div className="flex flex-col gap-1.5">
+                                                            <span className="text-sm font-medium text-slate-700 dark:text-slate-300 font-mono">BATCH-PC650-0824</span>
+                                                            <span className="text-xs text-slate-500">Exp: 2026-11-30</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-4 text-center align-top">
+                                                        <div className="inline-block px-3 py-1 text-lg font-bold text-slate-700 dark:text-slate-300">24</div>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-right align-top">
+                                                        <label className="inline-flex items-center cursor-pointer opacity-40 group-hover:opacity-100 transition-opacity select-none">
+                                                            <input className="sr-only peer" type="checkbox"/>
+                                                            <div className="px-4 py-2 border border-slate-300 dark:border-slate-600 hover:border-primary hover:text-primary peer-checked:bg-primary peer-checked:border-primary text-slate-700 dark:text-slate-300 peer-checked:text-white rounded-lg font-bold text-sm transition-all flex items-center gap-2 bg-white dark:bg-slate-800">
+                                                                <span className="material-symbols-outlined text-[18px]">check_box_outline_blank</span>
+                                                                <span>Pick</span>
+                                                            </div>
+                                                        </label>
+                                                    </td>
+                                                </tr>
+                                                {/* Completed Rows */}
+                                                 <tr className="bg-green-50/30 dark:bg-green-900/10 border-l-4 border-l-green-500">
+                                                    <td className="px-6 py-4 align-top">
+                                                        <div className="inline-flex items-center justify-center px-3 py-1.5 rounded bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 font-mono font-bold text-sm decoration-slate-500 line-through decoration-2 opacity-50">C-05-12</div>
+                                                    </td>
+                                                    <td className="px-4 py-4 align-top opacity-50"><span className="font-mono text-slate-600 dark:text-slate-400">10112</span></td>
+                                                    <td className="px-4 py-4 align-top opacity-50">
+                                                        <div className="flex flex-col gap-1.5">
+                                                            <span className="text-base font-bold text-slate-900 dark:text-white line-through decoration-slate-400">Metformin 500mg</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-4 align-top opacity-50">
+                                                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300 font-mono">T-8822</span>
+                                                    </td>
+                                                    <td className="px-4 py-4 text-center align-top opacity-50">
+                                                        <span className="text-lg font-bold text-slate-900 dark:text-white line-through decoration-slate-400">30</span>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-right align-top">
+                                                        <div className="inline-flex items-center gap-2 text-green-600 dark:text-green-400 px-4 py-2 rounded-lg font-bold text-sm cursor-default">
+                                                            <span className="material-symbols-outlined text-[20px] filled">check_circle</span> Done
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </main>
+                    </div>
+                </div>
+            );
+        };
+
+        // Screen 3: My Performance
+        const MyPerformance = () => {
+             return (
+                <div className="flex min-h-screen w-full">
+                    <Sidebar activePage="performance" />
+                    <div className="flex-1 flex flex-col h-full relative overflow-y-auto">
+                        <main className="flex-1 p-6 lg:p-10 max-w-[1600px] mx-auto w-full">
+                            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
+                                <div className="flex flex-col gap-2">
+                                    <h2 className="text-slate-900 dark:text-white text-3xl md:text-4xl font-black leading-tight tracking-tight">Dashboard</h2>
+                                    <p className="text-slate-500 dark:text-slate-400 text-base font-normal">Track your daily metrics and goals</p>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-3">
+                                    <div className="flex bg-white dark:bg-[#182435] rounded-lg p-1 shadow-sm border border-slate-200 dark:border-slate-700">
+                                        <button className="px-4 py-2 rounded-md bg-primary text-white text-sm font-bold shadow-sm transition-all">Today</button>
+                                        <button className="px-4 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm font-medium transition-all">This Week</button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
+                                <div className="bg-white dark:bg-[#182435] rounded-xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between h-full group hover:border-primary/50 transition-colors">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                                            <span className="material-symbols-outlined text-primary">inventory_2</span>
+                                        </div>
+                                        <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 rounded text-xs font-bold">
+                                            <span className="material-symbols-outlined text-[14px]">trending_up</span> +5%
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-1">Total Items Picked</p>
+                                        <p className="text-slate-900 dark:text-white text-3xl font-black">450 <span className="text-lg font-medium text-slate-400">Units</span></p>
+                                    </div>
+                                </div>
+                                
+                                <div className="bg-white dark:bg-[#182435] rounded-xl p-6 border-2 border-primary shadow-md flex flex-col justify-between h-full relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 p-2 opacity-5">
+                                        <span className="material-symbols-outlined text-[100px]">check_circle</span>
+                                    </div>
+                                    <div className="flex justify-between items-start mb-4 relative z-10">
+                                        <div className="p-2 bg-primary/10 rounded-lg">
+                                            <span className="material-symbols-outlined text-primary">verified</span>
+                                        </div>
+                                        <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 rounded text-xs font-bold">+0.2%</span>
+                                    </div>
+                                    <div className="relative z-10">
+                                        <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-1">Accuracy Rate</p>
+                                        <p className="text-slate-900 dark:text-white text-3xl font-black">99.2%</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
+                                <div className="xl:col-span-2 flex flex-col gap-6">
+                                     <div className="bg-white dark:bg-[#182435] rounded-xl border border-slate-200 dark:border-slate-700 p-6 shadow-sm">
+                                        <div className="flex justify-between items-center mb-6">
+                                            <h3 className="text-slate-900 dark:text-white text-lg font-bold">Pick Velocity (Hourly)</h3>
+                                        </div>
+                                        <div className="flex items-end justify-between h-48 gap-2 md:gap-4 w-full">
+                                            {/* Simple Bars */}
+                                            <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-t-sm" style={{height: '40%'}}></div>
+                                            <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-t-sm" style={{height: '65%'}}></div>
+                                            <div className="w-full bg-primary/40 rounded-t-sm" style={{height: '55%'}}></div>
+                                            <div className="w-full bg-primary/60 rounded-t-sm" style={{height: '80%'}}></div>
+                                            <div className="w-full bg-primary rounded-t-sm" style={{height: '95%'}}></div>
+                                            <div className="w-full bg-primary rounded-t-sm" style={{height: '70%'}}></div>
+                                            <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-t-sm" style={{height: '50%'}}></div>
+                                            <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-t-sm" style={{height: '30%'}}></div>
+                                        </div>
+                                         <div className="flex justify-between mt-4 text-xs font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                                            <span>8am</span>
+                                            <span>10am</span>
+                                            <span>12pm</span>
+                                            <span>2pm</span>
+                                            <span>4pm</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex flex-col gap-6">
+                                    <div className="bg-white dark:bg-[#182435] rounded-xl border border-slate-200 dark:border-slate-700 p-6 shadow-sm">
+                                        <div className="flex items-center justify-between mb-6">
+                                            <h3 className="text-slate-900 dark:text-white text-lg font-bold">Shift Goals</h3>
+                                            <span className="material-symbols-outlined text-slate-400">flag</span>
+                                        </div>
+                                        <div className="flex flex-col gap-6">
+                                            <div>
+                                                <div className="flex justify-between mb-2">
+                                                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Orders Complete</span>
+                                                    <span className="text-sm font-bold text-slate-900 dark:text-white">95/120</span>
+                                                </div>
+                                                <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2.5">
+                                                    <div className="bg-primary h-2.5 rounded-full" style={{width: '79%'}}></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </main>
+                    </div>
+                </div>
+            )
+        };
+
+        // Screen 4: Packing Session
+        const PackingSession = () => {
+             const navigate = useNavigate();
+
+            return (
+                <div className="flex h-screen overflow-hidden">
+                    <Sidebar activePage="packing-session" />
+                    <main className="flex-1 flex flex-col h-full overflow-hidden relative">
+                         <header className="h-16 flex items-center justify-between px-6 bg-white dark:bg-slate-900 border-b border-[#e7ecf3] dark:border-slate-800 shrink-0">
+                            <div className="flex items-center gap-4">
+                                <h2 className="text-lg font-bold tracking-tight">Packing Session</h2>
+                            </div>
+                            <div className="flex gap-3">
+                                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-100 dark:bg-green-900/30 border border-green-200 dark:border-green-800">
+                                    <span className="material-symbols-outlined text-green-700 dark:text-green-400 text-lg fill">wifi</span>
+                                    <span className="text-xs font-bold text-green-700 dark:text-green-400 uppercase tracking-wide">Station 4 Connected</span>
+                                </div>
+                            </div>
+                        </header>
+                         <div className="flex-1 overflow-y-auto p-4 lg:p-8">
+                            <div className="max-w-7xl mx-auto h-full flex flex-col lg:flex-row gap-6 lg:gap-8">
+                                <section className="flex-1 flex flex-col gap-4 min-w-0">
+                                    <div className="flex items-baseline justify-between mb-2">
+                                        <div className="flex flex-col gap-1">
+                                            <h3 className="text-3xl font-black tracking-tight text-[#0d131b] dark:text-white">Ready to Pack</h3>
+                                            <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">1 Invoice Assigned • Ready for verification</p>
+                                        </div>
+                                    </div>
+                                    <article className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden relative group">
+                                        <div className="h-1.5 w-full bg-primary absolute top-0 left-0"></div>
+                                        <div className="p-6 md:p-8 flex flex-col gap-6">
+                                            <div className="flex flex-wrap justify-between items-start gap-4">
+                                                <div className="flex flex-col gap-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="px-2 py-1 rounded text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 uppercase tracking-wider">Order</span>
+                                                        <span className="px-2 py-1 rounded text-xs font-bold bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 uppercase tracking-wider flex items-center gap-1">
+                                                            <span className="material-symbols-outlined text-sm">local_shipping</span> Express
+                                                        </span>
+                                                    </div>
+                                                    <h1 className="text-4xl md:text-5xl font-black text-[#0d131b] dark:text-white tracking-tight leading-none">#INV-3052</h1>
+                                                    <p className="text-lg text-slate-500 dark:text-slate-400 font-medium">HealthPlus Clinic - West Wing</p>
+                                                </div>
+                                                <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-700 flex flex-col items-center min-w-[100px]">
+                                                    <span className="text-3xl font-black text-primary">28</span>
+                                                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Items to Pack</span>
+                                                </div>
+                                            </div>
+                                            <hr className="border-slate-100 dark:border-slate-800"/>
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                                                    <div className="flex items-center gap-2 mb-1 text-slate-500 dark:text-slate-400">
+                                                        <span className="material-symbols-outlined text-lg">scale</span>
+                                                        <span className="text-xs font-bold uppercase">Total Weight</span>
+                                                    </div>
+                                                    <p className="font-bold text-[#0d131b] dark:text-white">8.5 kg</p>
+                                                </div>
+                                                 <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                                                    <div className="flex items-center gap-2 mb-1 text-slate-500 dark:text-slate-400">
+                                                        <span className="material-symbols-outlined text-lg">aspect_ratio</span>
+                                                        <span className="text-xs font-bold uppercase">Box Size</span>
+                                                    </div>
+                                                    <p className="font-bold text-[#0d131b] dark:text-white">Large (L2)</p>
+                                                </div>
+                                                <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                                                    <div className="flex items-center gap-2 mb-1 text-slate-500 dark:text-slate-400">
+                                                        <span className="material-symbols-outlined text-lg">package</span>
+                                                        <span className="text-xs font-bold uppercase">Packing Type</span>
+                                                    </div>
+                                                    <p className="font-bold text-[#0d131b] dark:text-white">Fragile / Wrap</p>
+                                                </div>
+                                                <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                                                    <div className="flex items-center gap-2 mb-1 text-slate-500 dark:text-slate-400">
+                                                        <span className="material-symbols-outlined text-lg">local_shipping</span>
+                                                        <span className="text-xs font-bold uppercase">Carrier</span>
+                                                    </div>
+                                                    <p className="font-bold text-[#0d131b] dark:text-white">FedEx Ground</p>
+                                                </div>
+                                            </div>
+                                            <div className="mt-2">
+                                                <button onClick={() => navigate('/packing-process')} className="w-full h-16 bg-primary hover:bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-500/30 flex items-center justify-center gap-3 transition-all active:scale-[0.98]">
+                                                    <span className="material-symbols-outlined text-3xl fill">inventory_2</span>
+                                                    <span className="text-xl font-bold tracking-wide">START PACKING</span>
+                                                </button>
+                                                <p className="text-center text-xs text-slate-400 mt-3 font-medium">Pressing Start will generate the shipping label</p>
+                                            </div>
+                                        </div>
+                                    </article>
+                                </section>
+                                <aside className="w-full lg:w-96 flex flex-col gap-4 shrink-0">
+                                    <div className="flex items-center justify-between mb-2 lg:mt-1">
+                                        <h3 className="text-lg font-bold text-[#0d131b] dark:text-white flex items-center gap-2">
+                                            <span className="material-symbols-outlined text-slate-400">history</span>
+                                            Recent Packed List
+                                        </h3>
+                                        <span className="text-xs font-bold bg-slate-200 dark:bg-slate-700 px-2 py-1 rounded text-slate-600 dark:text-slate-300">Shift A</span>
+                                    </div>
+                                    <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
+                                        <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                            <span>Packed Invoices</span>
+                                            <span>Status</span>
+                                        </div>
+                                        <div className="p-4 group hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-default select-none">
+                                            <div className="flex justify-between items-start mb-1">
+                                                <span className="font-bold text-slate-800 dark:text-slate-200">#INV-3051</span>
+                                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 uppercase">Shipped</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-sm text-slate-500 dark:text-slate-400">
+                                                <span>City Hospital</span>
+                                                <span className="font-semibold text-slate-700 dark:text-slate-300">12 Items</span>
+                                            </div>
+                                        </div>
+                                        <div className="p-4 group hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-default select-none">
+                                            <div className="flex justify-between items-start mb-1">
+                                                <span className="font-bold text-slate-800 dark:text-slate-200">#INV-3050</span>
+                                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 uppercase">Packed</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-sm text-slate-500 dark:text-slate-400">
+                                                <span>Valley View Pharmacy</span>
+                                                <span className="font-semibold text-slate-700 dark:text-slate-300">45 Items</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </aside>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            );
+        };
+
+        // Screen 5: Process Invoice (Unified Packing)
+        const PackingProcess = () => {
+             return (
+                <div className="flex h-screen overflow-hidden">
+                     <Sidebar activePage="packing-process" />
+                    <main className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark relative">
+                        <header className="bg-white dark:bg-[#1a2332] border-b border-slate-200 dark:border-slate-800 z-10 shadow-sm shrink-0">
+                            <div className="px-6 py-5">
+                                <div className="flex flex-wrap justify-between items-start gap-4 mb-6">
+                                    <div className="flex flex-col gap-1">
+                                        <div className="flex items-center gap-3">
+                                            <h1 className="text-slate-900 dark:text-white text-3xl font-black tracking-tight">Invoice #INV-2023-001</h1>
+                                            <span className="px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-700 text-xs font-bold uppercase tracking-wide border border-orange-200">High Priority</span>
+                                        </div>
+                                        <p className="text-slate-500 dark:text-slate-400 text-sm font-medium flex items-center gap-2">
+                                            <span className="material-symbols-outlined text-base">domain</span> Customer: Apex Pharma Solutions 
+                                            <span className="w-1 h-1 rounded-full bg-slate-300"></span>
+                                            <span className="material-symbols-outlined text-base">location_on</span> New York, NY
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <button className="flex items-center justify-center gap-2 h-10 px-4 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                                            <span className="material-symbols-outlined text-lg">print</span>
+                                            Print Label
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="flex flex-col lg:flex-row gap-6 items-end">
+                                    <div className="flex gap-4 flex-1 w-full lg:w-auto">
+                                        <div className="flex flex-col gap-1 flex-1 p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+                                            <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Items</span>
+                                            <span className="text-2xl font-bold text-slate-900 dark:text-white">24</span>
+                                        </div>
+                                        <div className="flex flex-col gap-1 flex-1 p-3 rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800">
+                                            <span className="text-xs font-medium text-blue-600 dark:text-blue-400 uppercase tracking-wider">Verified</span>
+                                            <span className="text-2xl font-bold text-blue-700 dark:text-blue-300">18</span>
+                                        </div>
+                                        <div className="flex flex-col gap-1 flex-1 p-3 rounded-lg border border-green-200 bg-green-50 dark:bg-green-900/20 dark:border-green-800">
+                                            <span className="text-xs font-medium text-green-600 dark:text-green-400 uppercase tracking-wider">Packed</span>
+                                            <span className="text-2xl font-bold text-green-700 dark:text-green-300">12</span>
+                                        </div>
+                                    </div>
+                                     <div className="flex flex-col gap-2 w-full lg:w-1/3 min-w-[300px] pb-1">
+                                        <div className="flex justify-between items-end">
+                                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Packing Progress</span>
+                                            <span className="text-sm font-medium text-slate-500 dark:text-slate-400">50% Complete</span>
+                                        </div>
+                                        <div className="h-3 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden relative">
+                                            <div className="absolute top-0 left-0 h-full bg-blue-300 dark:bg-blue-500/50 transition-all duration-500" style={{width: '75%'}}></div>
+                                            <div className="absolute top-0 left-0 h-full bg-primary transition-all duration-500" style={{width: '50%'}}></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </header>
+                         <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
+                            <div className="max-w-6xl mx-auto flex flex-col gap-6 pb-24">
+                                <label className="relative group">
+                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                        <span className="material-symbols-outlined text-slate-400 group-focus-within:text-primary transition-colors">barcode_reader</span>
+                                    </div>
+                                    <input autoFocus className="block w-full pl-12 pr-4 py-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1a2332] text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all text-lg shadow-sm" placeholder="Scan item barcode or type SKU to verify..." type="text"/>
+                                </label>
+                                <div className="flex flex-col rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1a2332] shadow-sm overflow-hidden">
+                                     <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                                        <div className="col-span-4 lg:col-span-4">Item Details</div>
+                                        <div className="col-span-2 lg:col-span-1 text-center">Qty</div>
+                                        <div className="col-span-3 lg:col-span-2 text-center">Status</div>
+                                        <div className="col-span-3 lg:col-span-5">Packing Actions</div>
+                                    </div>
+                                    {/* Active Item */}
+                                    <div className="grid grid-cols-12 gap-4 px-6 py-5 border-b border-slate-200 dark:border-slate-700 bg-blue-50/50 dark:bg-blue-900/10 items-center relative overflow-hidden">
+                                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary"></div>
+                                        <div className="col-span-4 lg:col-span-4 flex gap-4 items-center">
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-bold text-slate-900 dark:text-white">Paracetamol 500mg</span>
+                                                <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">SKU: PCM-500-TAB</span>
+                                                <span className="text-xs text-blue-600 dark:text-blue-400 font-medium mt-1">Batch #B9921</span>
+                                            </div>
+                                        </div>
+                                        <div className="col-span-2 lg:col-span-1 text-center">
+                                            <span className="text-lg font-black text-slate-900 dark:text-white">50</span>
+                                            <span className="block text-[10px] text-slate-400 uppercase">Unit</span>
+                                        </div>
+                                        <div className="col-span-3 lg:col-span-2 flex justify-center">
+                                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs font-bold border border-green-200 dark:border-green-800">
+                                                <span className="material-symbols-outlined text-base">check_circle</span> Verified
+                                            </span>
+                                        </div>
+                                        <div className="col-span-3 lg:col-span-5 flex flex-col sm:flex-row gap-3 items-center justify-end lg:justify-start">
+                                            <div className="flex flex-col gap-1 w-full sm:w-24">
+                                                <label className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">Pack Qty</label>
+                                                <input className="block w-full px-2 py-1.5 text-sm rounded-md border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 focus:border-primary focus:ring-primary text-center font-bold" type="number" defaultValue="50"/>
+                                            </div>
+                                            <div className="flex flex-col gap-1 w-full sm:w-auto flex-1 max-w-[120px]">
+                                                <label className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">Action</label>
+                                                <button className="w-full flex items-center justify-center gap-1 bg-primary hover:bg-blue-700 text-white px-3 py-1.5 rounded-md text-xs font-bold transition-colors">
+                                                    <span className="material-symbols-outlined text-sm">inventory_2</span> Pack
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {/* Other items */}
+                                    <div className="grid grid-cols-12 gap-4 px-6 py-4 border-b border-slate-200 dark:border-slate-700 items-center hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                        <div className="col-span-4 lg:col-span-4 flex gap-4 items-center">
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-semibold text-slate-900 dark:text-white">Amoxicillin 250mg</span>
+                                                <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">SKU: AMX-250-CAP</span>
+                                            </div>
+                                        </div>
+                                        <div className="col-span-2 lg:col-span-1 text-center">
+                                            <span className="text-sm font-bold text-slate-700 dark:text-slate-300">100</span>
+                                        </div>
+                                        <div className="col-span-3 lg:col-span-2 flex justify-center">
+                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 text-xs font-bold border border-slate-200 dark:border-slate-700">Pending</span>
+                                        </div>
+                                        <div className="col-span-3 lg:col-span-5 flex items-center">
+                                            <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-300 shadow-sm text-slate-700 text-xs font-bold hover:bg-slate-50 hover:text-primary hover:border-primary transition-all dark:bg-slate-800 dark:border-slate-600 dark:text-slate-300 dark:hover:border-primary">
+                                                <span className="material-symbols-outlined text-sm">qr_code_scanner</span> Verify
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                         <footer className="bg-white dark:bg-[#1a2332] border-t border-slate-200 dark:border-slate-800 px-6 py-4 z-20 shrink-0">
+                            <div className="max-w-6xl mx-auto flex justify-between items-center">
+                                <button className="flex items-center gap-2 text-red-600 hover:text-red-700 text-sm font-bold px-4 py-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                                    <span className="material-symbols-outlined text-lg">flag</span> Report Issue / Hold
+                                </button>
+                                <div className="flex items-center gap-3">
+                                    <button className="px-6 py-2.5 rounded-lg bg-primary hover:bg-blue-700 text-white text-sm font-bold shadow-md shadow-blue-500/20 flex items-center gap-2 transition-all transform active:scale-95">
+                                        <span className="material-symbols-outlined text-lg">check</span> Complete Packing
+                                    </button>
+                                </div>
+                            </div>
+                        </footer>
+                    </main>
+                </div>
+            );
+        };
+
+        // --- App Entry Point ---
+
+        const App = () => {
+            return (
+                <MemoryRouter>
+                    <Routes>
+                        <Route path="/" element={<PickingFloor />} />
+                        <Route path="/picking-order" element={<PickingOrder />} />
+                        <Route path="/performance" element={<MyPerformance />} />
+                        <Route path="/packing-session" element={<PackingSession />} />
+                        <Route path="/packing-process" element={<PackingProcess />} />
+                    </Routes>
+                </MemoryRouter>
+            );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+
+    </script>
+</body>
+</html>
