@@ -839,8 +839,9 @@ class PickingHistoryView(generics.ListAPIView):
             'invoice', 'invoice__customer', 'picker'
         ).order_by('-created_at')
         
-        # Permission check: regular users only see their own sessions
-        if not user.is_admin_or_superadmin():
+        # Permission check: regular users only see their own sessions.
+        # Users with role 'PICKER' are treated like admins and can view all picking sessions.
+        if not (user.is_admin_or_superadmin() or getattr(user, 'role', '').upper() == 'PICKER'):
             queryset = queryset.filter(picker=user)
         
         # Search filter
