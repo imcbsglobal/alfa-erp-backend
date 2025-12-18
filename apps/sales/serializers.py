@@ -446,19 +446,32 @@ class CompleteDeliverySerializer(serializers.Serializer):
 class PickingHistorySerializer(serializers.ModelSerializer):
     """Serializer for picking session history with invoice and timing details"""
     invoice_no = serializers.CharField(source='invoice.invoice_no', read_only=True)
+    invoice_date = serializers.DateField(source='invoice.invoice_date', read_only=True)
+    invoice_status = serializers.CharField(source='invoice.status', read_only=True)
+    invoice_remarks = serializers.CharField(source='invoice.remarks', read_only=True)
     customer_name = serializers.CharField(source='invoice.customer.name', read_only=True)
     customer_email = serializers.CharField(source='invoice.customer.email', read_only=True)
+    customer_phone = serializers.CharField(source='invoice.customer.phone1', read_only=True)
+    customer_address = serializers.CharField(source='invoice.customer.address1', read_only=True)
+    salesman_name = serializers.CharField(source='invoice.salesman.name', read_only=True)
     picker_email = serializers.CharField(source='picker.email', read_only=True)
     picker_name = serializers.CharField(source='picker.name', read_only=True)
+    items = InvoiceItemSerializer(source='invoice.items', many=True, read_only=True)
+    total_amount = serializers.SerializerMethodField()
     duration = serializers.SerializerMethodField()
     
     class Meta:
         model = PickingSession
         fields = [
-            'id', 'invoice_no', 'customer_name', 'customer_email',
-            'picker_email', 'picker_name', 'picking_status',
-            'start_time', 'end_time', 'duration', 'notes', 'created_at'
+            'id', 'invoice_no', 'invoice_date', 'invoice_status', 'invoice_remarks',
+            'customer_name', 'customer_email', 'customer_phone', 'customer_address',
+            'salesman_name', 'picker_email', 'picker_name', 'picking_status',
+            'items', 'total_amount', 'start_time', 'end_time', 'duration', 'notes', 'created_at'
         ]
+    
+    def get_total_amount(self, obj):
+        """Calculate total amount from invoice items"""
+        return sum(item.quantity * item.mrp for item in obj.invoice.items.all())
     
     def get_duration(self, obj):
         """Calculate duration in minutes"""
@@ -471,19 +484,32 @@ class PickingHistorySerializer(serializers.ModelSerializer):
 class PackingHistorySerializer(serializers.ModelSerializer):
     """Serializer for packing session history with invoice and timing details"""
     invoice_no = serializers.CharField(source='invoice.invoice_no', read_only=True)
+    invoice_date = serializers.DateField(source='invoice.invoice_date', read_only=True)
+    invoice_status = serializers.CharField(source='invoice.status', read_only=True)
+    invoice_remarks = serializers.CharField(source='invoice.remarks', read_only=True)
     customer_name = serializers.CharField(source='invoice.customer.name', read_only=True)
     customer_email = serializers.CharField(source='invoice.customer.email', read_only=True)
+    customer_phone = serializers.CharField(source='invoice.customer.phone1', read_only=True)
+    customer_address = serializers.CharField(source='invoice.customer.address1', read_only=True)
+    salesman_name = serializers.CharField(source='invoice.salesman.name', read_only=True)
     packer_email = serializers.CharField(source='packer.email', read_only=True)
     packer_name = serializers.CharField(source='packer.name', read_only=True)
+    items = InvoiceItemSerializer(source='invoice.items', many=True, read_only=True)
+    total_amount = serializers.SerializerMethodField()
     duration = serializers.SerializerMethodField()
     
     class Meta:
         model = PackingSession
         fields = [
-            'id', 'invoice_no', 'customer_name', 'customer_email',
-            'packer_email', 'packer_name', 'packing_status',
-            'start_time', 'end_time', 'duration', 'notes', 'created_at'
+            'id', 'invoice_no', 'invoice_date', 'invoice_status', 'invoice_remarks',
+            'customer_name', 'customer_email', 'customer_phone', 'customer_address',
+            'salesman_name', 'packer_email', 'packer_name', 'packing_status',
+            'items', 'total_amount', 'start_time', 'end_time', 'duration', 'notes', 'created_at'
         ]
+    
+    def get_total_amount(self, obj):
+        """Calculate total amount from invoice items"""
+        return sum(item.quantity * item.mrp for item in obj.invoice.items.all())
     
     def get_duration(self, obj):
         """Calculate duration in minutes"""
@@ -496,20 +522,33 @@ class PackingHistorySerializer(serializers.ModelSerializer):
 class DeliveryHistorySerializer(serializers.ModelSerializer):
     """Serializer for delivery session history with invoice and timing details"""
     invoice_no = serializers.CharField(source='invoice.invoice_no', read_only=True)
+    invoice_date = serializers.DateField(source='invoice.invoice_date', read_only=True)
+    invoice_status = serializers.CharField(source='invoice.status', read_only=True)
+    invoice_remarks = serializers.CharField(source='invoice.remarks', read_only=True)
     customer_name = serializers.CharField(source='invoice.customer.name', read_only=True)
     customer_email = serializers.CharField(source='invoice.customer.email', read_only=True)
+    customer_phone = serializers.CharField(source='invoice.customer.phone1', read_only=True)
+    customer_address = serializers.CharField(source='invoice.customer.address1', read_only=True)
+    salesman_name = serializers.CharField(source='invoice.salesman.name', read_only=True)
     delivery_user_email = serializers.CharField(source='assigned_to.email', read_only=True)
     delivery_user_name = serializers.CharField(source='assigned_to.name', read_only=True)
+    items = InvoiceItemSerializer(source='invoice.items', many=True, read_only=True)
+    total_amount = serializers.SerializerMethodField()
     duration = serializers.SerializerMethodField()
     
     class Meta:
         model = DeliverySession
         fields = [
-            'id', 'invoice_no', 'customer_name', 'customer_email',
-            'delivery_type', 'delivery_user_email', 'delivery_user_name',
-            'courier_name', 'tracking_no', 'delivery_status',
+            'id', 'invoice_no', 'invoice_date', 'invoice_status', 'invoice_remarks',
+            'customer_name', 'customer_email', 'customer_phone', 'customer_address',
+            'salesman_name', 'delivery_type', 'delivery_user_email', 'delivery_user_name',
+            'courier_name', 'tracking_no', 'delivery_status', 'items', 'total_amount',
             'start_time', 'end_time', 'duration', 'notes', 'created_at'
         ]
+    
+    def get_total_amount(self, obj):
+        """Calculate total amount from invoice items"""
+        return sum(item.quantity * item.mrp for item in obj.invoice.items.all())
     
     def get_duration(self, obj):
         """Calculate duration in minutes"""

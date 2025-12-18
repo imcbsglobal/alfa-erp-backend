@@ -195,7 +195,7 @@ python manage.py collectstatic --noinput
 ```
 
 ### 9. Run Development Server
-
+# 1
 ```bash
 python -m uvicorn config.asgi:application --reload --timeout-graceful-shutdown 1
 ```
