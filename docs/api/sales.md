@@ -32,6 +32,25 @@ This module contains 3 main integration points:
 
 ---
 
+## API Endpoints Summary
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/api/sales/invoices/` | Optional (IsAuthenticatedOrReadOnly) | List invoices (pagination + filters: `status`, `worker`, `user`, `created_by`) |
+| GET | `/api/sales/invoices/{id}/` | Optional (IsAuthenticatedOrReadOnly) | Invoice detail with nested customer, items, salesman |
+| POST | `/api/sales/import/invoice/` | API key or JWT (HasAPIKeyOrAuthenticated) | Import or update invoice (idempotent by `invoice_no`) |
+| GET | `/api/sales/sse/invoices/` | Open by default (see notes) | Server-Sent Events stream of invoice events |
+| GET | `/api/sales/picking/active/` | JWT (IsAuthenticated) | Get authenticated user's current picking task (admin may query others) |
+| POST | `/api/sales/picking/start/` | JWT (IsAuthenticated) | Start a picking session (scan user email) |
+| POST | `/api/sales/picking/complete/` | JWT (IsAuthenticated) | Complete picking (scan same user email) |
+| GET | `/api/sales/packing/active/` | JWT (IsAuthenticated) | Get authenticated user's current packing task (admin may query others) |
+| POST | `/api/sales/packing/start/` | JWT (IsAuthenticated) | Start a packing session (invoice must be PICKED) |
+| POST | `/api/sales/packing/complete/` | JWT (IsAuthenticated) | Complete packing (scan same user email) |
+| POST | `/api/sales/delivery/start/` | JWT (IsAuthenticated) | Start a delivery session (DIRECT/COURIER/INTERNAL) |
+| POST | `/api/sales/delivery/complete/` | JWT (IsAuthenticated) | Complete delivery (confirm delivery status) |
+
+---
+
 ## 1. List Invoices
 `GET /api/sales/invoices/`
 
@@ -294,19 +313,7 @@ Required (Bearer token)
 }
 ```
 
-**No Active Packing Task (200 OK)**
-```json
-{
-  "success": true,
-  "message": "Active packing task found",
-  "data": {
-    "task_type": "PACKING",
-    "session_id": 58,
-    "start_time": "2025-12-17T11:15:00Z",
-    "invoice": { ... }
-  }
-}
-```
+
 
 **No Active Packing Task (200 OK)**
 ```json
