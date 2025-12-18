@@ -38,8 +38,16 @@ Three specialized history serializers:
 Fields:
 - id (int) - Session ID
 - invoice_no (string) - Invoice number
+- invoice_date (date) - Invoice date
+- invoice_status (string) - Invoice status (PENDING, PICKING, PACKED, DELIVERED, etc.)
+- invoice_remarks (string) - Invoice remarks/notes
+- salesman_name (string) - Salesman who created the invoice
 - customer_name (string) - Customer full name
 - customer_email (string) - Customer email
+- customer_phone (string) - Customer primary phone
+- customer_address (string) - Customer address line 1
+- items (list) - Invoice line items (id, name, item_code, quantity, mrp, company_name, packing, shelf_location, remarks, batch_no, expiry_date)
+- total_amount (number) - Calculated total (sum of quantity * mrp)
 - picker_email (string) - Employee who picked
 - picker_name (string) - Employee full name
 - picking_status (string) - PREPARING, PICKED, VERIFIED
@@ -53,7 +61,11 @@ Fields:
 **PackingHistorySerializer**
 ```python
 Fields:
-- id, invoice_no, customer_name, customer_email
+- id, invoice_no, invoice_date, invoice_status, invoice_remarks
+- salesman_name
+- customer_name, customer_email, customer_phone, customer_address
+- items (list) - Invoice items
+- total_amount
 - packer_email, packer_name
 - packing_status (PENDING, IN_PROGRESS, PACKED)
 - start_time, end_time, duration, notes, created_at
@@ -62,7 +74,11 @@ Fields:
 **DeliveryHistorySerializer**
 ```python
 Fields:
-- id, invoice_no, customer_name, customer_email
+- id, invoice_no, invoice_date, invoice_status, invoice_remarks
+- salesman_name
+- customer_name, customer_email, customer_phone, customer_address
+- items (list) - Invoice items
+- total_amount
 - delivery_type (DIRECT, COURIER, INTERNAL)
 - delivery_user_email, delivery_user_name
 - courier_name, tracking_no

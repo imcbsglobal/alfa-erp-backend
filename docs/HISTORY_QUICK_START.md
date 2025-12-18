@@ -55,11 +55,33 @@ curl -H "Authorization: Bearer YOUR_TOKEN" \
     {
       "id": 15,
       "invoice_no": "INV-007",
+      "invoice_date": "2024-12-10",
+      "invoice_status": "PACKED",
+      "invoice_remarks": "Deliver with care",
+      "salesman_name": "John Sales",
       "customer_name": "John Doe",
       "customer_email": "customer1@gmail.com",
+      "customer_phone": "+1234567890",
+      "customer_address": "123 Main Street",
       "picker_email": "picker1@gmail.com",
       "picker_name": "Alice Picker",
       "picking_status": "PICKED",
+      "items": [
+        {
+          "id": 201,
+          "name": "Paracetamol 500mg",
+          "item_code": "P500",
+          "quantity": 2,
+          "mrp": 50.0,
+          "company_name": "ACME",
+          "packing": "Strip",
+          "shelf_location": "A1",
+          "remarks": "",
+          "batch_no": "B123",
+          "expiry_date": "2025-06-30"
+        }
+      ],
+      "total_amount": 100.0,
       "start_time": "2024-12-10T14:15:00Z",
       "end_time": "2024-12-10T14:30:00Z",
       "duration": 15.0,
