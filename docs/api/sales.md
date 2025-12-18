@@ -43,11 +43,14 @@ This module contains 3 main integration points:
 | GET | `/api/sales/picking/active/` | JWT (IsAuthenticated) | Get authenticated user's current picking task (admin may query others) |
 | POST | `/api/sales/picking/start/` | JWT (IsAuthenticated) | Start a picking session (scan user email) |
 | POST | `/api/sales/picking/complete/` | JWT (IsAuthenticated) | Complete picking (scan same user email) |
+| GET | `/api/sales/picking/history/` | JWT (IsAuthenticated) | List picking session history (filters: search, status, dates; admin sees all, user sees own) |
 | GET | `/api/sales/packing/active/` | JWT (IsAuthenticated) | Get authenticated user's current packing task (admin may query others) |
 | POST | `/api/sales/packing/start/` | JWT (IsAuthenticated) | Start a packing session (invoice must be PICKED) |
 | POST | `/api/sales/packing/complete/` | JWT (IsAuthenticated) | Complete packing (scan same user email) |
+| GET | `/api/sales/packing/history/` | JWT (IsAuthenticated) | List packing session history (filters: search, status, dates; admin sees all, user sees own) |
 | POST | `/api/sales/delivery/start/` | JWT (IsAuthenticated) | Start a delivery session (DIRECT/COURIER/INTERNAL) |
 | POST | `/api/sales/delivery/complete/` | JWT (IsAuthenticated) | Complete delivery (confirm delivery status) |
+| GET | `/api/sales/delivery/history/` | JWT (IsAuthenticated) | List delivery session history (filters: search, status, delivery_type, dates; admin sees all, user sees own) |
 
 ---
 
@@ -877,6 +880,517 @@ es.onmessage = (evt) => {
 - `item_code`, `quantity`, `mrp`, `company_name`, `packing`, `shelf_location`, `remarks`
 
 ---
+
+## 7. History: Picking Sessions
+
+`GET /api/sales/picking/history/`
+
+### Purpose
+Retrieve paginated list of picking session history with filtering and search capabilities.
+
+### Authentication
+Required (JWT) - IsAuthenticated
+
+### Permissions
+- **Admins/Superadmins**: Can view all picking sessions across all users
+- **Regular Users**: Can only view their own picking sessions
+
+### Query Parameters
+- `search` (string, optional): Search by invoice number, customer name, customer email, or picker email
+- `status` (string, optional): Filter by picking_status
+  - Valid values: `PREPARING`, `PICKED`, `VERIFIED`
+- `start_date` (string, optional): Filter sessions created on or after this date (format: YYYY-MM-DD)
+- `end_date` (string, optional): Filter sessions created on or before this date (format: YYYY-MM-DD)
+- `page` (integer, optional): Page number (default: 1)
+- `page_size` (integer, optional): Items per page (default: 10, max: 100)
+
+### Examples
+```bash
+# Get all picking history (admin sees all, user sees only their own)
+GET /api/sales/picking/history/
+
+# Search for specific invoice
+GET /api/sales/picking/history/?search=INV-007
+
+# Filter by status
+GET /api/sales/picking/history/?status=PICKED
+
+# Filter by date range
+GET /api/sales/picking/history/?start_date=2024-12-01&end_date=2024-12-31
+
+# Combined filters
+GET /api/sales/picking/history/?status=PICKED&start_date=2024-12-10&search=customer1
+
+# Pagination
+GET /api/sales/picking/history/?page=2&page_size=20
+```
+
+### Response
+**Success (200 OK):**
+```json
+{
+  "count": 25,
+  "next": "http://localhost:8000/api/sales/picking/history/?page=3",
+  "previous": "http://localhost:8000/api/sales/picking/history/?page=1",
+  "results": [
+    {
+      "id": 15,
+      "invoice_no": "INV-007",
+      "customer_name": "John Doe",
+      "customer_email": "customer1@gmail.com",
+      "picker_email": "picker1@gmail.com",
+      "picker_name": "Alice Picker",
+      "picking_status": "PICKED",
+      "start_time": "2024-12-10T14:15:00Z",
+      "end_time": "2024-12-10T14:30:00Z",
+      "duration": 15.0,
+      "notes": "All items picked successfully",
+      "created_at": "2024-12-10T14:15:00Z"
+    },
+    {
+      "id": 14,
+      "invoice_no": "INV-006",
+      "customer_name": "Jane Smith",
+      "customer_email": "customer2@gmail.com",
+      "picker_email": "picker2@gmail.com",
+      "picker_name": "Bob Picker",
+      "picking_status": "PREPARING",
+      "start_time": "2024-12-10T13:00:00Z",
+      "end_time": null,
+      "duration": null,
+      "notes": "",
+      "created_at": "2024-12-10T13:00:00Z"
+    }
+  ]
+}
+```
+
+### Frontend Integration (React Example)
+```jsx
+// Admin view - see all picking sessions
+const fetchPickingHistory = async (filters = {}) => {
+  const params = new URLSearchParams();
+  if (filters.search) params.append('search', filters.search);
+  if (filters.status) params.append('status', filters.status);
+  if (filters.startDate) params.append('start_date', filters.startDate);
+  if (filters.endDate) params.append('end_date', filters.endDate);
+  if (filters.page) params.append('page', filters.page);
+  
+  const response = await fetch(
+    `${BASE_URL}/api/sales/picking/history/?${params}`,
+    {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    }
+  );
+  
+  if (!response.ok) throw new Error('Failed to fetch picking history');
+  return await response.json();
+};
+
+// Usage in component
+const [historyData, setHistoryData] = useState(null);
+
+useEffect(() => {
+  fetchPickingHistory({ 
+    status: 'PICKED', 
+    startDate: '2024-12-01',
+    page: 1 
+  })
+    .then(data => setHistoryData(data))
+    .catch(err => console.error(err));
+}, []);
+```
+
+---
+
+## 8. History: Packing Sessions
+
+`GET /api/sales/packing/history/`
+
+### Purpose
+Retrieve paginated list of packing session history with filtering and search capabilities.
+
+### Authentication
+Required (JWT) - IsAuthenticated
+
+### Permissions
+- **Admins/Superadmins**: Can view all packing sessions across all users
+- **Regular Users**: Can only view their own packing sessions
+
+### Query Parameters
+- `search` (string, optional): Search by invoice number, customer name, customer email, or packer email
+- `status` (string, optional): Filter by packing_status
+  - Valid values: `PENDING`, `IN_PROGRESS`, `PACKED`
+- `start_date` (string, optional): Filter sessions created on or after this date (format: YYYY-MM-DD)
+- `end_date` (string, optional): Filter sessions created on or before this date (format: YYYY-MM-DD)
+- `page` (integer, optional): Page number (default: 1)
+- `page_size` (integer, optional): Items per page (default: 10, max: 100)
+
+### Examples
+```bash
+# Get all packing history
+GET /api/sales/packing/history/
+
+# Search for specific customer
+GET /api/sales/packing/history/?search=customer1@gmail.com
+
+# Filter completed packing tasks
+GET /api/sales/packing/history/?status=PACKED
+
+# Date range filter
+GET /api/sales/packing/history/?start_date=2024-12-10&end_date=2024-12-11
+```
+
+### Response
+**Success (200 OK):**
+```json
+{
+  "count": 18,
+  "next": "http://localhost:8000/api/sales/packing/history/?page=2",
+  "previous": null,
+  "results": [
+    {
+      "id": 22,
+      "invoice_no": "INV-008",
+      "customer_name": "Bob Wilson",
+      "customer_email": "customer3@gmail.com",
+      "packer_email": "packer1@gmail.com",
+      "packer_name": "Charlie Packer",
+      "packing_status": "PACKED",
+      "start_time": "2024-12-10T16:30:00Z",
+      "end_time": "2024-12-10T16:45:00Z",
+      "duration": 15.0,
+      "notes": "Packed in 2 boxes",
+      "created_at": "2024-12-10T16:30:00Z"
+    }
+  ]
+}
+```
+
+### Frontend Integration (React Example)
+```jsx
+const fetchPackingHistory = async (filters = {}) => {
+  const params = new URLSearchParams();
+  if (filters.search) params.append('search', filters.search);
+  if (filters.status) params.append('status', filters.status);
+  if (filters.startDate) params.append('start_date', filters.startDate);
+  if (filters.endDate) params.append('end_date', filters.endDate);
+  if (filters.page) params.append('page', filters.page);
+  
+  const response = await fetch(
+    `${BASE_URL}/api/sales/packing/history/?${params}`,
+    {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    }
+  );
+  
+  if (!response.ok) throw new Error('Failed to fetch packing history');
+  return await response.json();
+};
+```
+
+---
+
+## 9. History: Delivery Sessions
+
+`GET /api/sales/delivery/history/`
+
+### Purpose
+Retrieve paginated list of delivery session history with filtering and search capabilities.
+
+### Authentication
+Required (JWT) - IsAuthenticated
+
+### Permissions
+- **Admins/Superadmins**: Can view all delivery sessions across all users
+- **Regular Users**: Can only view their own delivery sessions (assigned to them)
+
+### Query Parameters
+- `search` (string, optional): Search by invoice number, customer name, customer email, delivery user email, courier name, or tracking number
+- `status` (string, optional): Filter by delivery_status
+  - Valid values: `PENDING`, `IN_TRANSIT`, `DELIVERED`
+- `delivery_type` (string, optional): Filter by delivery type
+  - Valid values: `DIRECT`, `COURIER`, `INTERNAL`
+- `start_date` (string, optional): Filter sessions created on or after this date (format: YYYY-MM-DD)
+- `end_date` (string, optional): Filter sessions created on or before this date (format: YYYY-MM-DD)
+- `page` (integer, optional): Page number (default: 1)
+- `page_size` (integer, optional): Items per page (default: 10, max: 100)
+
+### Examples
+```bash
+# Get all delivery history
+GET /api/sales/delivery/history/
+
+# Filter by delivery type
+GET /api/sales/delivery/history/?delivery_type=COURIER
+
+# Filter delivered orders
+GET /api/sales/delivery/history/?status=DELIVERED
+
+# Search by tracking number
+GET /api/sales/delivery/history/?search=DTDC123456
+
+# Combined filters - courier deliveries completed in date range
+GET /api/sales/delivery/history/?delivery_type=COURIER&status=DELIVERED&start_date=2024-12-10&end_date=2024-12-11
+
+# Search for specific driver
+GET /api/sales/delivery/history/?search=driver1@gmail.com
+```
+
+### Response
+**Success (200 OK):**
+```json
+{
+  "count": 32,
+  "next": "http://localhost:8000/api/sales/delivery/history/?page=2",
+  "previous": null,
+  "results": [
+    {
+      "id": 45,
+      "invoice_no": "INV-007",
+      "customer_name": "John Doe",
+      "customer_email": "customer1@gmail.com",
+      "delivery_type": "DIRECT",
+      "delivery_user_email": null,
+      "delivery_user_name": null,
+      "courier_name": null,
+      "tracking_no": null,
+      "delivery_status": "DELIVERED",
+      "start_time": "2024-12-10T14:00:00Z",
+      "end_time": "2024-12-10T14:30:00Z",
+      "duration": 30.0,
+      "notes": "Customer collected the order",
+      "created_at": "2024-12-10T14:00:00Z"
+    },
+    {
+      "id": 46,
+      "invoice_no": "INV-008",
+      "customer_name": "Jane Smith",
+      "customer_email": "customer2@gmail.com",
+      "delivery_type": "COURIER",
+      "delivery_user_email": null,
+      "delivery_user_name": null,
+      "courier_name": "DTDC",
+      "tracking_no": "DTDC123456",
+      "delivery_status": "DELIVERED",
+      "start_time": "2024-12-10T16:30:00Z",
+      "end_time": "2024-12-10T16:45:00Z",
+      "duration": 15.0,
+      "notes": "Handed to courier",
+      "created_at": "2024-12-10T16:30:00Z"
+    },
+    {
+      "id": 47,
+      "invoice_no": "INV-009",
+      "customer_name": "Bob Wilson",
+      "customer_email": "customer3@gmail.com",
+      "delivery_type": "INTERNAL",
+      "delivery_user_email": "driver1@gmail.com",
+      "delivery_user_name": "David Driver",
+      "courier_name": null,
+      "tracking_no": null,
+      "delivery_status": "DELIVERED",
+      "start_time": "2024-12-11T15:00:00Z",
+      "end_time": "2024-12-11T15:15:00Z",
+      "duration": 15.0,
+      "notes": "Delivered by company driver",
+      "created_at": "2024-12-11T15:00:00Z"
+    }
+  ]
+}
+```
+
+### Frontend Integration (React Example)
+```jsx
+const fetchDeliveryHistory = async (filters = {}) => {
+  const params = new URLSearchParams();
+  if (filters.search) params.append('search', filters.search);
+  if (filters.status) params.append('status', filters.status);
+  if (filters.deliveryType) params.append('delivery_type', filters.deliveryType);
+  if (filters.startDate) params.append('start_date', filters.startDate);
+  if (filters.endDate) params.append('end_date', filters.endDate);
+  if (filters.page) params.append('page', filters.page);
+  
+  const response = await fetch(
+    `${BASE_URL}/api/sales/delivery/history/?${params}`,
+    {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    }
+  );
+  
+  if (!response.ok) throw new Error('Failed to fetch delivery history');
+  return await response.json();
+};
+
+// Usage - Admin dashboard showing all delivery modes
+const DeliveryHistoryTable = () => {
+  const [history, setHistory] = useState([]);
+  const [filters, setFilters] = useState({
+    deliveryType: 'ALL', // ALL, DIRECT, COURIER, INTERNAL
+    status: '',
+    search: '',
+    startDate: '',
+    endDate: '',
+    page: 1
+  });
+  
+  useEffect(() => {
+    const params = { ...filters };
+    if (params.deliveryType === 'ALL') delete params.deliveryType;
+    
+    fetchDeliveryHistory(params)
+      .then(data => setHistory(data))
+      .catch(err => console.error(err));
+  }, [filters]);
+  
+  return (
+    <div>
+      <input 
+        type="text" 
+        placeholder="Search invoice or details..."
+        value={filters.search}
+        onChange={e => setFilters({...filters, search: e.target.value, page: 1})}
+      />
+      
+      <select 
+        value={filters.deliveryType}
+        onChange={e => setFilters({...filters, deliveryType: e.target.value, page: 1})}
+      >
+        <option value="ALL">All Modes</option>
+        <option value="DIRECT">Self Pickup</option>
+        <option value="COURIER">Courier</option>
+        <option value="INTERNAL">Company Delivery</option>
+      </select>
+      
+      <input 
+        type="date"
+        value={filters.startDate}
+        onChange={e => setFilters({...filters, startDate: e.target.value, page: 1})}
+      />
+      
+      <table>
+        <thead>
+          <tr>
+            <th>Invoice</th>
+            <th>Mode</th>
+            <th>Details</th>
+            <th>Date</th>
+            <th>Completed At</th>
+          </tr>
+        </thead>
+        <tbody>
+          {history.results?.map(session => (
+            <tr key={session.id}>
+              <td>{session.invoice_no}</td>
+              <td>
+                {session.delivery_type === 'DIRECT' && 'Self Pickup'}
+                {session.delivery_type === 'COURIER' && 'Courier'}
+                {session.delivery_type === 'INTERNAL' && 'Company Delivery'}
+              </td>
+              <td>
+                {session.delivery_type === 'DIRECT' && (
+                  <div>
+                    <div>{session.customer_email}</div>
+                    <div>Customer collected the order</div>
+                  </div>
+                )}
+                {session.delivery_type === 'COURIER' && (
+                  <div>
+                    <div>{session.courier_name}</div>
+                    <div>Tracking: {session.tracking_no}</div>
+                  </div>
+                )}
+                {session.delivery_type === 'INTERNAL' && (
+                  <div>
+                    <div>{session.delivery_user_email}</div>
+                    <div>Delivered by company driver</div>
+                  </div>
+                )}
+              </td>
+              <td>{new Date(session.created_at).toLocaleDateString('en-GB')}</td>
+              <td>{new Date(session.end_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      
+      {/* Pagination controls */}
+      <div>
+        <button 
+          disabled={!history.previous}
+          onClick={() => setFilters({...filters, page: filters.page - 1})}
+        >
+          Previous
+        </button>
+        <span>Page {filters.page}</span>
+        <button 
+          disabled={!history.next}
+          onClick={() => setFilters({...filters, page: filters.page + 1})}
+        >
+          Next
+        </button>
+      </div>
+      
+      <div>
+        Showing {history.results?.length || 0} of {history.count || 0} delivery records
+      </div>
+    </div>
+  );
+};
+```
+
+---
+
+## History Usage Notes
+
+### Admin vs User Views
+- **Admin users** (`is_admin_or_superadmin()` = True):
+  - See ALL sessions across all employees
+  - Can filter/search any invoice or user
+  - Use for monitoring team performance, tracking workflow times, and auditing
+
+- **Regular users** (pickers, packers, drivers):
+  - See ONLY their own sessions (sessions where they were the assigned worker)
+  - Cannot view other employees' work
+  - Use for personal work history and performance tracking
+
+### Duration Calculation
+- `duration` field shows time in **minutes** (decimal)
+- Only calculated when both `start_time` and `end_time` are present
+- Returns `null` for ongoing sessions (end_time is null)
+- Formula: `(end_time - start_time).total_seconds() / 60`
+
+### Date Format
+- Date filters use **YYYY-MM-DD** format (e.g., `2024-12-10`)
+- `start_date`: Inclusive - sessions created on or after this date
+- `end_date`: Inclusive - sessions created on or before this date
+- Date comparison uses `created_at` field, not start_time or end_time
+
+### Search Behavior
+- Search is **case-insensitive** and uses **partial matching** (icontains)
+- Searches across multiple fields:
+  - **Picking**: invoice_no, customer name, customer email, picker email
+  - **Packing**: invoice_no, customer name, customer email, packer email  
+  - **Delivery**: invoice_no, customer name, customer email, delivery user email, courier name, tracking number
+- Single search query checks all relevant fields (OR logic)
+
+### Performance Considerations
+- History views use `select_related()` to optimize database queries
+- Default page size is 10 (configurable up to 100)
+- Order by `created_at` descending (newest first)
+- For large datasets, consider adding database indexes on commonly filtered fields
+
+---
+
 
 ## Best Practices & Integration Tips
 - Use the `import/invoice/` endpoint for all invoice entries when you want the SSE notifications to be emitted.

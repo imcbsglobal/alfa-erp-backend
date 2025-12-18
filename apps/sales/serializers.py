@@ -441,3 +441,79 @@ class CompleteDeliverySerializer(serializers.Serializer):
         return data
 
 
+# ===== History Serializers =====
+
+class PickingHistorySerializer(serializers.ModelSerializer):
+    """Serializer for picking session history with invoice and timing details"""
+    invoice_no = serializers.CharField(source='invoice.invoice_no', read_only=True)
+    customer_name = serializers.CharField(source='invoice.customer.name', read_only=True)
+    customer_email = serializers.CharField(source='invoice.customer.email', read_only=True)
+    picker_email = serializers.CharField(source='picker.email', read_only=True)
+    picker_name = serializers.CharField(source='picker.name', read_only=True)
+    duration = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = PickingSession
+        fields = [
+            'id', 'invoice_no', 'customer_name', 'customer_email',
+            'picker_email', 'picker_name', 'picking_status',
+            'start_time', 'end_time', 'duration', 'notes', 'created_at'
+        ]
+    
+    def get_duration(self, obj):
+        """Calculate duration in minutes"""
+        if obj.start_time and obj.end_time:
+            delta = obj.end_time - obj.start_time
+            return round(delta.total_seconds() / 60, 2)  # minutes
+        return None
+
+
+class PackingHistorySerializer(serializers.ModelSerializer):
+    """Serializer for packing session history with invoice and timing details"""
+    invoice_no = serializers.CharField(source='invoice.invoice_no', read_only=True)
+    customer_name = serializers.CharField(source='invoice.customer.name', read_only=True)
+    customer_email = serializers.CharField(source='invoice.customer.email', read_only=True)
+    packer_email = serializers.CharField(source='packer.email', read_only=True)
+    packer_name = serializers.CharField(source='packer.name', read_only=True)
+    duration = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = PackingSession
+        fields = [
+            'id', 'invoice_no', 'customer_name', 'customer_email',
+            'packer_email', 'packer_name', 'packing_status',
+            'start_time', 'end_time', 'duration', 'notes', 'created_at'
+        ]
+    
+    def get_duration(self, obj):
+        """Calculate duration in minutes"""
+        if obj.start_time and obj.end_time:
+            delta = obj.end_time - obj.start_time
+            return round(delta.total_seconds() / 60, 2)  # minutes
+        return None
+
+
+class DeliveryHistorySerializer(serializers.ModelSerializer):
+    """Serializer for delivery session history with invoice and timing details"""
+    invoice_no = serializers.CharField(source='invoice.invoice_no', read_only=True)
+    customer_name = serializers.CharField(source='invoice.customer.name', read_only=True)
+    customer_email = serializers.CharField(source='invoice.customer.email', read_only=True)
+    delivery_user_email = serializers.CharField(source='assigned_to.email', read_only=True)
+    delivery_user_name = serializers.CharField(source='assigned_to.name', read_only=True)
+    duration = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = DeliverySession
+        fields = [
+            'id', 'invoice_no', 'customer_name', 'customer_email',
+            'delivery_type', 'delivery_user_email', 'delivery_user_name',
+            'courier_name', 'tracking_no', 'delivery_status',
+            'start_time', 'end_time', 'duration', 'notes', 'created_at'
+        ]
+    
+    def get_duration(self, obj):
+        """Calculate duration in minutes"""
+        if obj.start_time and obj.end_time:
+            delta = obj.end_time - obj.start_time
+            return round(delta.total_seconds() / 60, 2)  # minutes
+        return None

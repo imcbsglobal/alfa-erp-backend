@@ -799,3 +799,237 @@ class CompleteDeliveryView(APIView):
             "message": f"Delivery {delivery_status.lower()} for {invoice.invoice_no}",
             "data": response_serializer.data
         }, status=status.HTTP_200_OK)
+
+
+# ===== History Views =====
+
+class HistoryPagination(PageNumberPagination):
+    """Pagination for history endpoints"""
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
+class PickingHistoryView(generics.ListAPIView):
+    """
+    GET /api/sales/picking/history/
+    
+    List picking session history with filtering and search.
+    
+    Query Parameters:
+    - search: Search by invoice number or customer details
+    - status: Filter by picking_status (PREPARING, PICKED, VERIFIED)
+    - start_date: Filter by date (YYYY-MM-DD) - sessions created on or after
+    - end_date: Filter by date (YYYY-MM-DD) - sessions created on or before
+    - page: Page number for pagination
+    - page_size: Number of results per page (default: 10, max: 100)
+    
+    Permissions:
+    - Admins: See all picking sessions
+    - Regular users: See only their own picking sessions
+    """
+    from .serializers import PickingHistorySerializer
+    serializer_class = PickingHistorySerializer
+    pagination_class = HistoryPagination
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        user = self.request.user
+        queryset = PickingSession.objects.select_related(
+            'invoice', 'invoice__customer', 'picker'
+        ).order_by('-created_at')
+        
+        # Permission check: regular users only see their own sessions
+        if not user.is_admin_or_superadmin():
+            queryset = queryset.filter(picker=user)
+        
+        # Search filter
+        search = self.request.query_params.get('search', '').strip()
+        if search:
+            from django.db.models import Q
+            queryset = queryset.filter(
+                Q(invoice__invoice_no__icontains=search) |
+                Q(invoice__customer__name__icontains=search) |
+                Q(invoice__customer__email__icontains=search) |
+                Q(picker__email__icontains=search)
+            )
+        
+        # Status filter
+        status_filter = self.request.query_params.get('status', '').strip().upper()
+        if status_filter and status_filter in ['PREPARING', 'PICKED', 'VERIFIED']:
+            queryset = queryset.filter(picking_status=status_filter)
+        
+        # Date filters
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+        
+        if start_date:
+            from datetime import datetime
+            try:
+                start_dt = datetime.strptime(start_date, '%Y-%m-%d').date()
+                queryset = queryset.filter(created_at__date__gte=start_dt)
+            except ValueError:
+                pass  # Invalid date format, skip filter
+        
+        if end_date:
+            from datetime import datetime
+            try:
+                end_dt = datetime.strptime(end_date, '%Y-%m-%d').date()
+                queryset = queryset.filter(created_at__date__lte=end_dt)
+            except ValueError:
+                pass  # Invalid date format, skip filter
+        
+        return queryset
+
+
+class PackingHistoryView(generics.ListAPIView):
+    """
+    GET /api/sales/packing/history/
+    
+    List packing session history with filtering and search.
+    
+    Query Parameters:
+    - search: Search by invoice number or customer details
+    - status: Filter by packing_status (PENDING, IN_PROGRESS, PACKED)
+    - start_date: Filter by date (YYYY-MM-DD) - sessions created on or after
+    - end_date: Filter by date (YYYY-MM-DD) - sessions created on or before
+    - page: Page number for pagination
+    - page_size: Number of results per page (default: 10, max: 100)
+    
+    Permissions:
+    - Admins: See all packing sessions
+    - Regular users: See only their own packing sessions
+    """
+    from .serializers import PackingHistorySerializer
+    serializer_class = PackingHistorySerializer
+    pagination_class = HistoryPagination
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        user = self.request.user
+        queryset = PackingSession.objects.select_related(
+            'invoice', 'invoice__customer', 'packer'
+        ).order_by('-created_at')
+        
+        # Permission check: regular users only see their own sessions
+        if not user.is_admin_or_superadmin():
+            queryset = queryset.filter(packer=user)
+        
+        # Search filter
+        search = self.request.query_params.get('search', '').strip()
+        if search:
+            from django.db.models import Q
+            queryset = queryset.filter(
+                Q(invoice__invoice_no__icontains=search) |
+                Q(invoice__customer__name__icontains=search) |
+                Q(invoice__customer__email__icontains=search) |
+                Q(packer__email__icontains=search)
+            )
+        
+        # Status filter
+        status_filter = self.request.query_params.get('status', '').strip().upper()
+        if status_filter and status_filter in ['PENDING', 'IN_PROGRESS', 'PACKED']:
+            queryset = queryset.filter(packing_status=status_filter)
+        
+        # Date filters
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+        
+        if start_date:
+            from datetime import datetime
+            try:
+                start_dt = datetime.strptime(start_date, '%Y-%m-%d').date()
+                queryset = queryset.filter(created_at__date__gte=start_dt)
+            except ValueError:
+                pass  # Invalid date format, skip filter
+        
+        if end_date:
+            from datetime import datetime
+            try:
+                end_dt = datetime.strptime(end_date, '%Y-%m-%d').date()
+                queryset = queryset.filter(created_at__date__lte=end_dt)
+            except ValueError:
+                pass  # Invalid date format, skip filter
+        
+        return queryset
+
+
+class DeliveryHistoryView(generics.ListAPIView):
+    """
+    GET /api/sales/delivery/history/
+    
+    List delivery session history with filtering and search.
+    
+    Query Parameters:
+    - search: Search by invoice number or customer details
+    - status: Filter by delivery_status (PENDING, IN_TRANSIT, DELIVERED)
+    - delivery_type: Filter by delivery type (DIRECT, COURIER, INTERNAL)
+    - start_date: Filter by date (YYYY-MM-DD) - sessions created on or after
+    - end_date: Filter by date (YYYY-MM-DD) - sessions created on or before
+    - page: Page number for pagination
+    - page_size: Number of results per page (default: 10, max: 100)
+    
+    Permissions:
+    - Admins: See all delivery sessions
+    - Regular users: See only their own delivery sessions
+    """
+    from .serializers import DeliveryHistorySerializer
+    serializer_class = DeliveryHistorySerializer
+    pagination_class = HistoryPagination
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        user = self.request.user
+        queryset = DeliverySession.objects.select_related(
+            'invoice', 'invoice__customer', 'assigned_to'
+        ).order_by('-created_at')
+        
+        # Permission check: regular users only see their own sessions
+        if not user.is_admin_or_superadmin():
+            queryset = queryset.filter(assigned_to=user)
+        
+        # Search filter
+        search = self.request.query_params.get('search', '').strip()
+        if search:
+            from django.db.models import Q
+            queryset = queryset.filter(
+                Q(invoice__invoice_no__icontains=search) |
+                Q(invoice__customer__name__icontains=search) |
+                Q(invoice__customer__email__icontains=search) |
+                Q(assigned_to__email__icontains=search) |
+                Q(courier_name__icontains=search) |
+                Q(tracking_no__icontains=search)
+            )
+        
+        # Status filter
+        status_filter = self.request.query_params.get('status', '').strip().upper()
+        if status_filter and status_filter in ['PENDING', 'IN_TRANSIT', 'DELIVERED']:
+            queryset = queryset.filter(delivery_status=status_filter)
+        
+        # Delivery type filter
+        delivery_type = self.request.query_params.get('delivery_type', '').strip().upper()
+        if delivery_type and delivery_type in ['DIRECT', 'COURIER', 'INTERNAL']:
+            queryset = queryset.filter(delivery_type=delivery_type)
+        
+        # Date filters
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+        
+        if start_date:
+            from datetime import datetime
+            try:
+                start_dt = datetime.strptime(start_date, '%Y-%m-%d').date()
+                queryset = queryset.filter(created_at__date__gte=start_dt)
+            except ValueError:
+                pass  # Invalid date format, skip filter
+        
+        if end_date:
+            from datetime import datetime
+            try:
+                end_dt = datetime.strptime(end_date, '%Y-%m-%d').date()
+                queryset = queryset.filter(created_at__date__lte=end_dt)
+            except ValueError:
+                pass  # Invalid date format, skip filter
+        
+        return queryset
+
