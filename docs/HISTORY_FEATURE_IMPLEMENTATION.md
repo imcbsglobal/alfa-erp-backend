@@ -121,6 +121,8 @@ Implemented via `get_queryset()` filtering:
 
 | Parameter | Type | Description | Example |
 |---|---|---|---|
+| `invoice` | integer | Filter by invoice primary key (id) | `?invoice=123` |
+| `invoice_no` | string | Filter by invoice number (exact match) | `?invoice_no=INV-007` |
 | `search` | string | Search across invoice, customer, employee | `?search=INV-007` |
 | `status` | string | Filter by session status | `?status=PICKED` |
 | `start_date` | string | Sessions on or after (YYYY-MM-DD) | `?start_date=2024-12-01` |

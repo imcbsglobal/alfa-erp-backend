@@ -46,7 +46,7 @@ class Command(BaseCommand):
                 'name': "History",
                 'icon': "ListIcon",
                 'url': "/history",
-                'order': 2,
+                'order': 4,
                 'is_active': True,
                 'parent': None,
             }
@@ -63,7 +63,7 @@ class Command(BaseCommand):
                 'name': "Invoice",
                 'icon': "InvoiceIcon",
                 'url': "/invoices",  # Use submenu path since parent has no direct path
-                'order': 3,
+                'order': 2,
                 'is_active': True,
                 'parent': None,
             }
@@ -80,11 +80,11 @@ class Command(BaseCommand):
                 'is_active': True,
             }
         )
-        invoice_list, _ = MenuItem.objects.update_or_create(
+        my_assigned_bills, _ = MenuItem.objects.update_or_create(
             code="my_assigned_bills",
             defaults={
                 'name': "My Assigned Bills",
-                'icon': "ListIcon",
+                'icon': "PlusCircleIcon",
                 'url': "/invoices/my",
                 'parent': invoice,
                 'order': 2,
@@ -92,6 +92,45 @@ class Command(BaseCommand):
             }
         )
         self.stdout.write("  ✓ Invoice menus created")
+
+        # ========================================
+        # PACKING (Dropdown with 2 children)
+        # ========================================
+        packing, _ = MenuItem.objects.update_or_create(
+            code="packing",
+            defaults={
+                'name': "Packing",
+                'icon': "InvoiceIcon",
+                'url': "/packing/invoices",
+                'order': 3,
+                'is_active': True,
+                'parent': None,
+            }
+        )
+
+        packing_list, _ = MenuItem.objects.update_or_create(
+            code="packing_list",
+            defaults={
+                'name': "Packing List",
+                'icon': "ListIcon",
+                'url': "/packing/invoices",
+                'parent': packing,
+                'order': 1,
+                'is_active': True,
+            }
+        )
+        packing_my_assigned, _ = MenuItem.objects.update_or_create(
+            code="my_assigned_packing",
+            defaults={
+                'name': "My Assigned Packing",
+                'icon': "PlusCircleIcon",
+                'url': "/packing/my",
+                'parent': packing,
+                'order': 2,
+                'is_active': True,
+            }
+        )
+        self.stdout.write("  ✓ Packing menus created")
 
         # ========================================
         # 4. USER MANAGEMENT (Dropdown with 2 children)
@@ -102,7 +141,7 @@ class Command(BaseCommand):
                 'name': "User Management",
                 'icon': "UsersIcon",
                 'url': "/user-management",  # Use first submenu path
-                'order': 4,
+                'order': 5,
                 'is_active': True,
                 'parent': None,
             }
@@ -141,7 +180,7 @@ class Command(BaseCommand):
                 'name': "Master",
                 'icon': "TuneOutlinedIcon",
                 'url': "/master/job-title",  # Use first submenu path
-                'order': 5,
+                'order': 6,
                 'is_active': True,
                 'parent': None,
             }
@@ -189,13 +228,17 @@ class Command(BaseCommand):
         self.stdout.write("MENU STRUCTURE (matches menuConfig.js):")
         self.stdout.write(f"{'='*60}")
         self.stdout.write("1. Dashboard (single) → /dashboard")
-        self.stdout.write("2. History (single) → /history")
-        self.stdout.write("3. Invoice (dropdown)")
-        self.stdout.write("   └─ Invoice List → /invoices")
-        self.stdout.write("4. User Management (dropdown)")
+        self.stdout.write("2. Invoice (dropdown)")
+        self.stdout.write("   ├─ Invoice List → /invoices")
+        self.stdout.write("   └─ My Assigned Bills → /invoices/my")
+        self.stdout.write("3. Packing (dropdown)")
+        self.stdout.write("   ├─ Packing List → /packing/invoices")
+        self.stdout.write("   └─ My Assigned Packing → /packing/my")
+        self.stdout.write("4. History (single) → /history")
+        self.stdout.write("5. User Management (dropdown)")
         self.stdout.write("   ├─ User List → /user-management")
         self.stdout.write("   └─ User Control → /user-control")
-        self.stdout.write("5. Master (dropdown)")
+        self.stdout.write("6. Master (dropdown)")
         self.stdout.write("   ├─ Job Title → /master/job-title")
         self.stdout.write("   └─ Department → /master/department")
         self.stdout.write(f"{'='*60}")

@@ -896,6 +896,8 @@ Required (JWT) - IsAuthenticated
 - **Regular Users**: Can only view their own picking sessions
 
 ### Query Parameters
+- `invoice` (integer, optional): Filter by invoice primary key (id)
+- `invoice_no` (string, optional): Filter by invoice number (exact match)
 - `search` (string, optional): Search by invoice number, customer name, customer email, or picker email
 - `status` (string, optional): Filter by picking_status
   - Valid values: `PREPARING`, `PICKED`, `VERIFIED`
@@ -1051,7 +1053,9 @@ Required (JWT) - IsAuthenticated
 - **Regular Users**: Can only view their own packing sessions
 
 ### Query Parameters
-- `search` (string, optional): Search by invoice number, customer name, customer email, or packer email
+- `invoice` (integer, optional): Filter by invoice primary key (id)
+    - `invoice_no` (string, optional): Filter by invoice number (exact match)
+    - `search` (string, optional): Search by invoice number, customer name, customer email, or packer email
 - `status` (string, optional): Filter by packing_status
   - Valid values: `PENDING`, `IN_PROGRESS`, `PACKED`
 - `start_date` (string, optional): Filter sessions created on or after this date (format: YYYY-MM-DD)
@@ -1164,6 +1168,8 @@ Required (JWT) - IsAuthenticated
 - **Regular Users**: Can only view their own delivery sessions (assigned to them)
 
 ### Query Parameters
+- `invoice` (integer, optional): Filter by invoice primary key (id)
+- `invoice_no` (string, optional): Filter by invoice number (exact match)
 - `search` (string, optional): Search by invoice number, customer name, customer email, delivery user email, courier name, or tracking number
 - `status` (string, optional): Filter by delivery_status
   - Valid values: `PENDING`, `IN_TRANSIT`, `DELIVERED`

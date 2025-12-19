@@ -37,9 +37,16 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
     def post(self, request, *args, **kwargs):
         """Wrap the JWT response into our success_response format"""
-        response = super().post(request, *args, **kwargs)
-        # response.data contains tokens and 'user' key added by serializer
-        return success_response(data=response.data, message='Login successful', status_code=response.status_code)
+        try:
+            response = super().post(request, *args, **kwargs)
+            # response.data contains tokens and 'user' key added by serializer
+            return success_response(data=response.data, message='Login successful', status_code=response.status_code)
+        except Exception as e:
+            # Catch any authentication error and return simple message
+            return error_response(
+                message='Invalid email or password',
+                status_code=status.HTTP_401_UNAUTHORIZED
+            )
 
 
 class UserViewSet(BaseModelViewSet):

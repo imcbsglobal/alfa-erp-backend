@@ -285,63 +285,11 @@ class ImportInvoiceView(APIView):
         # If invoice exists, update it (replace items, update customer/salesman/fields)
         existing = Invoice.objects.filter(invoice_no=invoice_no).first()
         if existing:
-            try:
-                with transaction.atomic():
-                    data = serializer.validated_data
-                    customer_data = data.get('customer')
-                    items_data = data.get('items', [])
-                    salesman_name = data.get('salesman')
-
-                    # Upsert salesman and customer
-                    from .models import Salesman, Customer, InvoiceItem
-
-                    salesman, _ = Salesman.objects.get_or_create(name=salesman_name)
-                    customer, _ = Customer.objects.update_or_create(
-                        code=customer_data['code'],
-                        defaults=customer_data
-                    )
-
-                    # Update invoice fields
-                    existing.invoice_date = data.get('invoice_date')
-                    existing.salesman = salesman
-                    existing.customer = customer
-                    existing.created_by = data.get('created_by')
-                    existing.remarks = data.get('remarks', existing.remarks)
-                    if request.user and request.user.is_authenticated:
-                        existing.created_user = request.user
-                    existing.save()
-
-                    # Replace items: delete existing and recreate
-                    InvoiceItem.objects.filter(invoice=existing).delete()
-                    for item in items_data:
-                        InvoiceItem.objects.create(invoice=existing, **item)
-
-                    total_amount = sum(item['quantity'] * item['mrp'] for item in items_data)
-
-                    # Emit SSE event for updated invoice
-                    try:
-                        invoice_refreshed = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(id=existing.id)
-                        serializer_out = InvoiceListSerializer(invoice_refreshed)
-                        django_eventstream.send_event(
-                            INVOICE_CHANNEL,
-                            'message',
-                            serializer_out.data
-                        )
-                        logger.debug("Invoice update event sent: %s", existing.invoice_no)
-                    except Exception:
-                        logger.exception("Failed to send invoice update event")
-
-                    return Response(
-                        {
-                            "success": True,
-                            "message": "Invoice updated successfully",
-                            "data": {"id": existing.id, "invoice_no": existing.invoice_no, "total_amount": total_amount}
-                        },
-                        status=status.HTTP_200_OK,
-                    )
-            except Exception:
-                logger.exception("Failed to update existing invoice")
-                return Response({"success": False, "message": "Failed to update existing invoice."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({
+                "success": False,
+                "message": "Invoice with this invoice_no already exists. Import endpoint does not update existing invoices.",
+                "data": {"id": existing.id, "invoice_no": existing.invoice_no}
+            }, status=status.HTTP_409_CONFLICT)
 
         try:
             invoice = serializer.save()
@@ -844,6 +792,17 @@ class PickingHistoryView(generics.ListAPIView):
         if not (user.is_admin_or_superadmin() or getattr(user, 'role', '').upper() == 'PICKER'):
             queryset = queryset.filter(picker=user)
         
+        # Invoice filters: by primary key or by invoice number
+        invoice_id = self.request.query_params.get('invoice') or self.request.query_params.get('invoice_id')
+        if invoice_id:
+            try:
+                queryset = queryset.filter(invoice__id=int(invoice_id))
+            except (ValueError, TypeError):
+                queryset = queryset.filter(invoice__invoice_no__iexact=invoice_id)
+        invoice_no_param = self.request.query_params.get('invoice_no')
+        if invoice_no_param:
+            queryset = queryset.filter(invoice__invoice_no__iexact=invoice_no_param)
+
         # Search filter
         search = self.request.query_params.get('search', '').strip()
         if search:
@@ -916,6 +875,17 @@ class PackingHistoryView(generics.ListAPIView):
         if not user.is_admin_or_superadmin():
             queryset = queryset.filter(packer=user)
         
+        # Invoice filters: by primary key or by invoice number
+        invoice_id = self.request.query_params.get('invoice') or self.request.query_params.get('invoice_id')
+        if invoice_id:
+            try:
+                queryset = queryset.filter(invoice__id=int(invoice_id))
+            except (ValueError, TypeError):
+                queryset = queryset.filter(invoice__invoice_no__iexact=invoice_id)
+        invoice_no_param = self.request.query_params.get('invoice_no')
+        if invoice_no_param:
+            queryset = queryset.filter(invoice__invoice_no__iexact=invoice_no_param)
+
         # Search filter
         search = self.request.query_params.get('search', '').strip()
         if search:
@@ -989,6 +959,17 @@ class DeliveryHistoryView(generics.ListAPIView):
         if not user.is_admin_or_superadmin():
             queryset = queryset.filter(assigned_to=user)
         
+        # Invoice filters: by primary key or by invoice number
+        invoice_id = self.request.query_params.get('invoice') or self.request.query_params.get('invoice_id')
+        if invoice_id:
+            try:
+                queryset = queryset.filter(invoice__id=int(invoice_id))
+            except (ValueError, TypeError):
+                queryset = queryset.filter(invoice__invoice_no__iexact=invoice_id)
+        invoice_no_param = self.request.query_params.get('invoice_no')
+        if invoice_no_param:
+            queryset = queryset.filter(invoice__invoice_no__iexact=invoice_no_param)
+
         # Search filter
         search = self.request.query_params.get('search', '').strip()
         if search:
