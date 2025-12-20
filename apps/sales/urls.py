@@ -23,7 +23,7 @@ urlpatterns = [
     path("invoices/<int:pk>/", InvoiceDetailView.as_view(), name="invoice-detail"),
     path("import/invoice/", ImportInvoiceView.as_view(), name="import-invoice"),
     
-    # SSE endpoint using django-eventstream (CSRF exempt)
+    #Common Invoice SSE endpoint using django-eventstream (CSRF exempt)
     path("sse/invoices/", csrf_exempt(django_eventstream.views.events), {'channels': ['invoices']}, name="invoice-stream"),
     
     # Picking workflow
@@ -42,4 +42,6 @@ urlpatterns = [
     path("delivery/start/", StartDeliveryView.as_view(), name="delivery-start"),
     path("delivery/complete/", CompleteDeliveryView.as_view(), name="delivery-complete"),
     path("delivery/history/", DeliveryHistoryView.as_view(), name="delivery-history"),
+
+    # Billing 
 ]
