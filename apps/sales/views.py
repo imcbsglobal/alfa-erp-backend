@@ -766,7 +766,7 @@ class PickingHistoryView(generics.ListAPIView):
     
     Query Parameters:
     - search: Search by invoice number or customer details
-    - status: Filter by picking_status (PREPARING, PICKED, VERIFIED)
+    - status: Filter by picking_status (PREPARING, PICKED, VERIFIED, CANCELLED, RETURNED)
     - start_date: Filter by date (YYYY-MM-DD) - sessions created on or after
     - end_date: Filter by date (YYYY-MM-DD) - sessions created on or before
     - page: Page number for pagination
@@ -816,7 +816,7 @@ class PickingHistoryView(generics.ListAPIView):
         
         # Status filter
         status_filter = self.request.query_params.get('status', '').strip().upper()
-        if status_filter and status_filter in ['PREPARING', 'PICKED', 'VERIFIED']:
+        if status_filter and status_filter in ['PREPARING', 'PICKED', 'VERIFIED', 'CANCELLED', 'RETURNED']:
             queryset = queryset.filter(picking_status=status_filter)
         
         # Date filters
@@ -850,7 +850,7 @@ class PackingHistoryView(generics.ListAPIView):
     
     Query Parameters:
     - search: Search by invoice number or customer details
-    - status: Filter by packing_status (PENDING, IN_PROGRESS, PACKED)
+    - status: Filter by packing_status (PENDING, IN_PROGRESS, PACKED, CANCELLED, RETURNED)
     - start_date: Filter by date (YYYY-MM-DD) - sessions created on or after
     - end_date: Filter by date (YYYY-MM-DD) - sessions created on or before
     - page: Page number for pagination
@@ -899,7 +899,7 @@ class PackingHistoryView(generics.ListAPIView):
         
         # Status filter
         status_filter = self.request.query_params.get('status', '').strip().upper()
-        if status_filter and status_filter in ['PENDING', 'IN_PROGRESS', 'PACKED']:
+        if status_filter and status_filter in ['PENDING', 'IN_PROGRESS', 'PACKED', 'CANCELLED', 'RETURNED']:
             queryset = queryset.filter(packing_status=status_filter)
         
         # Date filters
