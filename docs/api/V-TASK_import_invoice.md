@@ -31,6 +31,7 @@ Sample Payload
   "invoice_date": "2025-01-18",
   "salesman": "Ajay",
   "created_by": "admin",
+  "priority": "HIGH",
   "customer": {
     "code": "CUST-889",
     "name": "LifeCare Pharmacy",
@@ -40,7 +41,7 @@ Sample Payload
     "phone1": "9876543210",
     "phone2": "",
     "email": "lifecare@shop.com"
-  },
+  ,
   "items": [
     {
       "name": "Paracetamol 650mg",

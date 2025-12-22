@@ -45,7 +45,7 @@ class InvoiceListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Invoice
         fields = [
-            'id', 'invoice_no', 'invoice_date', 'customer','status', 'salesman', 
+            'id', 'invoice_no', 'invoice_date', 'customer','status', 'priority', 'salesman', 
             'created_by', 'items', 'total_amount', 'remarks', 'created_at',
             'billing_status', 'return_reason', 'returned_by_email', 'returned_at',
             'picker_info', 'packer_info', 'current_handler'
@@ -138,6 +138,7 @@ class InvoiceImportSerializer(serializers.Serializer):
     invoice_date = serializers.DateField()
     salesman = serializers.CharField()
     created_by = serializers.CharField(required=False, allow_blank=True)
+    priority = serializers.ChoiceField(choices=[('LOW','Low'),('MEDIUM','Medium'),('HIGH','High')], required=False, default='MEDIUM')
     customer = CustomerSerializer()
     items = ItemSerializer(many=True)
 
@@ -209,7 +210,8 @@ class PickingSessionCreateSerializer(serializers.Serializer):
             picker=user,
             start_time=timezone.now(),
             picking_status="PREPARING",
-            notes=notes
+            notes=notes,
+            selected_items=[]
         )
 
         # Update invoice status

@@ -45,6 +45,18 @@ class Invoice(models.Model):
         ],
         default="INVOICED"
     )
+
+    # Priority for ordering / processing urgency
+    priority = models.CharField(
+        max_length=10,
+        choices=[
+            ("LOW", "Low"),
+            ("MEDIUM", "Medium"),
+            ("HIGH", "High"),
+        ],
+        default="MEDIUM",
+        help_text="Priority of the invoice (LOW, MEDIUM, HIGH)"
+    )
     
     # Billing fields
     billing_status = models.CharField(
@@ -101,10 +113,11 @@ class PickingSession(models.Model):
         default="PREPARING"
     )
     notes = models.TextField(null=True, blank=True)
+    selected_items = models.JSONField(blank=True, default=list, help_text='List of item IDs that have been selected/picked so far')
     created_at = models.DateTimeField(auto_now_add=True)
     
     def __str__(self):
-        return f"Packing - {self.invoice.invoice_no}"
+        return f"Picking - {self.invoice.invoice_no}"
     
 
 # apps/sales/models.py
@@ -126,6 +139,7 @@ class PackingSession(models.Model):
         default="PENDING"
     )
     notes = models.TextField(blank=True, null=True)
+    selected_items = models.JSONField(blank=True, default=list, help_text='List of item IDs that have been selected/packed so far')
     created_at = models.DateTimeField(auto_now_add=True)
     
     def __str__(self):

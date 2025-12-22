@@ -414,6 +414,7 @@ Set the key on the server using the `SALES_IMPORT_API_KEY` environment variable 
   "invoice_date": "2025-01-18",
   "salesman": "Ajay",
   "created_by": "admin",
+  "priority": "HIGH",
   "customer": {
     "code": "CUST-889",
     "name": "LifeCare Pharmacy",
@@ -423,7 +424,7 @@ Set the key on the server using the `SALES_IMPORT_API_KEY` environment variable 
     "phone1": "9876543210",
     "phone2": "",
     "email": "lifecare@shop.com"
-  },
+  ,
   "items": [
     {
       "name": "Paracetamol 650mg",
@@ -459,7 +460,8 @@ Set the key on the server using the `SALES_IMPORT_API_KEY` environment variable 
   "data": {
     "id": 1,
     "invoice_no": "INV-10222",
-    "total_amount": 920.0
+    "total_amount": 920.0,
+    "priority": "MEDIUM"
   }
 }
 ```
@@ -520,6 +522,7 @@ Example payload (JSON):
     "phone": ""
   },
   "created_by": "admin",
+  "priority": "MEDIUM",
   "items": [
     {
       "id": 45,

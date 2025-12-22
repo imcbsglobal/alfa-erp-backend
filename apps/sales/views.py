@@ -76,6 +76,11 @@ class InvoiceListView(generics.ListAPIView):
         if status_list:
             queryset = queryset.filter(status__in=status_list)
         
+        # Filter by priority (e.g., ?priority=HIGH)
+        priority = self.request.query_params.get('priority')
+        if priority:
+            queryset = queryset.filter(priority=priority)
+        
         # Filter by created_user ID
         user_id = self.request.query_params.get('user')
         if user_id:
@@ -339,7 +344,8 @@ class ImportInvoiceView(APIView):
                 "data": {
                     "id": invoice.id,
                     "invoice_no": invoice.invoice_no,
-                    "total_amount": total_amount
+                    "total_amount": total_amount,
+                    "priority": invoice.priority
                 }
             },
             status=status.HTTP_201_CREATED
@@ -533,7 +539,8 @@ class StartPackingView(APIView):
             packer=user,
             start_time=timezone.now(),
             packing_status="IN_PROGRESS",
-            notes=notes
+            notes=notes,
+            selected_items=[]
         )
         
         # Update invoice status

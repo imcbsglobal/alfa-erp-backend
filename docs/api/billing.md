@@ -8,6 +8,7 @@ The Billing API allows users to view their billed invoices and provides function
 - **Admin view**: Admins/superadmins see all invoices
 - **Return to billing**: Allows pickers/packers to return invoices when issues are found
 - **Billing status tracking**: Tracks invoice states (BILLED, RETURNED, RE_INVOICED)
+- **Invoice priority**: Invoices now include a `priority` field (LOW / MEDIUM / HIGH) to help order processing and task assignment
 
 ---
 
@@ -30,6 +31,7 @@ Retrieve a paginated list of invoices for the billing section.
 |-----------|------|-------------|---------|
 | `status` | string | Filter by invoice status | `?status=PENDING&status=PICKING` |
 | `billing_status` | string | Filter by billing status | `?billing_status=RETURNED` |
+| `priority` | string | Filter by invoice priority (LOW, MEDIUM, HIGH) | `?priority=HIGH` |
 | `created_by` | string | Filter by creator (admin only) | `?created_by=john@example.com` |
 | `page` | integer | Page number | `?page=2` |
 | `page_size` | integer | Items per page (max 100) | `?page_size=50` |
@@ -46,6 +48,7 @@ Retrieve a paginated list of invoices for the billing section.
       "invoice_no": "INV-001",
       "invoice_date": "2025-12-20",
       "status": "PENDING",
+      "priority": "MEDIUM",
       "billing_status": "BILLED",
       "created_by": "john@example.com",
       "customer": {
