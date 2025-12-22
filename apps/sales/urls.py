@@ -2,7 +2,8 @@ from django.urls import path, include
 from django.views.decorators.csrf import csrf_exempt
 import django_eventstream
 from .views import (
-    ImportInvoiceView, 
+    ImportInvoiceView,
+    UpdateInvoiceView,
     InvoiceListView, 
     InvoiceDetailView,
     MyActivePickingView,
@@ -24,6 +25,7 @@ urlpatterns = [
     path("invoices/", InvoiceListView.as_view(), name="invoice-list"),
     path("invoices/<int:pk>/", InvoiceDetailView.as_view(), name="invoice-detail"),
     path("import/invoice/", ImportInvoiceView.as_view(), name="import-invoice"),
+    path("update/invoice/", UpdateInvoiceView.as_view(), name="update-invoice"),
     
     #Common Invoice SSE endpoint using django-eventstream (CSRF exempt)
     path("sse/invoices/", csrf_exempt(django_eventstream.views.events), {'channels': ['invoices']}, name="invoice-stream"),

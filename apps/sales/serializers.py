@@ -1,7 +1,7 @@
 # apps/sales/serializers.py
 
 from rest_framework import serializers
-from .models import Invoice, InvoiceItem, Customer, Salesman, PickingSession, PackingSession, DeliverySession
+from .models import Invoice, InvoiceItem, InvoiceReturn, Customer, Salesman, PickingSession, PackingSession, DeliverySession
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 
@@ -31,13 +31,29 @@ class SalesmanReadSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'phone']
 
 
+class InvoiceReturnSerializer(serializers.ModelSerializer):
+    """Serializer for invoice return information"""
+    returned_by_email = serializers.CharField(source='returned_by.email', read_only=True)
+    returned_by_name = serializers.CharField(source='returned_by.name', read_only=True)
+    resolved_by_email = serializers.CharField(source='resolved_by.email', read_only=True, allow_null=True)
+    resolved_by_name = serializers.CharField(source='resolved_by.name', read_only=True, allow_null=True)
+    
+    class Meta:
+        model = InvoiceReturn
+        fields = [
+            'id', 'return_reason', 'returned_by', 'returned_by_email', 'returned_by_name',
+            'returned_at', 'returned_from_section', 'resolution_notes', 
+            'resolved_at', 'resolved_by', 'resolved_by_email', 'resolved_by_name'
+        ]
+
+
 class InvoiceListSerializer(serializers.ModelSerializer):
     """Serializer for invoice list and detail with nested data"""
     customer = CustomerReadSerializer(read_only=True)
     salesman = SalesmanReadSerializer(read_only=True)
     items = InvoiceItemSerializer(many=True, read_only=True)
     total_amount = serializers.SerializerMethodField()
-    returned_by_email = serializers.SerializerMethodField()
+    return_info = serializers.SerializerMethodField()
     picker_info = serializers.SerializerMethodField()
     packer_info = serializers.SerializerMethodField()
     current_handler = serializers.SerializerMethodField()
@@ -47,7 +63,7 @@ class InvoiceListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'invoice_no', 'invoice_date', 'customer','status', 'priority', 'salesman', 
             'created_by', 'items', 'total_amount', 'remarks', 'created_at',
-            'billing_status', 'return_reason', 'returned_by_email', 'returned_at',
+            'billing_status', 'return_info',
             'picker_info', 'packer_info', 'current_handler'
         ]
     
@@ -55,11 +71,13 @@ class InvoiceListSerializer(serializers.ModelSerializer):
         """Calculate total from items"""
         return sum(item.quantity * item.mrp for item in obj.items.all())
     
-    def get_returned_by_email(self, obj):
-        """Get email of user who returned the invoice"""
-        if obj.returned_by:
-            return obj.returned_by.email
-        return None
+    def get_return_info(self, obj):
+        """Get return information if invoice has been returned"""
+        try:
+            return_obj = obj.invoice_return
+            return InvoiceReturnSerializer(return_obj).data
+        except:
+            return None
     
     def get_picker_info(self, obj):
         """Get picker information from picking session"""
@@ -98,12 +116,15 @@ class InvoiceListSerializer(serializers.ModelSerializer):
             packer_info = self.get_packer_info(obj)
             return packer_info if packer_info else None
         elif obj.status == 'REVIEW':
-            return {
-                "email": obj.returned_by.email if obj.returned_by else None,
-                "name": obj.returned_by.name if obj.returned_by else None,
-                "status": "REVIEW",
-                "returned_at": obj.returned_at
-            }
+            return_info = self.get_return_info(obj)
+            if return_info:
+                return {
+                    "email": return_info.get('returned_by_email'),
+                    "name": return_info.get('returned_by_name'),
+                    "status": "REVIEW",
+                    "returned_at": return_info.get('returned_at'),
+                    "returned_from": return_info.get('returned_from_section')
+                }
         return None
 
 
@@ -631,14 +652,14 @@ class ReturnToBillingSerializer(serializers.Serializer):
             raise serializers.ValidationError({"invoice_no": "Invoice not found."})
 
         # Check if invoice can be returned (should be in picking, packing, or picked state)
-        allowed_statuses = ['PICKING', 'PICKED', 'PACKING']
+        allowed_statuses = ['PICKING', 'PICKED', 'PACKING', 'PACKED', 'DISPATCHED']
         if invoice.status not in allowed_statuses:
             raise serializers.ValidationError({
-                "invoice_no": f"Invoice in '{invoice.status}' state cannot be returned to billing. Only invoices in PICKING, PICKED, or PACKING state can be returned."
+                "invoice_no": f"Invoice in '{invoice.status}' state cannot be returned to billing. Only invoices in PICKING, PICKED, PACKING, PACKED, or DISPATCHED state can be returned."
             })
 
-        # Check if already in review
-        if invoice.billing_status == 'REVIEW':
+        # Check if already in review (has InvoiceReturn record)
+        if invoice.billing_status == 'REVIEW' or hasattr(invoice, 'invoice_return'):
             raise serializers.ValidationError({
                 "invoice_no": "Invoice has already been sent for review."
             })

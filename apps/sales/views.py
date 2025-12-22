@@ -27,6 +27,7 @@ from .serializers import (
     DeliverySessionReadSerializer,
     CompleteDeliverySerializer,
 )
+from .update_serializers import InvoiceUpdateSerializer
 from .events import INVOICE_CHANNEL
 from .models import Invoice, PickingSession, PackingSession, DeliverySession
 from rest_framework import generics
@@ -353,6 +354,114 @@ class ImportInvoiceView(APIView):
 
 # SSE endpoint is now handled by django-eventstream
 # See urls.py for the eventstream path configuration
+
+
+# ===== Update Invoice (After Review) =====
+
+class UpdateInvoiceView(APIView):
+    """
+    PATCH /api/sales/update/invoice/
+    
+    Update an invoice that was sent for review. This endpoint allows correcting
+    invoice data (items, batch numbers, dates, MRP, etc.) after issues were found
+    during picking/packing/delivery.
+    
+    Authentication: API Key (X-API-KEY) or Bearer Token
+    
+    Request Body:
+    {
+        "invoice_no": "INV-001",
+        "invoice_date": "2025-12-23",  // optional
+        "priority": "HIGH",  // optional
+        "items": [
+            {
+                "id": 123,  // optional - if provided, updates this item
+                "item_code": "MED001",
+                "quantity": 50,
+                "mrp": 145.50,
+                "batch_no": "BATCH456",
+                "expiry_date": "2026-06-30"
+            }
+        ],
+        "replace_items": false,  // if true, deletes items not in list
+        "resolution_notes": "Fixed batch number and updated MRP"
+    }
+    
+    Only invoices in REVIEW status can be updated.
+    After update, invoice status returns to the section it was returned from.
+    """
+    permission_classes = [HasAPIKeyOrAuthenticated]
+    
+    def patch(self, request):
+        serializer = InvoiceUpdateSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+        
+        if not serializer.is_valid():
+            return Response({
+                "success": False,
+                "message": "Validation failed",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Perform the update
+            invoice = serializer.update(None, serializer.validated_data)
+        except Exception as e:
+            logger.exception("Failed to update invoice")
+            return Response({
+                "success": False,
+                "message": f"Failed to update invoice: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        # Calculate new total
+        total_amount = sum(item.quantity * item.mrp for item in invoice.items.all())
+        
+        # Send SSE event with updated invoice
+        try:
+            invoice_refreshed = Invoice.objects.select_related(
+                'customer', 'salesman', 'invoice_return', 'invoice_return__returned_by'
+            ).prefetch_related('items').get(id=invoice.id)
+            
+            invoice_data = InvoiceListSerializer(invoice_refreshed).data
+            
+            django_eventstream.send_event(
+                INVOICE_CHANNEL,
+                'message',
+                invoice_data
+            )
+            
+            # Also send update notification
+            django_eventstream.send_event(
+                INVOICE_CHANNEL,
+                'message',
+                {
+                    'type': 'invoice_updated',
+                    'invoice_no': invoice.invoice_no,
+                    'status': invoice.status,
+                    'billing_status': invoice.billing_status,
+                    'timestamp': timezone.now().isoformat()
+                }
+            )
+            logger.debug("Invoice update event sent: %s", invoice.invoice_no)
+        except Exception:
+            logger.exception("Failed to send invoice update event")
+        
+        return Response({
+            "success": True,
+            "message": f"Invoice {invoice.invoice_no} updated successfully",
+            "data": {
+                "id": invoice.id,
+                "invoice_no": invoice.invoice_no,
+                "status": invoice.status,
+                "billing_status": invoice.billing_status,
+                "total_amount": total_amount,
+                "items_count": invoice.items.count(),
+                "returned_from_section": invoice.invoice_return.returned_from_section,
+                "resolution_notes": invoice.invoice_return.resolution_notes
+            }
+        }, status=status.HTTP_200_OK)
 
 
 # ===== PICKING WORKFLOW =====
@@ -1046,7 +1155,9 @@ class BillingInvoicesView(generics.ListAPIView):
     
     def get_queryset(self):
         user = self.request.user
-        queryset = Invoice.objects.select_related('customer', 'salesman', 'created_user', 'returned_by').prefetch_related('items').order_by('-created_at')
+        queryset = Invoice.objects.select_related(
+            'customer', 'salesman', 'created_user', 'invoice_return', 'invoice_return__returned_by'
+        ).prefetch_related('items').order_by('-created_at')
         
         # If user is not admin, filter to only show their own invoices
         if not user.is_admin_or_superadmin():
@@ -1097,6 +1208,7 @@ class ReturnToBillingView(APIView):
     
     def post(self, request):
         from .serializers import ReturnToBillingSerializer
+        from .models import InvoiceReturn
         from django.contrib.auth import get_user_model
         
         User = get_user_model()
@@ -1122,12 +1234,26 @@ class ReturnToBillingView(APIView):
         else:
             returning_user = request.user
         
-        # Update invoice with review information
+        # Auto-detect which section is returning the invoice based on current status
+        returned_from_section = None
+        if invoice.status in ['PICKING', 'PICKED']:
+            returned_from_section = 'PICKING'
+        elif invoice.status == 'PACKING':
+            returned_from_section = 'PACKING'
+        elif invoice.status in ['PACKED', 'DISPATCHED', 'DELIVERED']:
+            returned_from_section = 'DELIVERY'
+        
+        # Create InvoiceReturn record
+        invoice_return = InvoiceReturn.objects.create(
+            invoice=invoice,
+            return_reason=return_reason,
+            returned_by=returning_user,
+            returned_from_section=returned_from_section
+        )
+        
+        # Update invoice status
         invoice.billing_status = 'REVIEW'
-        invoice.return_reason = return_reason
-        invoice.returned_by = returning_user
-        invoice.returned_at = timezone.now()
-        invoice.status = 'REVIEW'  # Set to REVIEW status for billing corrections
+        invoice.status = 'REVIEW'
         invoice.save()
         
         # Cancel any active picking/packing sessions if they exist
@@ -1149,7 +1275,7 @@ class ReturnToBillingView(APIView):
         try:
             # Refresh invoice with all relations
             invoice_refreshed = Invoice.objects.select_related(
-                'customer', 'salesman', 'returned_by'
+                'customer', 'salesman', 'invoice_return', 'invoice_return__returned_by'
             ).prefetch_related('items').get(id=invoice.id)
             
             # Serialize full invoice data with picker/packer info
@@ -1162,7 +1288,7 @@ class ReturnToBillingView(APIView):
                 invoice_data
             )
             
-            # Also send a review notification event
+            # Also send a review notification event (includes which section triggered the return)
             django_eventstream.send_event(
                 INVOICE_CHANNEL,
                 'message',
@@ -1171,6 +1297,7 @@ class ReturnToBillingView(APIView):
                     'invoice_no': invoice.invoice_no,
                     'sent_by': returning_user.email,
                     'review_reason': return_reason,
+                    'returned_from_section': invoice_return.returned_from_section,
                     'timestamp': timezone.now().isoformat()
                 }
             )
@@ -1183,9 +1310,10 @@ class ReturnToBillingView(APIView):
             "data": {
                 "invoice_no": invoice.invoice_no,
                 "billing_status": invoice.billing_status,
-                "review_reason": invoice.return_reason,
+                "review_reason": invoice_return.return_reason,
+                "returned_from_section": invoice_return.returned_from_section,
                 "sent_by": returning_user.email,
-                "sent_at": invoice.returned_at
+                "sent_at": invoice_return.returned_at
             }
         }, status=status.HTTP_200_OK)
 

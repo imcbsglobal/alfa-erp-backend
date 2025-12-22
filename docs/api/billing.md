@@ -6,8 +6,8 @@ The Billing API allows users to view their billed invoices and provides function
 ## Key Features
 - **User-specific invoice viewing**: Regular users see only their own created invoices
 - **Admin view**: Admins/superadmins see all invoices
-- **Return to billing**: Allows pickers/packers to return invoices when issues are found
-- **Billing status tracking**: Tracks invoice states (BILLED, RETURNED, RE_INVOICED)
+- **Return to billing**: Allows pickers/packers to return invoices when issues are found; return details are stored in a separate `InvoiceReturn` record and exposed under `return_info` in invoice responses.
+- **Billing status tracking**: Tracks invoice states (BILLED, REVIEW, RE_INVOICED)
 - **Invoice priority**: Invoices now include a `priority` field (LOW / MEDIUM / HIGH) to help order processing and task assignment
 
 ---
@@ -81,9 +81,7 @@ Retrieve a paginated list of invoices for the billing section.
       ],
       "total_amount": 550.00,
       "remarks": null,
-      "return_reason": null,
-      "returned_by_email": null,
-      "returned_at": null,
+      "return_info": null,
       "created_at": "2025-12-20T10:30:00Z"
     }
   ]
@@ -96,8 +94,8 @@ Retrieve a paginated list of invoices for the billing section.
 curl -X GET "http://localhost:8000/api/sales/billing/invoices/" \
   -H "Authorization: Bearer YOUR_TOKEN"
 
-# Get returned invoices only
-curl -X GET "http://localhost:8000/api/sales/billing/invoices/?billing_status=RETURNED" \
+# Get invoices under review only
+curl -X GET "http://localhost:8000/api/sales/billing/invoices/?billing_status=REVIEW" \
   -H "Authorization: Bearer YOUR_TOKEN"
 
 # Get pending invoices (admin)
@@ -216,14 +214,14 @@ curl -X POST "http://localhost:8000/api/sales/billing/return/" \
 ```
 BILLED (default)
    ↓
-RETURNED (when returned from picking/packing)
+REVIEW (when returned from picking/packing/delivery)
    ↓
 RE_INVOICED (after corrections and re-submission)
 ```
 
 **Billing Status Values**:
 - `BILLED`: Invoice has been initially billed
-- `RETURNED`: Invoice returned to billing for corrections
+- `REVIEW`: Invoice has been sent to billing for review/corrections (an `InvoiceReturn` record is created)
 - `RE_INVOICED`: Invoice has been corrected and re-submitted
 
 ---
@@ -232,14 +230,11 @@ RE_INVOICED (after corrections and re-submission)
 
 ```
 PENDING → PICKING → PICKED → PACKING → PACKED → DISPATCHED → DELIVERED
-           ↑                    ↑
-           └────────────────────┘
-           (Return to PENDING when returned to billing)
 ```
 
 When an invoice is returned to billing:
-1. Invoice `status` is reset to `PENDING`
-2. Invoice `billing_status` is set to `RETURNED`
+1. Invoice `status` is set to `REVIEW` and `billing_status` is set to `REVIEW`
+2. An `InvoiceReturn` record is created (accessible via `return_info` in responses) containing `return_reason`, `returned_by`, `returned_from_section`, and timestamps
 3. Any active picking/packing sessions are marked as `CANCELLED`
 4. The invoice can be corrected and re-processed
 
@@ -282,10 +277,11 @@ When an invoice is returned to billing, a real-time event is sent via Server-Sen
 **Event Data**:
 ```json
 {
-  "type": "invoice_returned",
+  "type": "invoice_review",
   "invoice_no": "INV-001",
-  "returned_by": "picker@example.com",
-  "return_reason": "Out of stock - Item MED001 unavailable",
+  "sent_by": "picker@example.com",
+  "review_reason": "Out of stock - Item MED001 unavailable",
+  "returned_from_section": "PICKING",
   "timestamp": "2025-12-22T14:30:00Z"
 }
 ```

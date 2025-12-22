@@ -6,10 +6,11 @@
 
 **New Model Fields Added to Invoice:**
 ```python
-invoice.billing_status  # "BILLED", "RETURNED", "RE_INVOICED"
-invoice.return_reason   # Text explaining why returned
-invoice.returned_by     # User who returned it
-invoice.returned_at     # Timestamp of return
+invoice.billing_status  # "BILLED", "REVIEW", "RE_INVOICED"
+# Use the related `invoice_return` / serializer `return_info` for details
+invoice.return_info.return_reason   # Text explaining why returned
+invoice.return_info.returned_by     # User who returned it
+invoice.return_info.returned_at     # Timestamp of return
 ```
 
 **New API Endpoints:**
@@ -36,10 +37,10 @@ data.results.forEach(invoice => {
 });
 ```
 
-### 2. Show Only Returned Invoices
+### 2. Show Only Invoices Under Review
 ```javascript
 const response = await fetch(
-  '/api/sales/billing/invoices/?billing_status=RETURNED',
+  '/api/sales/billing/invoices/?billing_status=REVIEW',
   { headers: { 'Authorization': `Bearer ${token}` }}
 );
 ```
@@ -70,8 +71,8 @@ if (result.success) {
 
 | User Type | Can View | Can Return |
 |-----------|----------|------------|
-| Regular User | Only their own invoices | Any invoice in PICKING/PACKING state |
-| Admin | All invoices | Any invoice in PICKING/PACKING state |
+| Regular User | Only their own invoices | Any invoice in `PICKING`, `PICKED`, `PACKING`, `PACKED`, or `DISPATCHED` state |
+| Admin | All invoices | Any invoice in `PICKING`, `PICKED`, `PACKING`, `PACKED`, or `DISPATCHED` state |
 
 ---
 
@@ -82,8 +83,8 @@ Subscribe to invoice returns:
 const eventSource = new EventSource('/api/sales/sse/invoices/');
 eventSource.addEventListener('message', (e) => {
   const data = JSON.parse(e.data);
-  if (data.type === 'invoice_returned') {
-    showNotification(`Invoice ${data.invoice_no} returned by ${data.returned_by}`);
+  if (data.type === 'invoice_review') {
+    showNotification(`Invoice ${data.invoice_no} returned by ${data.sent_by} from ${data.returned_from_section}: ${data.review_reason}`);
   }
 });
 ```
@@ -101,8 +102,9 @@ eventSource.addEventListener('message', (e) => {
    ↓
 4. POST to /api/sales/billing/return/
    ↓
-5. Invoice status → PENDING
-   billing_status → RETURNED
+5. Invoice status → REVIEW
+   billing_status → REVIEW
+   InvoiceReturn record created (accessible via `return_info`)
    Active sessions → CANCELLED
    ↓
 6. Billing user sees returned invoice in dashboard
@@ -171,7 +173,7 @@ curl -X POST "/api/sales/billing/return/" \
 - Verify invoice exists in database
 
 **Issue:** "Invoice in 'X' state cannot be returned"
-- Only PICKING, PICKED, or PACKING invoices can be returned
+- Only invoices in `PICKING`, `PICKED`, `PACKING`, `PACKED`, or `DISPATCHED` can be returned
 - Check current invoice status
 
 **Issue:** "Invoice has already been returned"
@@ -188,8 +190,8 @@ curl -X POST "/api/sales/billing/return/" \
 ## 📊 Database Queries
 
 ```python
-# Get all returned invoices
-Invoice.objects.filter(billing_status='RETURNED')
+# Get all invoices under review
+Invoice.objects.filter(billing_status='REVIEW')
 
 # Get user's invoices
 Invoice.objects.filter(
@@ -198,15 +200,16 @@ Invoice.objects.filter(
 
 # Get invoices returned today
 from django.utils import timezone
+from apps.sales.models import InvoiceReturn
+
 today = timezone.now().date()
-Invoice.objects.filter(
+InvoiceReturn.objects.filter(
     returned_at__date=today
 )
 
 # Most common return reasons
-Invoice.objects.filter(
-    billing_status='RETURNED'
-).values('return_reason').annotate(
+from django.db.models import Count
+InvoiceReturn.objects.values('return_reason').annotate(
     count=Count('id')
 ).order_by('-count')
 ```
@@ -229,7 +232,7 @@ Invoice.objects.filter(
 
 ### 3. Notification Toast
 - Show when invoice returned (SSE event)
-- Display: invoice_no, returned_by, reason
+- Display: invoice_no, `sent_by`, `returned_from_section`, `review_reason`
 - Action: View Invoice button
 
 ---
