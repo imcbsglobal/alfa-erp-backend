@@ -1138,8 +1138,24 @@ class ReturnToBillingView(APIView):
                 packing_session.notes = f"Cancelled due to review needed: {return_reason}"
                 packing_session.save()
         
-        # Send event notification
+        # Send full invoice data event (not just notification)
         try:
+            # Refresh invoice with all relations
+            invoice_refreshed = Invoice.objects.select_related(
+                'customer', 'salesman', 'returned_by'
+            ).prefetch_related('items').get(id=invoice.id)
+            
+            # Serialize full invoice data with picker/packer info
+            invoice_data = InvoiceListSerializer(invoice_refreshed).data
+            
+            # Send full invoice update
+            django_eventstream.send_event(
+                INVOICE_CHANNEL,
+                'message',
+                invoice_data
+            )
+            
+            # Also send a review notification event
             django_eventstream.send_event(
                 INVOICE_CHANNEL,
                 'message',

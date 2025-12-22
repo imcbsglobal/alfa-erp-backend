@@ -38,13 +38,17 @@ class InvoiceListSerializer(serializers.ModelSerializer):
     items = InvoiceItemSerializer(many=True, read_only=True)
     total_amount = serializers.SerializerMethodField()
     returned_by_email = serializers.SerializerMethodField()
+    picker_info = serializers.SerializerMethodField()
+    packer_info = serializers.SerializerMethodField()
+    current_handler = serializers.SerializerMethodField()
     
     class Meta:
         model = Invoice
         fields = [
             'id', 'invoice_no', 'invoice_date', 'customer','status', 'salesman', 
             'created_by', 'items', 'total_amount', 'remarks', 'created_at',
-            'billing_status', 'return_reason', 'returned_by_email', 'returned_at'
+            'billing_status', 'return_reason', 'returned_by_email', 'returned_at',
+            'picker_info', 'packer_info', 'current_handler'
         ]
     
     def get_total_amount(self, obj):
@@ -55,6 +59,51 @@ class InvoiceListSerializer(serializers.ModelSerializer):
         """Get email of user who returned the invoice"""
         if obj.returned_by:
             return obj.returned_by.email
+        return None
+    
+    def get_picker_info(self, obj):
+        """Get picker information from picking session"""
+        try:
+            picking_session = obj.pickingsession
+            return {
+                "email": picking_session.picker.email if picking_session.picker else None,
+                "name": picking_session.picker.name if picking_session.picker else None,
+                "status": picking_session.picking_status,
+                "start_time": picking_session.start_time,
+                "end_time": picking_session.end_time
+            }
+        except:
+            return None
+    
+    def get_packer_info(self, obj):
+        """Get packer information from packing session"""
+        try:
+            packing_session = obj.packingsession
+            return {
+                "email": packing_session.packer.email if packing_session.packer else None,
+                "name": packing_session.packer.name if packing_session.packer else None,
+                "status": packing_session.packing_status,
+                "start_time": packing_session.start_time,
+                "end_time": packing_session.end_time
+            }
+        except:
+            return None
+    
+    def get_current_handler(self, obj):
+        """Get current handler based on invoice status"""
+        if obj.status == 'PICKING' or obj.status == 'PICKED':
+            picker_info = self.get_picker_info(obj)
+            return picker_info if picker_info else None
+        elif obj.status == 'PACKING' or obj.status == 'PACKED':
+            packer_info = self.get_packer_info(obj)
+            return packer_info if packer_info else None
+        elif obj.status == 'REVIEW':
+            return {
+                "email": obj.returned_by.email if obj.returned_by else None,
+                "name": obj.returned_by.name if obj.returned_by else None,
+                "status": "REVIEW",
+                "returned_at": obj.returned_at
+            }
         return None
 
 
