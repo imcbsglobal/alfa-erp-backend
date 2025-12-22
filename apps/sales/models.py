@@ -34,16 +34,32 @@ class Invoice(models.Model):
     status = models.CharField(
         max_length=20,
         choices=[
-            ("PENDING", "Pending"),            # invoice/order created; waiting to be processed
+            ("INVOICED", "Invoiced"),            # invoice/order created; waiting to be processed
             ("PICKING", "Picking"),            # packing in progress (bag/box preparation)
             ("PICKED", "Picked"),              # all items picked; ready for packing
             ("PACKING", "Packing"),            # packing in progress (bag/box preparation)
             ("PACKED", "Packed"),              # packing completed; ready for dispatch
             ("DISPATCHED", "Dispatched"),      # left the store / handed to delivery person
             ("DELIVERED", "Delivered"),        # delivered to customer / order completed
+            ("RETURNED", "Returned"),          # returned to billing for corrections
         ],
-        default="PENDING"
+        default="INVOICED"
     )
+    
+    # Billing fields
+    billing_status = models.CharField(
+        max_length=20,
+        choices=[
+            ("BILLED", "Billed"),              # invoice has been billed
+            ("RETURNED", "Returned"),          # invoice returned to billing for corrections
+            ("RE_INVOICED", "Re-invoiced"),    # invoice has been corrected and re-submitted
+        ],
+        default="BILLED",
+        help_text="Billing status of the invoice"
+    )
+    return_reason = models.TextField(blank=True, null=True, help_text="Reason for returning invoice to billing")
+    returned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="returned_invoices", help_text="User who returned the invoice")
+    returned_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when invoice was returned")
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -79,6 +95,8 @@ class PickingSession(models.Model):
             ("PREPARING", "Preparing"),      # picking in progress
             ("PICKED", "Picked"),            # finished picking
             ("VERIFIED", "Verified"),        # pharmacist check
+            ("CANCELLED", "Cancelled"),      # picking cancelled (e.g., returned to billing)
+            ("RETURNED", "Returned"),        # picking returned for corrections
         ],
         default="PREPARING"
     )
@@ -99,9 +117,11 @@ class PackingSession(models.Model):
     packing_status = models.CharField(
         max_length=20,
         choices=[
-            ("PENDING", "Pending"),      # waiting to pack
-            ("IN_PROGRESS", "In Progress"), # packing started
-            ("PACKED", "Packed"),        # packing completed
+            ("PENDING", "Pending"),          # waiting to pack
+            ("IN_PROGRESS", "In Progress"),  # packing started
+            ("PACKED", "Packed"),            # packing completed
+            ("CANCELLED", "Cancelled"),      # packing cancelled (e.g., returned to billing)
+            ("RETURNED", "Returned"),        # packing returned for corrections
         ],
         default="PENDING"
     )

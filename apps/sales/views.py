@@ -51,13 +51,13 @@ class InvoiceListView(generics.ListAPIView):
     List all invoices with pagination, includes customer, salesman, items
     
     Query Parameters:
-    - status: Filter by invoice status (PENDING, PICKING, PICKED, PACKING, PACKED, DISPATCHED, DELIVERED)
+    - status: Filter by invoice status (INVOICED, PICKING, PICKED, PACKING, PACKED, DISPATCHED, DELIVERED, RETURNED)
     - user: Filter by created_user ID (invoices created by specific user)
     - created_by: Filter by created_by string field (username/identifier)
     - worker: Filter by worker email (picker/packer/delivery person who worked on the invoice)
     
     Examples:
-    - /api/sales/invoices/?status=PENDING
+    - /api/sales/invoices/?status=INVOICED
     - /api/sales/invoices/?status=PICKING&status=PACKING (multiple values)
     - /api/sales/invoices/?user=5
     - /api/sales/invoices/?created_by=admin
@@ -1014,4 +1014,156 @@ class DeliveryHistoryView(generics.ListAPIView):
                 pass  # Invalid date format, skip filter
         
         return queryset
+
+
+# ===== Billing Section APIs =====
+
+class BillingInvoicesView(generics.ListAPIView):
+    """
+    GET /api/sales/billing/invoices/
+    List invoices for the billing section.
+    
+    - Regular users see only their own created invoices (by created_by or created_user)
+    - Admin/superadmin see all invoices
+    
+    Query Parameters:
+    - status: Filter by invoice status (INVOICED, PICKING, etc.)
+    - billing_status: Filter by billing status (BILLED, RETURNED, RE_INVOICED)
+    - created_by: Filter by created_by string field (for admin)
+    
+    Authentication: Required
+    """
+    serializer_class = InvoiceListSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = InvoiceListPagination
+    
+    def get_queryset(self):
+        user = self.request.user
+        queryset = Invoice.objects.select_related('customer', 'salesman', 'created_user', 'returned_by').prefetch_related('items').order_by('-created_at')
+        
+        # If user is not admin, filter to only show their own invoices
+        if not user.is_admin_or_superadmin():
+            # Filter by created_user or created_by matching user's email or name
+            from django.db.models import Q
+            queryset = queryset.filter(
+                Q(created_user=user) | 
+                Q(created_by=self.request.user.email) | 
+                Q(created_by__icontains=self.request.user.name)
+            )
+        
+        # Filter by invoice status
+        status_list = self.request.query_params.getlist('status')
+        if status_list:
+            queryset = queryset.filter(status__in=status_list)
+        
+        # Filter by billing status
+        billing_status_list = self.request.query_params.getlist('billing_status')
+        if billing_status_list:
+            queryset = queryset.filter(billing_status__in=billing_status_list)
+        
+        # Filter by created_by (for admin searches)
+        created_by = self.request.query_params.get('created_by')
+        if created_by and user.is_admin_or_superadmin():
+            queryset = queryset.filter(created_by__icontains=created_by)
+        
+        return queryset
+
+
+class ReturnToBillingView(APIView):
+    """
+    POST /api/sales/billing/return/
+    Return an invoice to billing from picking/packing section.
+    
+    Request body:
+    {
+        "invoice_no": "INV-001",
+        "return_reason": "Missing items in stock",
+        "user_email": "picker@example.com"  // optional, defaults to authenticated user
+    }
+    
+    Authentication: Required
+    
+    Returns the invoice back to RETURNED status with billing_status=RETURNED
+    so it can be corrected and re-invoiced by billing staff.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        from .serializers import ReturnToBillingSerializer
+        from django.contrib.auth import get_user_model
+        
+        User = get_user_model()
+        
+        serializer = ReturnToBillingSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({
+                "success": False,
+                "message": "Validation failed",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        invoice = serializer.validated_data['invoice']
+        return_reason = serializer.validated_data['return_reason']
+        user_email = serializer.validated_data.get('user_email')
+        
+        # Determine who is returning the invoice
+        if user_email:
+            try:
+                returning_user = User.objects.get(email=user_email)
+            except User.DoesNotExist:
+                returning_user = request.user
+        else:
+            returning_user = request.user
+        
+        # Update invoice with return information
+        invoice.billing_status = 'RETURNED'
+        invoice.return_reason = return_reason
+        invoice.returned_by = returning_user
+        invoice.returned_at = timezone.now()
+        invoice.status = 'RETURNED'  # Set to RETURNED status for billing corrections
+        invoice.save()
+        
+        # Cancel any active picking/packing sessions if they exist
+        if hasattr(invoice, 'pickingsession'):
+            picking_session = invoice.pickingsession
+            if picking_session.picking_status == 'PREPARING':
+                picking_session.picking_status = 'CANCELLED'
+                picking_session.notes = f"Cancelled due to return to billing: {return_reason}"
+                picking_session.save()
+        
+        if hasattr(invoice, 'packingsession'):
+            packing_session = invoice.packingsession
+            if packing_session.packing_status == 'IN_PROGRESS':
+                packing_session.packing_status = 'CANCELLED'
+                packing_session.notes = f"Cancelled due to return to billing: {return_reason}"
+                packing_session.save()
+        
+        # Send event notification
+        try:
+            django_eventstream.send_event(
+                INVOICE_CHANNEL,
+                'message',
+                {
+                    'type': 'invoice_returned',
+                    'invoice_no': invoice.invoice_no,
+                    'returned_by': returning_user.email,
+                    'return_reason': return_reason,
+                    'timestamp': timezone.now().isoformat()
+                }
+            )
+        except Exception as e:
+            logger.error(f"Failed to send invoice return event: {e}")
+        
+        return Response({
+            "success": True,
+            "message": f"Invoice {invoice.invoice_no} has been returned to billing for corrections",
+            "data": {
+                "invoice_no": invoice.invoice_no,
+                "billing_status": invoice.billing_status,
+                "return_reason": invoice.return_reason,
+                "returned_by": returning_user.email,
+                "returned_at": invoice.returned_at
+            }
+        }, status=status.HTTP_200_OK)
+
 

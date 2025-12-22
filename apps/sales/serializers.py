@@ -37,17 +37,25 @@ class InvoiceListSerializer(serializers.ModelSerializer):
     salesman = SalesmanReadSerializer(read_only=True)
     items = InvoiceItemSerializer(many=True, read_only=True)
     total_amount = serializers.SerializerMethodField()
+    returned_by_email = serializers.SerializerMethodField()
     
     class Meta:
         model = Invoice
         fields = [
             'id', 'invoice_no', 'invoice_date', 'customer','status', 'salesman', 
-            'created_by', 'items', 'total_amount', 'remarks', 'created_at'
+            'created_by', 'items', 'total_amount', 'remarks', 'created_at',
+            'billing_status', 'return_reason', 'returned_by_email', 'returned_at'
         ]
     
     def get_total_amount(self, obj):
         """Calculate total from items"""
         return sum(item.quantity * item.mrp for item in obj.items.all())
+    
+    def get_returned_by_email(self, obj):
+        """Get email of user who returned the invoice"""
+        if obj.returned_by:
+            return obj.returned_by.email
+        return None
 
 
 # ===== Serializers for import =====
@@ -123,7 +131,7 @@ class PickingSessionCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError({"invoice_no": "Invoice not found."})
 
         # Check invoice status
-        if invoice.status not in ['CREATED', 'PENDING']:
+        if invoice.status not in ['CREATED', 'INVOICED']:
             raise serializers.ValidationError({
                 "invoice_no": f"Invoice cannot be picked in '{invoice.status}' state."
             })
@@ -156,7 +164,7 @@ class PickingSessionCreateSerializer(serializers.Serializer):
         )
 
         # Update invoice status
-        invoice.status = "PENDING"
+        invoice.status = "PICKING"
         invoice.save(update_fields=["status"])
 
         return picking_session
@@ -549,6 +557,43 @@ class DeliveryHistorySerializer(serializers.ModelSerializer):
     def get_total_amount(self, obj):
         """Calculate total amount from invoice items"""
         return sum(item.quantity * item.mrp for item in obj.invoice.items.all())
+
+
+# ===== Billing Serializers =====
+
+class ReturnToBillingSerializer(serializers.Serializer):
+    """Serializer for returning an invoice to billing for corrections"""
+    invoice_no = serializers.CharField(help_text="Invoice number to return")
+    return_reason = serializers.CharField(
+        help_text="Reason for returning: missing items, wrong batch number, out of stock, etc."
+    )
+    user_email = serializers.EmailField(
+        required=False,
+        help_text="Email of user returning the invoice (optional, defaults to authenticated user)"
+    )
+
+    def validate(self, data):
+        # Validate invoice exists
+        try:
+            invoice = Invoice.objects.get(invoice_no=data['invoice_no'])
+        except Invoice.DoesNotExist:
+            raise serializers.ValidationError({"invoice_no": "Invoice not found."})
+
+        # Check if invoice can be returned (should be in picking, packing, or picked state)
+        allowed_statuses = ['PICKING', 'PICKED', 'PACKING']
+        if invoice.status not in allowed_statuses:
+            raise serializers.ValidationError({
+                "invoice_no": f"Invoice in '{invoice.status}' state cannot be returned to billing. Only invoices in PICKING, PICKED, or PACKING state can be returned."
+            })
+
+        # Check if already returned
+        if invoice.billing_status == 'RETURNED':
+            raise serializers.ValidationError({
+                "invoice_no": "Invoice has already been returned to billing."
+            })
+
+        data['invoice'] = invoice
+        return data
     
     def get_duration(self, obj):
         """Calculate duration in minutes"""

@@ -16,6 +16,8 @@ from .views import (
     PickingHistoryView,
     PackingHistoryView,
     DeliveryHistoryView,
+    BillingInvoicesView,
+    ReturnToBillingView,
 )
 
 urlpatterns = [
@@ -43,5 +45,8 @@ urlpatterns = [
     path("delivery/complete/", CompleteDeliveryView.as_view(), name="delivery-complete"),
     path("delivery/history/", DeliveryHistoryView.as_view(), name="delivery-history"),
 
-    # Billing 
+    # Billing endpoints
+    path("billing/invoices/", BillingInvoicesView.as_view(), name="billing-invoices"),
+    path("billing/return/", ReturnToBillingView.as_view(), name="billing-return"),
 ]
+
