@@ -34,14 +34,14 @@ class Invoice(models.Model):
     status = models.CharField(
         max_length=20,
         choices=[
-            ("INVOICED", "Invoiced"),            # invoice/order created; waiting to be processed
-            ("PICKING", "Picking"),            # packing in progress (bag/box preparation)
+            ("INVOICED", "Invoiced"),          # invoice/order created; waiting to be processed
+            ("PICKING", "Picking"),            # picking in progress
             ("PICKED", "Picked"),              # all items picked; ready for packing
             ("PACKING", "Packing"),            # packing in progress (bag/box preparation)
             ("PACKED", "Packed"),              # packing completed; ready for dispatch
             ("DISPATCHED", "Dispatched"),      # left the store / handed to delivery person
             ("DELIVERED", "Delivered"),        # delivered to customer / order completed
-            ("RETURNED", "Returned"),          # returned to billing for corrections
+            ("REVIEW", "Under Review"),        # needs billing/admin review for corrections
         ],
         default="INVOICED"
     )
@@ -51,15 +51,15 @@ class Invoice(models.Model):
         max_length=20,
         choices=[
             ("BILLED", "Billed"),              # invoice has been billed
-            ("RETURNED", "Returned"),          # invoice returned to billing for corrections
+            ("REVIEW", "Under Review"),        # invoice needs review for corrections
             ("RE_INVOICED", "Re-invoiced"),    # invoice has been corrected and re-submitted
         ],
         default="BILLED",
         help_text="Billing status of the invoice"
     )
-    return_reason = models.TextField(blank=True, null=True, help_text="Reason for returning invoice to billing")
-    returned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="returned_invoices", help_text="User who returned the invoice")
-    returned_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when invoice was returned")
+    return_reason = models.TextField(blank=True, null=True, help_text="Reason for sending invoice to review")
+    returned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="returned_invoices", help_text="User who sent the invoice for review")
+    returned_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when invoice was sent for review")
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -95,8 +95,8 @@ class PickingSession(models.Model):
             ("PREPARING", "Preparing"),      # picking in progress
             ("PICKED", "Picked"),            # finished picking
             ("VERIFIED", "Verified"),        # pharmacist check
-            ("CANCELLED", "Cancelled"),      # picking cancelled (e.g., returned to billing)
-            ("RETURNED", "Returned"),        # picking returned for corrections
+            ("CANCELLED", "Cancelled"),      # picking cancelled (e.g., sent for review)
+            ("REVIEW", "Under Review"),      # picking sent for review/corrections
         ],
         default="PREPARING"
     )
@@ -120,8 +120,8 @@ class PackingSession(models.Model):
             ("PENDING", "Pending"),          # waiting to pack
             ("IN_PROGRESS", "In Progress"),  # packing started
             ("PACKED", "Packed"),            # packing completed
-            ("CANCELLED", "Cancelled"),      # packing cancelled (e.g., returned to billing)
-            ("RETURNED", "Returned"),        # packing returned for corrections
+            ("CANCELLED", "Cancelled"),      # packing cancelled (e.g., sent for review)
+            ("REVIEW", "Under Review"),      # packing sent for review/corrections
         ],
         default="PENDING"
     )

@@ -586,10 +586,10 @@ class ReturnToBillingSerializer(serializers.Serializer):
                 "invoice_no": f"Invoice in '{invoice.status}' state cannot be returned to billing. Only invoices in PICKING, PICKED, or PACKING state can be returned."
             })
 
-        # Check if already returned
-        if invoice.billing_status == 'RETURNED':
+        # Check if already in review
+        if invoice.billing_status == 'REVIEW':
             raise serializers.ValidationError({
-                "invoice_no": "Invoice has already been returned to billing."
+                "invoice_no": "Invoice has already been sent for review."
             })
 
         data['invoice'] = invoice

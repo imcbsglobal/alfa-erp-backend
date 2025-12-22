@@ -51,7 +51,7 @@ class InvoiceListView(generics.ListAPIView):
     List all invoices with pagination, includes customer, salesman, items
     
     Query Parameters:
-    - status: Filter by invoice status (INVOICED, PICKING, PICKED, PACKING, PACKED, DISPATCHED, DELIVERED, RETURNED)
+    - status: Filter by invoice status (INVOICED, PICKING, PICKED, PACKING, PACKED, DISPATCHED, DELIVERED, REVIEW)
     - user: Filter by created_user ID (invoices created by specific user)
     - created_by: Filter by created_by string field (username/identifier)
     - worker: Filter by worker email (picker/packer/delivery person who worked on the invoice)
@@ -766,7 +766,7 @@ class PickingHistoryView(generics.ListAPIView):
     
     Query Parameters:
     - search: Search by invoice number or customer details
-    - status: Filter by picking_status (PREPARING, PICKED, VERIFIED, CANCELLED, RETURNED)
+    - status: Filter by picking_status (PREPARING, PICKED, VERIFIED, CANCELLED, REVIEW)
     - start_date: Filter by date (YYYY-MM-DD) - sessions created on or after
     - end_date: Filter by date (YYYY-MM-DD) - sessions created on or before
     - page: Page number for pagination
@@ -816,7 +816,7 @@ class PickingHistoryView(generics.ListAPIView):
         
         # Status filter
         status_filter = self.request.query_params.get('status', '').strip().upper()
-        if status_filter and status_filter in ['PREPARING', 'PICKED', 'VERIFIED', 'CANCELLED', 'RETURNED']:
+        if status_filter and status_filter in ['PREPARING', 'PICKED', 'VERIFIED', 'CANCELLED', 'REVIEW']:
             queryset = queryset.filter(picking_status=status_filter)
         
         # Date filters
@@ -850,7 +850,7 @@ class PackingHistoryView(generics.ListAPIView):
     
     Query Parameters:
     - search: Search by invoice number or customer details
-    - status: Filter by packing_status (PENDING, IN_PROGRESS, PACKED, CANCELLED, RETURNED)
+    - status: Filter by packing_status (PENDING, IN_PROGRESS, PACKED, CANCELLED, REVIEW)
     - start_date: Filter by date (YYYY-MM-DD) - sessions created on or after
     - end_date: Filter by date (YYYY-MM-DD) - sessions created on or before
     - page: Page number for pagination
@@ -899,7 +899,7 @@ class PackingHistoryView(generics.ListAPIView):
         
         # Status filter
         status_filter = self.request.query_params.get('status', '').strip().upper()
-        if status_filter and status_filter in ['PENDING', 'IN_PROGRESS', 'PACKED', 'CANCELLED', 'RETURNED']:
+        if status_filter and status_filter in ['PENDING', 'IN_PROGRESS', 'PACKED', 'CANCELLED', 'REVIEW']:
             queryset = queryset.filter(packing_status=status_filter)
         
         # Date filters
@@ -1028,7 +1028,7 @@ class BillingInvoicesView(generics.ListAPIView):
     
     Query Parameters:
     - status: Filter by invoice status (INVOICED, PICKING, etc.)
-    - billing_status: Filter by billing status (BILLED, RETURNED, RE_INVOICED)
+    - billing_status: Filter by billing status (BILLED, REVIEW, RE_INVOICED)
     - created_by: Filter by created_by string field (for admin)
     
     Authentication: Required
@@ -1072,7 +1072,7 @@ class BillingInvoicesView(generics.ListAPIView):
 class ReturnToBillingView(APIView):
     """
     POST /api/sales/billing/return/
-    Return an invoice to billing from picking/packing section.
+    Send an invoice for review from picking/packing section.
     
     Request body:
     {
@@ -1083,7 +1083,7 @@ class ReturnToBillingView(APIView):
     
     Authentication: Required
     
-    Returns the invoice back to RETURNED status with billing_status=RETURNED
+    Sets the invoice to REVIEW status with billing_status=REVIEW
     so it can be corrected and re-invoiced by billing staff.
     """
     permission_classes = [IsAuthenticated]
@@ -1106,7 +1106,7 @@ class ReturnToBillingView(APIView):
         return_reason = serializer.validated_data['return_reason']
         user_email = serializer.validated_data.get('user_email')
         
-        # Determine who is returning the invoice
+        # Determine who is sending the invoice for review
         if user_email:
             try:
                 returning_user = User.objects.get(email=user_email)
@@ -1115,12 +1115,12 @@ class ReturnToBillingView(APIView):
         else:
             returning_user = request.user
         
-        # Update invoice with return information
-        invoice.billing_status = 'RETURNED'
+        # Update invoice with review information
+        invoice.billing_status = 'REVIEW'
         invoice.return_reason = return_reason
         invoice.returned_by = returning_user
         invoice.returned_at = timezone.now()
-        invoice.status = 'RETURNED'  # Set to RETURNED status for billing corrections
+        invoice.status = 'REVIEW'  # Set to REVIEW status for billing corrections
         invoice.save()
         
         # Cancel any active picking/packing sessions if they exist
@@ -1128,14 +1128,14 @@ class ReturnToBillingView(APIView):
             picking_session = invoice.pickingsession
             if picking_session.picking_status == 'PREPARING':
                 picking_session.picking_status = 'CANCELLED'
-                picking_session.notes = f"Cancelled due to return to billing: {return_reason}"
+                picking_session.notes = f"Cancelled due to review needed: {return_reason}"
                 picking_session.save()
         
         if hasattr(invoice, 'packingsession'):
             packing_session = invoice.packingsession
             if packing_session.packing_status == 'IN_PROGRESS':
                 packing_session.packing_status = 'CANCELLED'
-                packing_session.notes = f"Cancelled due to return to billing: {return_reason}"
+                packing_session.notes = f"Cancelled due to review needed: {return_reason}"
                 packing_session.save()
         
         # Send event notification
@@ -1144,25 +1144,25 @@ class ReturnToBillingView(APIView):
                 INVOICE_CHANNEL,
                 'message',
                 {
-                    'type': 'invoice_returned',
+                    'type': 'invoice_review',
                     'invoice_no': invoice.invoice_no,
-                    'returned_by': returning_user.email,
-                    'return_reason': return_reason,
+                    'sent_by': returning_user.email,
+                    'review_reason': return_reason,
                     'timestamp': timezone.now().isoformat()
                 }
             )
         except Exception as e:
-            logger.error(f"Failed to send invoice return event: {e}")
+            logger.error(f"Failed to send invoice review event: {e}")
         
         return Response({
             "success": True,
-            "message": f"Invoice {invoice.invoice_no} has been returned to billing for corrections",
+            "message": f"Invoice {invoice.invoice_no} has been sent for review and corrections",
             "data": {
                 "invoice_no": invoice.invoice_no,
                 "billing_status": invoice.billing_status,
-                "return_reason": invoice.return_reason,
-                "returned_by": returning_user.email,
-                "returned_at": invoice.returned_at
+                "review_reason": invoice.return_reason,
+                "sent_by": returning_user.email,
+                "sent_at": invoice.returned_at
             }
         }, status=status.HTTP_200_OK)
 
