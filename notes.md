@@ -1,109 +1,59 @@
-Super question bro 🔥
-Based **on the proposal PDF details**, we can clearly extract real–world **roles** that exist in Alfa Agencies workflow.
+# ALFA ERP - Development Notes
+
+This document contains development notes, role design decisions, and implementation guidance for the ALFA ERP system.
 
 ---
 
-# 🎯 **Identifying Existing Roles From Proposal**
+## User Roles
 
-From modules:
+### Recommended Role Structure
 
-| Process                        | Responsible person in proposal        |
-| ------------------------------ | ------------------------------------- |
-| Picking medicines              | Picker / Store staff                  |
-| Packing medicines              | Packer                                |
-| Delivery & dispatch            | Delivery person / Courier coordinator |
-| Purchase orders                | Purchase manager / Stock manager      |
-| Payment follow-up              | Accounts / Collection agent           |
-| Dashboard visibility / control | Admin                                 |
-| Data import & configuration    | System admin / Supervisor             |
+| Role | Purpose / Access |
+| ---- | ---------------- |
+| **ADMIN** | Full access, create users, dashboard, reports, configuration |
+| **SUPERADMIN** | Full system access including super-admin configurations |
+| **BILLING** | Create and manage sales orders (bills) |
+| **PICKER** | Handle picking stage only |
+| **PACKER** | Handle packing stage only |
+| **DRIVER** | Update dispatch, delivery status |
+| **USER** | Basic user role with limited access |
 
-### 🥇 **Recommended Roles**
-
-| Role                      | Purpose / Access                                             |
-| ------------------------- | ------------------------------------------------------------ |
-| **Admin**                 | Full access, create users, dashboard, reports, configuration |
-| **Billing / Sales**       | Create and manage sales orders (bills)                       |
-| **Picker**                | Handle picking stage only                                    |
-| **Packer**                | Handle packing stage only                                    |
-| **Dispatcher / Delivery** | Update dispatch, delivery status                             |
-| **Purchase Manager**      | PO creation, PO tracking, GRN                                |
-| **Accounts / Follow-up**  | Payment collection, follow-up history                        |
-| **Viewer / Supervisor**   | Read-only dashboards                                         |
-
-### Optionally combine:
-
-* Picker + Packer → **Store Staff**
-* Delivery + Courier → **Delivery Team**
-
-Final example recommended set:
-
+### Simplified Role Set (Alternative)
 ```
 ADMIN
-STORE
+STORE (Picker + Packer combined)
 DELIVERY
-PURCHASE
-ACCOUNTS
+BILLING
 VIEWER
 ```
 
 ---
 
-# 🧠 **Sidebar Control Approaches**
+## Sidebar & Menu Access Control
 
-Sidebar must be dynamic based on RBAC. Here are **multiple solution patterns**:
+### Permission-Based Approach (Recommended)
 
----
-
-## **Solution 1 — Role-Based Sidebar**
-
-Frontend contains predefined menu per role:
-
-```js
-const menus = {
-  ADMIN: ["dashboard", "sales", "delivery", "purchase", "payments", "users"],
-  STORE: ["dashboard", "sales", "delivery"],
-  DELIVERY: ["dashboard", "delivery"],
-  PURCHASE: ["dashboard", "purchase"],
-  ACCOUNTS: ["dashboard", "payments"],
-};
-```
-
-Filter by:
-
-```js
-const visible = menus[user.role];
-```
-
-### Good for:
-
-* Simple systems
-* Few roles
-
----
-
-## **Solution 2 — Permission-Based Sidebar (Better & scalable)**
-
-Backend returns list like:
+Backend returns list of permissions:
 
 ```json
 {
   "permissions": [
     "sales.view",
     "sales.update_status",
-    "purchase.view",
-    "payment.followup"
+    "picking.view",
+    "packing.view",
+    "delivery.view"
   ]
 }
 ```
 
-Frontend menu:
+Frontend menu filtering:
 
-```js
+```javascript
 const menuItems = [
   { label: "Dashboard", key: "dashboard" },
   { label: "Delivery", key: "delivery", permission: "sales.update_status" },
-  { label: "Purchase Orders", key: "purchase", permission: "purchase.view" },
-  { label: "Payments", key: "payments", permission: "payment.followup" }
+  { label: "Purchase Orders", key: "purchase", permission: "purchase.view" }
 ];
 
 const allowedMenu = menuItems.filter(item =>
@@ -111,202 +61,73 @@ const allowedMenu = menuItems.filter(item =>
 );
 ```
 
-### Good for:
+### Backend-Generated Sidebar
 
-* Complex control
-* Different permissions within same role
-* ERP scaling in future
-
----
-
-## **Solution 3 — Hybrid model**
-
-Use role for navigation and permission for button-level control.
-
-```
-Role decides modules to show
-Permissions decide actions inside pages
-```
-
-Example:
-
-* Accounts role sees "Payments"
-* But only if they have `payment.followup.update` they can change status
-
----
-
-## **Solution 4 — Backend-Generated Sidebar (Most centralized)**
-
-Backend returns menu + permissions:
+For centralized control, the backend returns the sidebar structure:
 
 ```json
 {
   "sidebar": [
     { "name": "Dashboard", "url": "/dashboard" },
-    { "name": "Purchase", "url": "/purchase" }
+    { "name": "Invoices", "url": "/invoices" }
   ]
 }
 ```
 
-Frontend just renders it.
-
-### Pros:
-
-* No redeployment for UI change
-* Central rule management
-
-### Cons:
-
-* More backend coding
+**Pros**: No frontend redeployment for menu changes  
+**Cons**: More backend work
 
 ---
 
-# 🥇 Recommended Approach for Your ERP
+## Django App Structure
 
-### **Permission-based (Solution 2) + Hybrid (Solution 3)**
+```
+apps/
+├── accounts/          # Users, Roles, Permissions, JWT Auth
+├── accesscontrol/     # Menu items, User-Menu assignments
+├── sales/             # Invoices, Picking, Packing, Delivery workflows
+├── analytics/         # Dashboard stats, KPIs, reports
+└── common/            # Shared utilities, response handlers
+```
 
-Why?
+### Module Responsibilities
 
-* That’s how Marg ERP, Tally, SAP, Odoo do it
-* Clean, scalable, reusable
-* No need to redeploy frontend when permissions change
+**accounts/**
+- User model with role field
+- JWT authentication
+- Department and JobTitle models
+- User management views
+
+**accesscontrol/**
+- MenuItem model (hierarchical menus)
+- UserMenu model (user-to-menu assignments)
+- Menu assignment views
+
+**sales/**
+- Invoice, InvoiceItem, InvoiceReturn models
+- Customer, Salesman models
+- PickingSession, PackingSession, DeliverySession models
+- SSE real-time events
+- Workflow views (start/complete picking/packing/delivery)
+
+**analytics/**
+- Dashboard summary endpoints (planned)
+- KPI calculations (planned)
+
+**common/**
+- Standardized API response handlers
+- Custom viewsets and mixins
 
 ---
 
-# 📌 Example Permission Mapping for Identified Roles
+## Key Implementation Decisions
 
-| Role     | Permissions                                            |
-| -------- | ------------------------------------------------------ |
-| ADMIN    | All                                                    |
-| STORE    | `sales.view`, `sales.update_status`, `packing.update`  |
-| DELIVERY | `delivery.view`, `delivery.update`                     |
-| PURCHASE | `purchase.view`, `purchase.create`, `purchase.receive` |
-| ACCOUNTS | `payment.view`, `payment.followup.update`              |
-| VIEWER   | read-only dashboards                                   |
+1. **Single Role per User**: Currently each user has one role (not multi-role)
+2. **Email-based User Identification**: Users scan email (via QR) to start/complete tasks
+3. **SSE for Real-time Updates**: Using django-eventstream for live invoice updates
+4. **Session Tracking**: Each workflow step (picking/packing/delivery) creates a session record
+5. **Menu Access at Login**: User menus are returned during login response
 
 ---
 
-# 🚀 Next Step
-
-If you want, I will generate:
-
-* **Seed script** for roles & permissions
-* **Permission matrix table**
-* **JSON permission response example**
-* **Frontend menu config example (React)**
-
-Just say **“Generate seed & matrix”** and I’ll create it.
-
-
-
-
-apps 
-🎯 Final Recommended Django App Structure
-1. accounts/
-
-Handles Users, Roles, Permissions (RBAC), Login/JWT
-
-2. core/
-
-Common utilities:
-
-BaseModel with timestamps
-
-AuditLog
-
-File exports
-
-Shared enums, choices
-
-Logging middleware
-
-3. inventory/
-
-Handles:
-
-Item
-
-ItemBatch
-
-Stock
-
-Warehouse
-
-4. sales/
-
-Handles:
-
-SalesOrder (Bill)
-
-SalesOrderItem
-
-Workflow state transitions
-
-Taking assignment (picker/packer/dispatcher)
-
-This app covers:
-✔ picking
-✔ packing
-✔ dispatch assignment
-✔ status logs
-✔ timeline & audit
-
-No need for separate apps for each stage.
-
-5. delivery/
-
-Handles what happens after packing:
-
-PackingList
-
-Delivery
-
-Delivery challan printing
-
-Courier tracking
-
-Dispatch view (mobile-friendly)
-
-6. purchase/
-
-Handles:
-
-Purchase Orders
-
-Suppliers
-
-PO import (V-Task)
-
-GRN & GRNItem
-
-PO splitting
-
-7. payments/
-
-Handles payment follow-up:
-
-PaymentFollowupCase
-
-FollowupEntry
-
-Call logs
-
-Reminder tasks
-
-8. reports/
-
-KPI dashboard
-
-Aggregated metrics
-
-CSV/Excel report endpoints
-
-9. integrations/
-
-Handles:
-
-V-TASK import mapping
-
-File processing via Celery
-
-Background jobs
+*For detailed API documentation, see [docs/api/](docs/api/README.md)*
