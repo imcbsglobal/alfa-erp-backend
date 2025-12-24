@@ -5,7 +5,7 @@ This guide walks you through creating a new Django app in the ALFA ERP Backend p
 ## Overview
 
 Django apps are modular components that encapsulate specific functionality. Each app should have a single, well-defined purpose.
-
+- [ ] Create Folder name in apps
 - [ ] App created in `apps/` directory
 - [ ] App config updated with correct name
 - [ ] Added to `INSTALLED_APPS`

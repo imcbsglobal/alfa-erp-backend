@@ -1,7 +1,7 @@
 # apps/sales/serializers.py
 
 from rest_framework import serializers
-from .models import Invoice, InvoiceItem, Customer, Salesman, PickingSession, PackingSession, DeliverySession
+from .models import Invoice, InvoiceItem, InvoiceReturn, Customer, Salesman, PickingSession, PackingSession, DeliverySession
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 
@@ -31,30 +31,168 @@ class SalesmanReadSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'phone']
 
 
+class InvoiceReturnSerializer(serializers.ModelSerializer):
+    """Serializer for invoice return information"""
+    returned_by_email = serializers.CharField(source='returned_by.email', read_only=True)
+    returned_by_name = serializers.CharField(source='returned_by.name', read_only=True)
+    resolved_by_email = serializers.CharField(source='resolved_by.email', read_only=True, allow_null=True)
+    resolved_by_name = serializers.CharField(source='resolved_by.name', read_only=True, allow_null=True)
+    
+    class Meta:
+        model = InvoiceReturn
+        fields = [
+            'id', 'return_reason', 'returned_by', 'returned_by_email', 'returned_by_name',
+            'returned_at', 'returned_from_section', 'resolution_notes', 
+            'resolved_at', 'resolved_by', 'resolved_by_email', 'resolved_by_name'
+        ]
+
+
 class InvoiceListSerializer(serializers.ModelSerializer):
     """Serializer for invoice list and detail with nested data"""
     customer = CustomerReadSerializer(read_only=True)
     salesman = SalesmanReadSerializer(read_only=True)
     items = InvoiceItemSerializer(many=True, read_only=True)
     total_amount = serializers.SerializerMethodField()
-    returned_by_email = serializers.SerializerMethodField()
+    return_info = serializers.SerializerMethodField()
+    picker_info = serializers.SerializerMethodField()
+    packer_info = serializers.SerializerMethodField()
+    delivery_info = serializers.SerializerMethodField()  # ✅ ADD THIS
+    current_handler = serializers.SerializerMethodField()
     
     class Meta:
         model = Invoice
         fields = [
-            'id', 'invoice_no', 'invoice_date', 'customer','status', 'salesman', 
+            'id', 'invoice_no', 'invoice_date', 'customer','status', 'priority', 'salesman', 
             'created_by', 'items', 'total_amount', 'remarks', 'created_at',
-            'billing_status', 'return_reason', 'returned_by_email', 'returned_at'
+            'billing_status', 'return_info',
+            'picker_info', 'packer_info', 'delivery_info', 'current_handler'  # ✅ ADD delivery_info
         ]
     
     def get_total_amount(self, obj):
         """Calculate total from items"""
         return sum(item.quantity * item.mrp for item in obj.items.all())
     
-    def get_returned_by_email(self, obj):
-        """Get email of user who returned the invoice"""
-        if obj.returned_by:
-            return obj.returned_by.email
+    def get_return_info(self, obj):
+        """Get return information if invoice has been returned"""
+        try:
+            return_obj = obj.invoice_return
+            return InvoiceReturnSerializer(return_obj).data
+        except:
+            return None
+    
+    def get_picker_info(self, obj):
+        """Get picker information from picking session"""
+        try:
+            picking_session = obj.pickingsession
+            return {
+                "email": picking_session.picker.email if picking_session.picker else None,
+                "name": picking_session.picker.name if picking_session.picker else None,
+                "status": picking_session.picking_status,
+                "start_time": picking_session.start_time,
+                "end_time": picking_session.end_time
+            }
+        except:
+            return None
+    
+    def get_packer_info(self, obj):
+        """Get packer information from packing session"""
+        try:
+            packing_session = obj.packingsession
+            return {
+                "email": packing_session.packer.email if packing_session.packer else None,
+                "name": packing_session.packer.name if packing_session.packer else None,
+                "status": packing_session.packing_status,
+                "start_time": packing_session.start_time,
+                "end_time": packing_session.end_time
+            }
+        except:
+            return None
+    
+    # ✅ NEW METHOD
+    def get_delivery_info(self, obj):
+        """Get delivery information from delivery session"""
+        try:
+            delivery = obj.deliverysession
+            
+            # For DISPATCHED status - show who dispatched (assigned_to)
+            if obj.status == 'DISPATCHED':
+                return {
+                    "name": delivery.assigned_to.name if delivery.assigned_to else None,
+                    "email": delivery.assigned_to.email if delivery.assigned_to else None,
+                    "delivery_type": delivery.delivery_type,
+                    "status": "DISPATCHED",
+                    "time": delivery.start_time,
+                    "courier_name": delivery.courier_name,
+                    "tracking_no": delivery.tracking_no,
+                }
+            
+            # For DELIVERED status - show who delivered (delivered_by)
+            if obj.status == 'DELIVERED':
+                return {
+                    "name": delivery.delivered_by.name if delivery.delivered_by else None,
+                    "email": delivery.delivered_by.email if delivery.delivered_by else None,
+                    "delivery_type": delivery.delivery_type,
+                    "status": "DELIVERED",
+                    "time": delivery.end_time,
+                    "courier_name": delivery.courier_name,
+                    "tracking_no": delivery.tracking_no,
+                }
+            
+            return None
+        except:
+            return None
+    
+    def get_current_handler(self, obj):
+        """Get current handler based on invoice status"""
+        if obj.status in ['PICKING', 'PICKED']:
+            return self.get_picker_info(obj)
+        
+        elif obj.status in ['PACKING', 'PACKED']:
+            return self.get_packer_info(obj)
+        
+        elif obj.status == 'DISPATCHED':
+            try:
+                delivery = obj.deliverysession
+                return {
+                    "name": delivery.assigned_to.name if delivery.assigned_to else None,
+                    "email": delivery.assigned_to.email if delivery.assigned_to else None,
+                    "status": "DISPATCHED",
+                    "mode": delivery.delivery_type,
+                    "courier_name": delivery.courier_name,
+                    "tracking_no": delivery.tracking_no,
+                    "start_time": delivery.start_time,
+                    "end_time": None,
+                }
+            except:
+                return None
+        
+        elif obj.status == 'DELIVERED':
+            try:
+                delivery = obj.deliverysession
+                return {
+                    "name": delivery.delivered_by.name if delivery.delivered_by else None,
+                    "email": delivery.delivered_by.email if delivery.delivered_by else None,
+                    "status": "DELIVERED",
+                    "mode": delivery.delivery_type,
+                    "courier_name": delivery.courier_name,
+                    "tracking_no": delivery.tracking_no,
+                    "start_time": delivery.start_time,
+                    "end_time": delivery.end_time,
+                }
+            except:
+                return None
+        
+        elif obj.status == 'REVIEW':
+            return_info = self.get_return_info(obj)
+            if return_info:
+                return {
+                    "name": return_info.get('returned_by_name'),
+                    "email": return_info.get('returned_by_email'),
+                    "status": "REVIEW",
+                    "returned_at": return_info.get('returned_at'),
+                    "returned_from": return_info.get('returned_from_section')
+                }
+        
         return None
 
 
@@ -89,6 +227,7 @@ class InvoiceImportSerializer(serializers.Serializer):
     invoice_date = serializers.DateField()
     salesman = serializers.CharField()
     created_by = serializers.CharField(required=False, allow_blank=True)
+    priority = serializers.ChoiceField(choices=[('LOW','Low'),('MEDIUM','Medium'),('HIGH','High')], required=False, default='MEDIUM')
     customer = CustomerSerializer()
     items = ItemSerializer(many=True)
 
@@ -160,7 +299,8 @@ class PickingSessionCreateSerializer(serializers.Serializer):
             picker=user,
             start_time=timezone.now(),
             picking_status="PREPARING",
-            notes=notes
+            notes=notes,
+            selected_items=[]
         )
 
         # Update invoice status
@@ -386,14 +526,18 @@ class DeliverySessionReadSerializer(serializers.ModelSerializer):
     """Read serializer for delivery session details"""
     assigned_to_name = serializers.CharField(source='assigned_to.name', read_only=True)
     assigned_to_email = serializers.CharField(source='assigned_to.email', read_only=True)
+    delivered_by_name = serializers.CharField(source='delivered_by.name', read_only=True)  # ✅ ADD
+    delivered_by_email = serializers.CharField(source='delivered_by.email', read_only=True)  # ✅ ADD
     invoice_no = serializers.CharField(source='invoice.invoice_no', read_only=True)
     duration_minutes = serializers.SerializerMethodField()
     
     class Meta:
         model = DeliverySession
         fields = [
-            'id', 'invoice', 'invoice_no', 'delivery_type', 'assigned_to', 
-            'assigned_to_name', 'assigned_to_email', 'courier_name', 'tracking_no',
+            'id', 'invoice', 'invoice_no', 'delivery_type', 
+            'assigned_to', 'assigned_to_name', 'assigned_to_email',
+            'delivered_by', 'delivered_by_name', 'delivered_by_email',  # ✅ ADD THESE
+            'courier_name', 'tracking_no',
             'start_time', 'end_time', 'delivery_status', 'notes',
             'duration_minutes', 'created_at'
         ]
@@ -580,14 +724,14 @@ class ReturnToBillingSerializer(serializers.Serializer):
             raise serializers.ValidationError({"invoice_no": "Invoice not found."})
 
         # Check if invoice can be returned (should be in picking, packing, or picked state)
-        allowed_statuses = ['PICKING', 'PICKED', 'PACKING']
+        allowed_statuses = ['PICKING', 'PICKED', 'PACKING', 'PACKED', 'DISPATCHED']
         if invoice.status not in allowed_statuses:
             raise serializers.ValidationError({
-                "invoice_no": f"Invoice in '{invoice.status}' state cannot be returned to billing. Only invoices in PICKING, PICKED, or PACKING state can be returned."
+                "invoice_no": f"Invoice in '{invoice.status}' state cannot be returned to billing. Only invoices in PICKING, PICKED, PACKING, PACKED, or DISPATCHED state can be returned."
             })
 
-        # Check if already in review
-        if invoice.billing_status == 'REVIEW':
+        # Check if already in review (has InvoiceReturn record)
+        if invoice.billing_status == 'REVIEW' or hasattr(invoice, 'invoice_return'):
             raise serializers.ValidationError({
                 "invoice_no": "Invoice has already been sent for review."
             })
