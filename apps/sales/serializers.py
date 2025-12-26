@@ -701,6 +701,12 @@ class DeliveryHistorySerializer(serializers.ModelSerializer):
     def get_total_amount(self, obj):
         """Calculate total amount from invoice items"""
         return sum(item.quantity * item.mrp for item in obj.invoice.items.all())
+    
+    def get_duration(self, obj):
+        if obj.start_time and obj.end_time:
+            delta = obj.end_time - obj.start_time
+            return int(delta.total_seconds() // 60)  # duration in minutes
+        return None
 
 
 # ===== Billing Serializers =====

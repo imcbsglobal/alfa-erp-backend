@@ -6,7 +6,8 @@ import uuid
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
 from django.utils import timezone
-
+import uuid
+from django.core.validators import MinValueValidator
 
 class Department(models.Model):
     """Department model for organizing job titles"""
@@ -187,3 +188,60 @@ class User(AbstractBaseUser, PermissionsMixin):
             self.is_superuser or 
             self.role in [User.Role.ADMIN, User.Role.SUPERADMIN]
         )
+
+class Courier(models.Model):
+    TYPE_CHOICES = [
+        ('EXTERNAL', 'External'),
+        ('INTERNAL', 'Internal'),
+    ]
+    
+    RATE_TYPE_CHOICES = [
+        ('FLAT', 'Flat Rate'),
+        ('WEIGHT', 'Per Weight'),
+        ('DISTANCE', 'Per Distance'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('ACTIVE', 'Active'),
+        ('INACTIVE', 'Inactive'),
+    ]
+    
+    courier_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    courier_code = models.CharField(max_length=50, unique=True)
+    courier_name = models.CharField(max_length=200)
+    type = models.CharField(max_length=10, choices=TYPE_CHOICES, default='EXTERNAL')
+    contact_person = models.CharField(max_length=200, blank=True, null=True)
+    phone = models.CharField(max_length=20)
+    alt_phone = models.CharField(max_length=20, blank=True, null=True)
+    email = models.EmailField(blank=True, null=True)
+    address = models.TextField(blank=True, null=True)
+    service_area = models.CharField(max_length=200, blank=True, null=True)
+    rate_type = models.CharField(max_length=10, choices=RATE_TYPE_CHOICES, default='FLAT')
+    base_rate = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        default=0,
+        validators=[MinValueValidator(0)]
+    )
+    vehicle_type = models.CharField(max_length=100, blank=True, null=True)
+    max_weight = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        blank=True, 
+        null=True,
+        validators=[MinValueValidator(0)]
+    )
+    cod_supported = models.BooleanField(default=False)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='ACTIVE')
+    remarks = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'couriers'
+        ordering = ['-created_at']
+        verbose_name = 'Courier'
+        verbose_name_plural = 'Couriers'
+    
+    def __str__(self):
+        return f"{self.courier_code} - {self.courier_name}"
