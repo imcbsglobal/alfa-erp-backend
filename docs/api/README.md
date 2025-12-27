@@ -120,9 +120,14 @@ GET /api/auth/users/?search=admin&ordering=email
 - [Update Job Title](./job_titles.md#update-job-title) - `PUT/PATCH /api/auth/job-titles/{id}/`
 - [Delete Job Title](./job_titles.md#delete-job-title) - `DELETE /api/auth/job-titles/{id}/`
 
-### Sales
+### Sales & Couriers
 - [Import Invoice](./sales.md#import-invoice) - `POST /api/sales/import/invoice/`
 - [Invoice Stream (SSE)](./sales.md#sse-invoice-stream) - `GET /api/sales/sse/invoices/`
+- [List Couriers](./sales.md#list-couriers) - `GET /api/sales/couriers/`
+- [Create Courier](./sales.md#create-courier) - `POST /api/sales/couriers/`
+- [Get Courier](./sales.md#get-courier-details) - `GET /api/sales/couriers/{id}/`
+- [Update Courier](./sales.md#update-courier) - `PUT/PATCH /api/sales/couriers/{id}/`
+- [Delete Courier](./sales.md#delete-courier) - `DELETE /api/sales/couriers/{id}/`
 
 ## Quick Start Examples
 

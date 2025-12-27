@@ -52,6 +52,12 @@ This module contains 3 main integration points:
 | POST | `/api/sales/delivery/start/` | JWT (IsAuthenticated) | Start a delivery session (DIRECT/COURIER/INTERNAL) |
 | POST | `/api/sales/delivery/complete/` | JWT (IsAuthenticated) | Complete delivery (confirm delivery status) |
 | GET | `/api/sales/delivery/history/` | JWT (IsAuthenticated) | List delivery session history (filters: search, status, delivery_type, dates; admin sees all, user sees own) |
+| GET | `/api/sales/couriers/` | JWT (IsAuthenticated) | List all couriers with optional filtering (status, type, search) |
+| POST | `/api/sales/couriers/` | JWT (Admin only) | Create new courier |
+| GET | `/api/sales/couriers/{id}/` | JWT (IsAuthenticated) | Get courier details by ID |
+| PUT | `/api/sales/couriers/{id}/` | JWT (Admin only) | Update courier (full update) |
+| PATCH | `/api/sales/couriers/{id}/` | JWT (Admin only) | Update courier (partial update) |
+| DELETE | `/api/sales/couriers/{id}/` | JWT (Admin only) | Delete courier |
 
 ---
 
@@ -1546,6 +1552,262 @@ const DeliveryHistoryTable = () => {
 
 ---
 
+
+---
+
+## Courier Management
+
+Courier APIs provide CRUD operations for managing courier/delivery service providers used in the delivery workflow.
+
+### Base Path
+`/api/sales/couriers/`
+
+### Authentication & Permissions
+- **List, Retrieve**: All authenticated users
+- **Create, Update, Delete**: Admin users only
+
+---
+
+### Courier Data Model
+
+```json
+{
+  "courier_id": "uuid",
+  "courier_code": "string",
+  "courier_name": "string",
+  "type": "EXTERNAL|INTERNAL",
+  "contact_person": "string",
+  "phone": "string",
+  "alt_phone": "string",
+  "email": "string",
+  "address": "string",
+  "service_area": "string",
+  "rate_type": "FLAT|WEIGHT|DISTANCE",
+  "base_rate": "decimal",
+  "vehicle_type": "string",
+  "max_weight": "decimal",
+  "cod_supported": "boolean",
+  "status": "ACTIVE|INACTIVE",
+  "remarks": "string",
+  "created_at": "datetime",
+  "updated_at": "datetime"
+}
+```
+
+**Field Descriptions:**
+- `courier_code`: Unique courier identifier (e.g., "DHL001")
+- `type`: EXTERNAL (third-party) or INTERNAL (company fleet)
+- `rate_type`: FLAT (fixed), WEIGHT (per kg), or DISTANCE (per km)
+- `cod_supported`: Cash on Delivery support flag
+- `status`: ACTIVE or INACTIVE
+
+---
+
+### List Couriers
+
+**Endpoint**: `GET /api/sales/couriers/`
+
+**Query Parameters:**
+- `status` (string): Filter by ACTIVE or INACTIVE
+- `type` (string): Filter by EXTERNAL or INTERNAL
+- `search` (string): Search in courier_name, courier_code, contact_person
+
+**Example:**
+```bash
+GET /api/sales/couriers/?status=ACTIVE
+GET /api/sales/couriers/?type=EXTERNAL&search=express
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "status_code": 200,
+  "message": "Couriers retrieved successfully",
+  "data": [
+    {
+      "courier_id": "123e4567-e89b-12d3-a456-426614174000",
+      "courier_code": "DHL001",
+      "courier_name": "DHL Express",
+      "type": "EXTERNAL",
+      "contact_person": "John Doe",
+      "phone": "+971501234567",
+      "alt_phone": "+971521234567",
+      "email": "contact@dhl.com",
+      "address": "Dubai, UAE",
+      "service_area": "UAE, GCC",
+      "rate_type": "WEIGHT",
+      "base_rate": "25.00",
+      "vehicle_type": "Van",
+      "max_weight": "100.00",
+      "cod_supported": true,
+      "status": "ACTIVE",
+      "remarks": "Priority courier service",
+      "created_at": "2025-12-01T10:00:00Z",
+      "updated_at": "2025-12-20T15:30:00Z"
+    }
+  ]
+}
+```
+
+---
+
+### Create Courier
+
+**Endpoint**: `POST /api/sales/couriers/`
+
+**Authentication**: Admin only
+
+**Request Body:**
+```json
+{
+  "courier_code": "FDX001",
+  "courier_name": "FedEx Express",
+  "type": "EXTERNAL",
+  "contact_person": "Mike Johnson",
+  "phone": "+971501122334",
+  "alt_phone": "+971521122334",
+  "email": "contact@fedex.com",
+  "address": "Sharjah, UAE",
+  "service_area": "Worldwide",
+  "rate_type": "WEIGHT",
+  "base_rate": "30.00",
+  "vehicle_type": "Aircraft",
+  "max_weight": "1000.00",
+  "cod_supported": false,
+  "status": "ACTIVE",
+  "remarks": "International courier"
+}
+```
+
+**Validation Rules:**
+- `courier_code` must be unique
+- `phone` is required
+- `base_rate` must be >= 0
+- `max_weight` must be >= 0 if provided
+
+**Response (201 Created):**
+```json
+{
+  "success": true,
+  "status_code": 201,
+  "message": "Courier created successfully",
+  "data": {
+    "courier_id": "123e4567-e89b-12d3-a456-426614174002",
+    "courier_code": "FDX001",
+    "courier_name": "FedEx Express",
+    ...
+  }
+}
+```
+
+---
+
+### Get Courier Details
+
+**Endpoint**: `GET /api/sales/couriers/{courier_id}/`
+
+**Example:**
+```bash
+GET /api/sales/couriers/123e4567-e89b-12d3-a456-426614174000/
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "status_code": 200,
+  "message": "Courier retrieved successfully",
+  "data": {
+    "courier_id": "123e4567-e89b-12d3-a456-426614174000",
+    "courier_code": "DHL001",
+    "courier_name": "DHL Express",
+    ...
+  }
+}
+```
+
+---
+
+### Update Courier
+
+**Endpoint**: `PUT /api/sales/couriers/{courier_id}/` (full update)  
+**Endpoint**: `PATCH /api/sales/couriers/{courier_id}/` (partial update)
+
+**Authentication**: Admin only
+
+**PATCH Example (partial update):**
+```json
+{
+  "status": "INACTIVE",
+  "remarks": "Temporarily suspended"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "status_code": 200,
+  "message": "Courier updated successfully",
+  "data": {
+    "courier_id": "123e4567-e89b-12d3-a456-426614174000",
+    "status": "INACTIVE",
+    "remarks": "Temporarily suspended",
+    ...
+  }
+}
+```
+
+---
+
+### Delete Courier
+
+**Endpoint**: `DELETE /api/sales/couriers/{courier_id}/`
+
+**Authentication**: Admin only
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "status_code": 200,
+  "message": "Courier \"DHL Express\" deleted successfully"
+}
+```
+
+---
+
+### Courier Integration with Delivery
+
+Couriers are referenced when creating delivery sessions with `delivery_type: "COURIER"`:
+
+```json
+{
+  "invoice_id": 123,
+  "delivery_type": "COURIER",
+  "courier_id": "123e4567-e89b-12d3-a456-426614174000",
+  "tracking_no": "DHL123456789",
+  "notes": "Handed to DHL courier"
+}
+```
+
+**Courier Types:**
+- **EXTERNAL**: Third-party services (DHL, FedEx, DTDC)
+- **INTERNAL**: Company-owned delivery fleet
+
+**Rate Types:**
+- **FLAT**: Fixed rate per delivery
+- **WEIGHT**: Rate based on weight
+- **DISTANCE**: Rate based on distance
+
+**Best Practices:**
+- Use unique `courier_code` for easy identification
+- Mark inactive instead of deleting (preserves history)
+- Keep contact information up-to-date
+- Document service areas for routing decisions
+
+---
 
 ## Best Practices & Integration Tips
 - Use the `import/invoice/` endpoint for all invoice entries when you want the SSE notifications to be emitted.
