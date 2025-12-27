@@ -1319,3 +1319,135 @@ class ReturnToBillingView(APIView):
         }, status=status.HTTP_200_OK)
 
 
+from rest_framework import viewsets
+from apps.common.viewsets import BaseModelViewSet
+from apps.common.response import success_response, error_response, created_response
+from apps.accounts.models import Courier
+from .serializers import CourierSerializer
+
+
+class CourierViewSet(BaseModelViewSet):
+    """
+    ViewSet for managing couriers
+    Provides CRUD operations for courier management
+    """
+    queryset = Courier.objects.all()
+    serializer_class = CourierSerializer
+    permission_classes = [IsAuthenticated]
+    lookup_field = 'courier_id'
+    
+    def get_queryset(self):
+        """
+        Filter couriers based on query parameters
+        - status: Filter by status (ACTIVE/INACTIVE)
+        - type: Filter by type (EXTERNAL/INTERNAL)
+        - search: Search in courier_name, courier_code, contact_person
+        """
+        queryset = Courier.objects.all()
+        
+        # Filter by status
+        status_param = self.request.query_params.get('status', None)
+        if status_param:
+            queryset = queryset.filter(status=status_param.upper())
+        
+        # Filter by type
+        type_param = self.request.query_params.get('type', None)
+        if type_param:
+            queryset = queryset.filter(type=type_param.upper())
+        
+        # Search functionality
+        search = self.request.query_params.get('search', None)
+        if search:
+            from django.db.models import Q
+            queryset = queryset.filter(
+                Q(courier_name__icontains=search) |
+                Q(courier_code__icontains=search) |
+                Q(contact_person__icontains=search)
+            )
+        
+        return queryset.order_by('-created_at')
+    
+    def list(self, request, *args, **kwargs):
+        """
+        List all couriers with optional filtering
+        """
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        
+        return success_response(
+            data=serializer.data,
+            message='Couriers retrieved successfully'
+        )
+    
+    def create(self, request, *args, **kwargs):
+        """
+        Create a new courier
+        """
+        serializer = self.get_serializer(data=request.data)
+        
+        if serializer.is_valid():
+            serializer.save()
+            return created_response(
+                data=serializer.data,
+                message='Courier created successfully'
+            )
+        
+        return error_response(
+            message='Validation error',
+            errors=serializer.errors,
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+    
+    def retrieve(self, request, *args, **kwargs):
+        """
+        Retrieve a single courier
+        """
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        
+        return success_response(
+            data=serializer.data,
+            message='Courier retrieved successfully'
+        )
+    
+    def update(self, request, *args, **kwargs):
+        """
+        Update a courier (full update)
+        """
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        
+        if serializer.is_valid():
+            serializer.save()
+            return success_response(
+                data=serializer.data,
+                message='Courier updated successfully'
+            )
+        
+        return error_response(
+            message='Validation error',
+            errors=serializer.errors,
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+    
+    def partial_update(self, request, *args, **kwargs):
+        """
+        Partial update of a courier
+        """
+        kwargs['partial'] = True
+        return self.update(request, *args, **kwargs)
+    
+    def destroy(self, request, *args, **kwargs):
+        """
+        Delete a courier
+        """
+        instance = self.get_object()
+        courier_name = instance.courier_name
+        instance.delete()
+        
+        return success_response(
+            message=f'Courier "{courier_name}" deleted successfully'
+        )
+
+

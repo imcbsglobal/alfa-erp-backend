@@ -217,6 +217,7 @@ CLOUDFLARE_R2_PUBLIC_URL=your-public-domain.com
 - `User` - Custom user model with email login, roles, department/job_title
 - `Department` - Organization departments
 - `JobTitle` - Job positions linked to departments
+- `Courier` - Courier/delivery service providers (master data)
 
 **accesscontrol app**:
 - `MenuItem` - Navigation menu items (hierarchical)
@@ -230,7 +231,7 @@ CLOUDFLARE_R2_PUBLIC_URL=your-public-domain.com
 - `InvoiceReturn` - Return/review records
 - `PickingSession` - Picking workflow sessions
 - `PackingSession` - Packing workflow sessions
-- `DeliverySession` - Delivery workflow sessions
+- `DeliverySession` - Delivery workflow sessions (references Courier)
 
 ### Running Migrations
 
@@ -619,7 +620,7 @@ python manage.py migrate --fake <app> <migration>
 | [docs/api/README.md](api/README.md) | API overview & quick start |
 | [docs/api/authentication.md](api/authentication.md) | Auth endpoints |
 | [docs/api/users.md](api/users.md) | User management |
-| [docs/api/sales.md](api/sales.md) | Sales & workflow APIs |
+| [docs/api/sales.md](api/sales.md) | Sales, workflow & courier APIs |
 | [docs/api/billing.md](api/billing.md) | Billing API |
 | [docs/api/menu_access_control.md](api/menu_access_control.md) | Menu control API |
 | [docs/api/job_titles.md](api/job_titles.md) | Departments & job titles |

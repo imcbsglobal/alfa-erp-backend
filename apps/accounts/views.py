@@ -22,10 +22,9 @@ from .serializers import (
     UserListSerializer,
     ChangePasswordSerializer,
     JobTitleSerializer,
-    DepartmentSerializer,
-    CourierSerializer
+    DepartmentSerializer
 )
-from .models import JobTitle, Department, Courier
+from .models import JobTitle, Department
 
 User = get_user_model()
 
@@ -169,133 +168,6 @@ class DepartmentViewSet(BaseModelViewSet):
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
             return [IsAdminUser()]
         return [IsAuthenticated()]
-
-
-# ==================== COURIER VIEWSET ====================
-
-class CourierViewSet(BaseModelViewSet):
-    """
-    ViewSet for Courier CRUD operations
-    """
-    queryset = Courier.objects.all()
-    serializer_class = CourierSerializer
-    permission_classes = [IsAuthenticated]
-    lookup_field = 'courier_id'
-    
-    def get_permissions(self):
-        """
-        Only SUPERADMIN and ADMIN can create, update, delete
-        All authenticated users can view
-        """
-        if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            self.permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
-        return super().get_permissions()
-    
-    def list(self, request, *args, **kwargs):
-        """
-        List all couriers with optional filtering
-        """
-        queryset = self.get_queryset()
-        
-        # Search functionality
-        search = request.query_params.get('search', None)
-        if search:
-            queryset = queryset.filter(
-                Q(courier_name__icontains=search) |
-                Q(courier_code__icontains=search) |
-                Q(contact_person__icontains=search)
-            )
-        
-        # Filter by type
-        courier_type = request.query_params.get('type', None)
-        if courier_type and courier_type != 'ALL':
-            queryset = queryset.filter(type=courier_type)
-        
-        # Filter by status
-        courier_status = request.query_params.get('status', None)
-        if courier_status and courier_status != 'ALL':
-            queryset = queryset.filter(status=courier_status)
-        
-        serializer = self.get_serializer(queryset, many=True)
-        
-        return success_response(
-            data={
-                'results': serializer.data,
-                'count': queryset.count()
-            },
-            message='Couriers retrieved successfully'
-        )
-    
-    def create(self, request, *args, **kwargs):
-        """
-        Create a new courier
-        """
-        serializer = self.get_serializer(data=request.data)
-        
-        if serializer.is_valid():
-            serializer.save()
-            return created_response(
-                data=serializer.data,
-                message='Courier created successfully'
-            )
-        
-        return error_response(
-            message='Validation error',
-            errors=serializer.errors,
-            status_code=status.HTTP_400_BAD_REQUEST
-        )
-    
-    def retrieve(self, request, *args, **kwargs):
-        """
-        Retrieve a single courier
-        """
-        instance = self.get_object()
-        serializer = self.get_serializer(instance)
-        
-        return success_response(
-            data=serializer.data,
-            message='Courier retrieved successfully'
-        )
-    
-    def update(self, request, *args, **kwargs):
-        """
-        Update a courier (full update)
-        """
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        
-        if serializer.is_valid():
-            serializer.save()
-            return success_response(
-                data=serializer.data,
-                message='Courier updated successfully'
-            )
-        
-        return error_response(
-            message='Validation error',
-            errors=serializer.errors,
-            status_code=status.HTTP_400_BAD_REQUEST
-        )
-    
-    def partial_update(self, request, *args, **kwargs):
-        """
-        Partial update of a courier
-        """
-        kwargs['partial'] = True
-        return self.update(request, *args, **kwargs)
-    
-    def destroy(self, request, *args, **kwargs):
-        """
-        Delete a courier
-        """
-        instance = self.get_object()
-        courier_name = instance.courier_name
-        instance.delete()
-        
-        return success_response(
-            message=f'Courier "{courier_name}" deleted successfully'
-        )
 
 
 from rest_framework.permissions import BasePermission
