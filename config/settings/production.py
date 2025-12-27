@@ -4,7 +4,7 @@ Production settings for ALFA ERP Backend
 from .base import *
 import os
 
-DEBUG = False
+DEBUG = True
 
 # Allowed hosts from environment (comma separated string)
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if os.getenv("ALLOWED_HOSTS") else ['*']

@@ -45,6 +45,18 @@ class Invoice(models.Model):
         ],
         default="INVOICED"
     )
+
+    # Priority for ordering / processing urgency
+    priority = models.CharField(
+        max_length=10,
+        choices=[
+            ("LOW", "Low"),
+            ("MEDIUM", "Medium"),
+            ("HIGH", "High"),
+        ],
+        default="MEDIUM",
+        help_text="Priority of the invoice (LOW, MEDIUM, HIGH)"
+    )
     
     # Billing fields
     billing_status = models.CharField(
@@ -57,14 +69,41 @@ class Invoice(models.Model):
         default="BILLED",
         help_text="Billing status of the invoice"
     )
-    return_reason = models.TextField(blank=True, null=True, help_text="Reason for sending invoice to review")
-    returned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="returned_invoices", help_text="User who sent the invoice for review")
-    returned_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when invoice was sent for review")
 
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return self.invoice_no
+
+
+class InvoiceReturn(models.Model):
+    """
+    Separate model to track invoice returns for review/corrections.
+    This keeps the Invoice model clean and allows for detailed return tracking.
+    """
+    invoice = models.OneToOneField(Invoice, on_delete=models.CASCADE, related_name="invoice_return")
+    return_reason = models.TextField(help_text="Reason for sending invoice to review")
+    returned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="returned_invoices", help_text="User who sent the invoice for review")
+    returned_at = models.DateTimeField(auto_now_add=True, help_text="Timestamp when invoice was sent for review")
+    returned_from_section = models.CharField(
+        max_length=20,
+        choices=[
+            ("PICKING", "Picking Section"),
+            ("PACKING", "Packing Section"),
+            ("DELIVERY", "Delivery Section"),
+        ],
+        help_text="Section from which the invoice was returned for review"
+    )
+    resolution_notes = models.TextField(blank=True, null=True, help_text="Notes about how the issue was resolved")
+    resolved_at = models.DateTimeField(null=True, blank=True, help_text="When the invoice was corrected and re-invoiced")
+    resolved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="resolved_invoices", help_text="User who resolved the issue")
+    
+    class Meta:
+        ordering = ['-returned_at']
+    
+    def __str__(self):
+        return f"Return: {self.invoice.invoice_no} from {self.returned_from_section}"
+
     
 class InvoiceItem(models.Model):
     invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name="items")
@@ -101,10 +140,11 @@ class PickingSession(models.Model):
         default="PREPARING"
     )
     notes = models.TextField(null=True, blank=True)
+    selected_items = models.JSONField(blank=True, default=list, help_text='List of item IDs that have been selected/picked so far')
     created_at = models.DateTimeField(auto_now_add=True)
     
     def __str__(self):
-        return f"Packing - {self.invoice.invoice_no}"
+        return f"Picking - {self.invoice.invoice_no}"
     
 
 # apps/sales/models.py
@@ -126,6 +166,7 @@ class PackingSession(models.Model):
         default="PENDING"
     )
     notes = models.TextField(blank=True, null=True)
+    selected_items = models.JSONField(blank=True, default=list, help_text='List of item IDs that have been selected/packed so far')
     created_at = models.DateTimeField(auto_now_add=True)
     
     def __str__(self):

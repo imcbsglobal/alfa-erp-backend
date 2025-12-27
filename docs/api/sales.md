@@ -38,7 +38,8 @@ This module contains 3 main integration points:
 |---|---|---|---|
 | GET | `/api/sales/invoices/` | Optional (IsAuthenticatedOrReadOnly) | List invoices (pagination + filters: `status`, `worker`, `user`, `created_by`) |
 | GET | `/api/sales/invoices/{id}/` | Optional (IsAuthenticatedOrReadOnly) | Invoice detail with nested customer, items, salesman |
-| POST | `/api/sales/import/invoice/` | API key or JWT (HasAPIKeyOrAuthenticated) | Import or update invoice (idempotent by `invoice_no`) |
+| POST | `/api/sales/import/invoice/` | API key or JWT (HasAPIKeyOrAuthenticated) | Import an invoice (create-only; idempotent by `invoice_no`) |
+| PATCH | `/api/sales/update/invoice/` | API key or JWT (HasAPIKeyOrAuthenticated) | Update a returned invoice (resolve `InvoiceReturn`, update items/customer, set `billing_status=RE_INVOICED`) |
 | GET | `/api/sales/sse/invoices/` | Open by default (see notes) | Server-Sent Events stream of invoice events |
 | GET | `/api/sales/picking/active/` | JWT (IsAuthenticated) | Get authenticated user's current picking task (admin may query others) |
 | POST | `/api/sales/picking/start/` | JWT (IsAuthenticated) | Start a picking session (scan user email) |
@@ -198,6 +199,77 @@ curl -X GET "http://localhost:8000/api/sales/invoices/31/"
 ---
 
 ## 3. My Active Picking Task
+
+---
+
+## Update Returned Invoice
+`PATCH /api/sales/update/invoice/`
+
+### Purpose
+Update/resolve an invoice that was previously sent for review (returned to billing). This endpoint is intended for automated systems (e.g., V-TASK) or billing staff to submit corrections and mark the invoice as re-invoiced.
+
+### Authentication
+API key (`X-API-KEY`) or JWT (HasAPIKeyOrAuthenticated). External systems should use the import API key used for imports.
+
+### Conditions
+- Invoice must be in `REVIEW` state and have an `InvoiceReturn` record (i.e., previously returned).
+
+### Behavior
+- Updates invoice fields (date, priority, remarks), customer, salesman.
+- Updates/creates invoice items (match by `id` or `item_code`). Optionally `replace_items=true` to remove items not in request.
+- Sets `InvoiceReturn.resolution_notes`, `resolved_at` and `resolved_by`.
+- Changes invoice `status` back to the workflow position it came from (e.g., PICKING -> `INVOICED`, PACKING -> `PICKED`, DELIVERY -> `PACKED`), and sets `billing_status` to `RE_INVOICED`.
+- Emits SSE events (`invoice_updated` and full invoice payload) to `invoices` channel.
+
+### Request Body (partial update allowed)
+```json
+{
+  "invoice_no": "INV-001",
+  "invoice_date": "2025-12-23",
+  "items": [
+    { "id": 12, "item_code": "MED001", "mrp": 145.5, "batch_no": "B456" },
+    { "item_code": "NEW001", "name": "New Item", "quantity": 2, "mrp": 55.0 }
+  ],
+  "replace_items": false,
+  "resolution_notes": "Fixed batch numbers and updated MRP"
+}
+```
+
+### Response (200 OK)
+```json
+{
+  "success": true,
+  "message": "Invoice INV-001 updated successfully",
+  "data": {
+    "id": 123,
+    "invoice_no": "INV-001",
+    "status": "INVOICED",
+    "billing_status": "RE_INVOICED",
+    "total_amount": 1245.0,
+    "items_count": 3,
+    "returned_from_section": "PICKING",
+    "resolution_notes": "Fixed batch numbers and updated MRP"
+  }
+}
+```
+
+### Example cURL (API key)
+```bash
+curl -X PATCH "http://localhost:8000/api/sales/update/invoice/" \
+  -H "Content-Type: application/json" \
+  -H "X-API-KEY: your-import-api-key" \
+  -d '{
+    "invoice_no": "INV-001",
+    "items": [{"item_code": "MED001", "mrp": 145.5}],
+    "resolution_notes": "Fixed price and batch"
+  }'
+```
+
+### Notes
+- Prefer PATCH (partial update) instead of PUT. Use `replace_items=true` only when you intend to remove missing line-items.
+- The endpoint is suitable for automated systems (V-TASK) to submit corrections after a return event.
+
+---
 `GET /api/sales/picking/active/`
 
 ### Purpose
@@ -414,6 +486,7 @@ Set the key on the server using the `SALES_IMPORT_API_KEY` environment variable 
   "invoice_date": "2025-01-18",
   "salesman": "Ajay",
   "created_by": "admin",
+  "priority": "HIGH",
   "customer": {
     "code": "CUST-889",
     "name": "LifeCare Pharmacy",
@@ -423,7 +496,7 @@ Set the key on the server using the `SALES_IMPORT_API_KEY` environment variable 
     "phone1": "9876543210",
     "phone2": "",
     "email": "lifecare@shop.com"
-  },
+  ,
   "items": [
     {
       "name": "Paracetamol 650mg",
@@ -459,7 +532,8 @@ Set the key on the server using the `SALES_IMPORT_API_KEY` environment variable 
   "data": {
     "id": 1,
     "invoice_no": "INV-10222",
-    "total_amount": 920.0
+    "total_amount": 920.0,
+    "priority": "MEDIUM"
   }
 }
 ```
@@ -520,6 +594,7 @@ Example payload (JSON):
     "phone": ""
   },
   "created_by": "admin",
+  "priority": "MEDIUM",
   "items": [
     {
       "id": 45,

@@ -31,6 +31,7 @@ Sample Payload
   "invoice_date": "2025-01-18",
   "salesman": "Ajay",
   "created_by": "admin",
+  "priority": "HIGH",
   "customer": {
     "code": "CUST-889",
     "name": "LifeCare Pharmacy",
@@ -40,7 +41,7 @@ Sample Payload
     "phone1": "9876543210",
     "phone2": "",
     "email": "lifecare@shop.com"
-  },
+  ,
   "items": [
     {
       "name": "Paracetamol 650mg",
@@ -83,6 +84,39 @@ curl -X POST "http://localhost:8000/api/sales/import/invoice/" \
   -H "Authorization: Bearer <access_token>" \
   -d @invoice.json
 ```
+
+
+## Updating Returned Invoices (V-TASK)
+V-TASK (or similar external systems) should use `PATCH /api/sales/update/invoice/` to submit corrections for invoices that were returned to billing (i.e., invoices in `REVIEW` state). This allows automated resolution of issues discovered during picking/packing/delivery.
+
+- Authentication: Use the same `X-API-KEY` used for import or a valid JWT.
+- Procedure:
+  1. Inspect invoice (or listen to SSE `invoice_review` events).
+  2. Build a patch payload containing corrected items/fields and `resolution_notes`.
+  3. Call `PATCH /api/sales/update/invoice/` with the JSON body.
+
+Example payload:
+```json
+{
+  "invoice_no": "INV-001",
+  "items": [
+    { "item_code": "MED001", "mrp": 145.5, "batch_no": "B456" },
+    { "item_code": "MED002", "quantity": 2, "mrp": 55 }
+  ],
+  "replace_items": false,
+  "resolution_notes": "Fixed batch number and updated MRP"
+}
+```
+
+cURL example:
+```bash
+curl -X PATCH "http://localhost:8000/api/sales/update/invoice/" \
+  -H "Content-Type: application/json" \
+  -H "X-API-KEY: your-import-api-key" \
+  -d @update_payload.json
+```
+
+Success response will include the invoice status and updated totals. The system will emit SSE `invoice_updated` events and the full invoice payload to the `invoices` stream.
 
 Success Response (201 Created)
 

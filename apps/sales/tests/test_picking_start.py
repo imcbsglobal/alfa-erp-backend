@@ -48,3 +48,23 @@ class PickingStartTests(TestCase):
 
         self.assertEqual(resp.status_code, 400)
         self.assertIn('user_id', resp.data.get('errors', resp.data))
+
+    def test_start_packing_creates_session_and_sets_selected_items(self):
+        packer = User.objects.create_user(email="packer@example.com", password="pass")
+        actor = User.objects.create_user(email="actor2@example.com", password="pass")
+
+        self.client.force_authenticate(user=actor)
+
+        resp = self.client.post(
+            "/api/sales/packing/start/",
+            {"invoice_no": self.invoice.invoice_no, "user_email": packer.email, "notes": "Start"},
+            format='json'
+        )
+
+        self.assertEqual(resp.status_code, 201)
+        ps = PackingSession.objects.get(invoice=self.invoice)
+        self.assertEqual(ps.packer.id, packer.id)
+        self.invoice.refresh_from_db()
+        self.assertEqual(self.invoice.status, "PACKING")
+        # selected_items should be defaulted to an empty list
+        self.assertEqual(ps.selected_items, [])
