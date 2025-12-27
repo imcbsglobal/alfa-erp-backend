@@ -56,6 +56,7 @@ class InvoiceListSerializer(serializers.ModelSerializer):
     return_info = serializers.SerializerMethodField()
     picker_info = serializers.SerializerMethodField()
     packer_info = serializers.SerializerMethodField()
+    delivery_info = serializers.SerializerMethodField() 
     current_handler = serializers.SerializerMethodField()
     
     class Meta:
@@ -64,8 +65,7 @@ class InvoiceListSerializer(serializers.ModelSerializer):
             'id', 'invoice_no', 'invoice_date', 'customer','status', 'priority', 'salesman', 
             'created_by', 'items', 'total_amount', 'remarks', 'created_at',
             'billing_status', 'return_info',
-            'picker_info', 'packer_info', 'current_handler'
-        ]
+            'picker_info', 'packer_info', 'delivery_info', 'current_handler' ]
     
     def get_total_amount(self, obj):
         """Calculate total from items"""
@@ -115,6 +115,80 @@ class InvoiceListSerializer(serializers.ModelSerializer):
         elif obj.status == 'PACKING' or obj.status == 'PACKED':
             packer_info = self.get_packer_info(obj)
             return packer_info if packer_info else None
+    # ✅ NEW METHOD
+    def get_delivery_info(self, obj):
+        """Get delivery information from delivery session"""
+        try:
+            delivery = obj.deliverysession
+            
+            # For DISPATCHED status - show who dispatched (assigned_to)
+            if obj.status == 'DISPATCHED':
+                return {
+                    "name": delivery.assigned_to.name if delivery.assigned_to else None,
+                    "email": delivery.assigned_to.email if delivery.assigned_to else None,
+                    "delivery_type": delivery.delivery_type,
+                    "status": "DISPATCHED",
+                    "time": delivery.start_time,
+                    "courier_name": delivery.courier_name,
+                    "tracking_no": delivery.tracking_no,
+                }
+            
+            # For DELIVERED status - show who delivered (delivered_by)
+            if obj.status == 'DELIVERED':
+                return {
+                    "name": delivery.delivered_by.name if delivery.delivered_by else None,
+                    "email": delivery.delivered_by.email if delivery.delivered_by else None,
+                    "delivery_type": delivery.delivery_type,
+                    "status": "DELIVERED",
+                    "time": delivery.end_time,
+                    "courier_name": delivery.courier_name,
+                    "tracking_no": delivery.tracking_no,
+                }
+            
+            return None
+        except:
+            return None
+    
+    def get_current_handler(self, obj):
+        """Get current handler based on invoice status"""
+        if obj.status in ['PICKING', 'PICKED']:
+            return self.get_picker_info(obj)
+        
+        elif obj.status in ['PACKING', 'PACKED']:
+            return self.get_packer_info(obj)
+        
+        elif obj.status == 'DISPATCHED':
+            try:
+                delivery = obj.deliverysession
+                return {
+                    "name": delivery.assigned_to.name if delivery.assigned_to else None,
+                    "email": delivery.assigned_to.email if delivery.assigned_to else None,
+                    "status": "DISPATCHED",
+                    "mode": delivery.delivery_type,
+                    "courier_name": delivery.courier_name,
+                    "tracking_no": delivery.tracking_no,
+                    "start_time": delivery.start_time,
+                    "end_time": None,
+                }
+            except:
+                return None
+        
+        elif obj.status == 'DELIVERED':
+            try:
+                delivery = obj.deliverysession
+                return {
+                    "name": delivery.delivered_by.name if delivery.delivered_by else None,
+                    "email": delivery.delivered_by.email if delivery.delivered_by else None,
+                    "status": "DELIVERED",
+                    "mode": delivery.delivery_type,
+                    "courier_name": delivery.courier_name,
+                    "tracking_no": delivery.tracking_no,
+                    "start_time": delivery.start_time,
+                    "end_time": delivery.end_time,
+                }
+            except:
+                return None
+        
         elif obj.status == 'REVIEW':
             return_info = self.get_return_info(obj)
             if return_info:
@@ -125,6 +199,7 @@ class InvoiceListSerializer(serializers.ModelSerializer):
                     "returned_at": return_info.get('returned_at'),
                     "returned_from": return_info.get('returned_from_section')
                 }
+        
         return None
 
 
@@ -458,14 +533,18 @@ class DeliverySessionReadSerializer(serializers.ModelSerializer):
     """Read serializer for delivery session details"""
     assigned_to_name = serializers.CharField(source='assigned_to.name', read_only=True)
     assigned_to_email = serializers.CharField(source='assigned_to.email', read_only=True)
+    delivered_by_name = serializers.CharField(source='delivered_by.name', read_only=True)  # ✅ ADD
+    delivered_by_email = serializers.CharField(source='delivered_by.email', read_only=True)  # ✅ ADD
     invoice_no = serializers.CharField(source='invoice.invoice_no', read_only=True)
     duration_minutes = serializers.SerializerMethodField()
     
     class Meta:
         model = DeliverySession
         fields = [
-            'id', 'invoice', 'invoice_no', 'delivery_type', 'assigned_to', 
-            'assigned_to_name', 'assigned_to_email', 'courier_name', 'tracking_no',
+            'id', 'invoice', 'invoice_no', 'delivery_type', 
+            'assigned_to', 'assigned_to_name', 'assigned_to_email',
+            'delivered_by', 'delivered_by_name', 'delivered_by_email',  # ✅ ADD THESE
+            'courier_name', 'tracking_no',
             'start_time', 'end_time', 'delivery_status', 'notes',
             'duration_minutes', 'created_at'
         ]
@@ -629,6 +708,12 @@ class DeliveryHistorySerializer(serializers.ModelSerializer):
     def get_total_amount(self, obj):
         """Calculate total amount from invoice items"""
         return sum(item.quantity * item.mrp for item in obj.invoice.items.all())
+    
+    def get_duration(self, obj):
+        if obj.start_time and obj.end_time:
+            delta = obj.end_time - obj.start_time
+            return int(delta.total_seconds() // 60)  # duration in minutes
+        return None
 
 
 # ===== Billing Serializers =====

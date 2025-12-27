@@ -177,13 +177,28 @@ class DeliverySession(models.Model):
     delivery_type = models.CharField(
         max_length=20,
         choices=[
-            ("DIRECT", "Direct Delivery"),     # staff delivers to customer
-            ("COURIER", "Courier Service"),    # external courier
-            ("INTERNAL", "Internal Staff"),    # internal transport
+            ("DIRECT", "Direct Delivery"),
+            ("COURIER", "Courier Service"),
+            ("INTERNAL", "Internal Staff"),
         ],
         default="DIRECT"
     )
-    assigned_to = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    assigned_to = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name="assigned_deliveries",
+        help_text="Person who dispatched/started delivery"
+    )
+    delivered_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="delivered_invoices",
+        help_text="Person who completed the delivery"
+    )
     courier_name = models.CharField(max_length=150, blank=True, null=True)
     tracking_no = models.CharField(max_length=150, blank=True, null=True)
     start_time = models.DateTimeField(null=True)

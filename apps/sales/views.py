@@ -834,7 +834,8 @@ class CompleteDeliveryView(APIView):
         delivery_status = validated_data.get('delivery_status', 'DELIVERED')
         notes = validated_data.get('notes', '')
         
-        # Update delivery session
+        # ✅ SET delivered_by to the user who completed delivery
+        delivery_session.delivered_by = request.user
         delivery_session.end_time = timezone.now()
         delivery_session.delivery_status = delivery_status
         if notes:
