@@ -1,6 +1,7 @@
 from django.urls import path, include
 from django.views.decorators.csrf import csrf_exempt
 import django_eventstream
+from rest_framework.routers import DefaultRouter
 from .views import (
     ImportInvoiceView,
     UpdateInvoiceView,
@@ -19,9 +20,16 @@ from .views import (
     DeliveryHistoryView,
     BillingInvoicesView,
     ReturnToBillingView,
+    CourierViewSet,
 )
 
+router = DefaultRouter()
+router.register(r'couriers', CourierViewSet, basename='courier')
+
 urlpatterns = [
+    # Router URLs for ViewSets
+    path('', include(router.urls)),
+    
     path("invoices/", InvoiceListView.as_view(), name="invoice-list"),
     path("invoices/<int:pk>/", InvoiceDetailView.as_view(), name="invoice-detail"),
     path("import/invoice/", ImportInvoiceView.as_view(), name="import-invoice"),
