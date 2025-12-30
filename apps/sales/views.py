@@ -545,7 +545,8 @@ class CompletePickingView(APIView):
     Body: {
         "invoice_no": "INV-001",
         "user_email": "john.doe@company.com",
-        "notes": "Picking completed"
+        "notes": "Picking completed",
+        "is_repick": false  // Set to true for re-invoiced bills
     }
     """
     permission_classes = [IsAuthenticated]
@@ -564,6 +565,7 @@ class CompletePickingView(APIView):
         picking_session = validated_data['picking_session']
         invoice = validated_data['invoice']
         notes = validated_data.get('notes', '')
+        is_repick = validated_data.get('is_repick', False)
         
         # Update picking session
         picking_session.end_time = timezone.now()
@@ -574,7 +576,19 @@ class CompletePickingView(APIView):
         
         # Update invoice status
         invoice.status = "PICKED"
-        invoice.save(update_fields=['status'])
+        
+        # Update billing status if this was a re-pick
+        if is_repick and invoice.billing_status == 'RE_INVOICED':
+            invoice.billing_status = 'BILLED'
+            
+            # Update the InvoiceReturn record
+            if hasattr(invoice, 'invoice_return'):
+                invoice_return = invoice.invoice_return
+                invoice_return.resolved_at = timezone.now()
+                invoice_return.resolved_by = request.user
+                invoice_return.save()
+        
+        invoice.save(update_fields=['status', 'billing_status'])
         
         
         # Emit SSE event
@@ -592,7 +606,7 @@ class CompletePickingView(APIView):
         response_serializer = PickingSessionReadSerializer(picking_session)
         return Response({
             "success": True,
-            "message": f"Picking completed for {invoice.invoice_no}",
+            "message": f"Picking completed for {invoice.invoice_no}" + (" (Re-pick completed)" if is_repick else ""),
             "data": response_serializer.data
         }, status=status.HTTP_200_OK)
 
@@ -674,7 +688,6 @@ class StartPackingView(APIView):
             "message": f"Packing started by {user.name}",
             "data": response_serializer.data
         }, status=status.HTTP_201_CREATED)
-
 
 class CompletePackingView(APIView):
     """

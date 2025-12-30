@@ -344,6 +344,7 @@ class CompletePickingSerializer(serializers.Serializer):
     invoice_no = serializers.CharField()
     user_email = serializers.EmailField(help_text="Scanned user email for verification")
     notes = serializers.CharField(required=False, allow_blank=True)
+    is_repick = serializers.BooleanField(required=False, default=False)  # ✅ NEW FLAG
     
     def validate(self, data):
         # Validate invoice exists
@@ -352,11 +353,7 @@ class CompletePickingSerializer(serializers.Serializer):
         except Invoice.DoesNotExist:
             raise serializers.ValidationError({"invoice_no": "Invoice not found."})
         
-        # Check if picking session exists
-        try:
-            picking_session = PickingSession.objects.get(invoice=invoice)
-        except PickingSession.DoesNotExist:
-            raise serializers.ValidationError({"invoice_no": "No picking session found for this invoice."})
+        is_repick = data.get('is_repick', False)
         
         # Verify user email
         try:
@@ -364,21 +361,53 @@ class CompletePickingSerializer(serializers.Serializer):
         except User.DoesNotExist:
             raise serializers.ValidationError({"user_email": "User not found. Please scan a valid email."})
         
-        # Verify it's the same user who started picking
+        # ✅ For re-invoiced bills, create or reset picking session automatically
+        if is_repick and invoice.billing_status == 'RE_INVOICED':
+            # Check if picking session exists
+            if hasattr(invoice, 'pickingsession'):
+                picking_session = invoice.pickingsession
+                # Reset the existing session for re-pick
+                picking_session.picker = user
+                picking_session.start_time = timezone.now()
+                picking_session.end_time = None
+                picking_session.picking_status = "PREPARING"
+                picking_session.notes = (picking_session.notes or '') + "\nRe-started for re-invoiced bill"
+                picking_session.save()
+            else:
+                # Create new picking session
+                picking_session = PickingSession.objects.create(
+                    invoice=invoice,
+                    picker=user,
+                    start_time=timezone.now(),
+                    picking_status="PREPARING",
+                    notes="Auto-started for re-invoiced bill",
+                    selected_items=[]
+                )
+            
+            # Update invoice status
+            invoice.status = "PICKING"
+            invoice.save(update_fields=["status"])
+        
+        # Check if picking session exists
+        try:
+            picking_session = PickingSession.objects.get(invoice=invoice)
+        except PickingSession.DoesNotExist:
+            raise serializers.ValidationError({"invoice_no": "No picking session found for this invoice."})
+        
+        # Verify it's the same user who started picking (or re-pick user)
         if picking_session.picker and picking_session.picker.email != user.email:
             raise serializers.ValidationError({
                 "user_email": f"Email mismatch. This invoice was started by {picking_session.picker.name} ({picking_session.picker.email}). Please scan the correct email."
             })
         
-        # Check picking status
-        if picking_session.picking_status == "PICKED":
+        # ✅ Only check if already completed for non-repick cases
+        if not is_repick and picking_session.picking_status == "PICKED":
             raise serializers.ValidationError({"invoice_no": "Picking already completed for this invoice."})
         
         data['invoice'] = invoice
         data['picking_session'] = picking_session
         data['user'] = user
         return data
-
 
 # ===== PACKING SERIALIZERS =====
 
