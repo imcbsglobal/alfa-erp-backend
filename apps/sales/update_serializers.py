@@ -81,16 +81,16 @@ class InvoiceUpdateSerializer(serializers.Serializer):
             raise serializers.ValidationError({"invoice_no": "Invoice not found."})
         
         # Check if invoice is in REVIEW status
-        if invoice.status != 'REVIEW' or invoice.billing_status != 'REVIEW':
-            raise serializers.ValidationError({
-                "invoice_no": f"Invoice must be in REVIEW status to be updated. Current status: {invoice.status}"
-            })
+        # if invoice.status != 'REVIEW' or invoice.billing_status != 'REVIEW':
+        #     raise serializers.ValidationError({
+        #         "invoice_no": f"Invoice must be in REVIEW status to be updated. Current status: {invoice.status}"
+        #     })
         
         # Check if invoice has an InvoiceReturn record
-        if not hasattr(invoice, 'invoice_return'):
-            raise serializers.ValidationError({
-                "invoice_no": "Invoice has no return record. Only returned invoices can be updated via this endpoint."
-            })
+        # if not hasattr(invoice, 'invoice_return'):
+        #     raise serializers.ValidationError({
+        #         "invoice_no": "Invoice has no return record. Only returned invoices can be updated via this endpoint."
+        #     })
         
         data['invoice'] = invoice
         return data
@@ -197,16 +197,36 @@ class InvoiceUpdateSerializer(serializers.Serializer):
         # Change status back to where it was returned from
         returned_from = invoice_return.returned_from_section
         if returned_from == 'PICKING':
-            invoice.status = 'INVOICED'  # Ready to be picked again
+            invoice.status = 'PICKING'  # Return to picking status
+            invoice.billing_status = 'RE_INVOICED'
+            
+            # Update picking session status if exists
+            if hasattr(invoice, 'pickingsession'):
+                picking_session = invoice.pickingsession
+                if picking_session.picking_status == 'REVIEW':
+                    picking_session.picking_status = 'PREPARING'
+                    picking_session.notes = f"Resumed after review: {resolution_notes}"
+                    picking_session.save()
+                    
         elif returned_from == 'PACKING':
-            invoice.status = 'PICKED'  # Ready to be packed
+            invoice.status = 'PACKING'  # Return to packing status
+            invoice.billing_status = 'RE_INVOICED'
+            
+            # Update packing session status if exists
+            if hasattr(invoice, 'packingsession'):
+                packing_session = invoice.packingsession
+                if packing_session.packing_status == 'REVIEW':
+                    packing_session.packing_status = 'IN_PROGRESS'
+                    packing_session.notes = f"Resumed after review: {resolution_notes}"
+                    packing_session.save()
+                    
         elif returned_from == 'DELIVERY':
-            invoice.status = 'PACKED'  # Ready for delivery
+            invoice.status = 'PACKED'  # Ready for delivery again
+            invoice.billing_status = 'RE_INVOICED'
         else:
             invoice.status = 'INVOICED'  # Default fallback
+            invoice.billing_status = 'RE_INVOICED'
         
-        # Update billing status to RE_INVOICED
-        invoice.billing_status = 'RE_INVOICED'
         invoice.save()
         
         return invoice
