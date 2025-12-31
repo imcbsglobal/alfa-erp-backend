@@ -375,8 +375,7 @@ class UpdateInvoiceView(APIView):
         "priority": "HIGH",  // optional
         "items": [
             {
-                "id": 123,  // optional - if provided, updates this item
-                "item_code": "MED001",
+                "item_code": "MED001",  // required - used to match existing items
                 "quantity": 50,
                 "mrp": 145.50,
                 "batch_no": "BATCH456",

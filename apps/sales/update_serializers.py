@@ -10,9 +10,8 @@ from django.db import transaction
 
 
 class InvoiceItemUpdateSerializer(serializers.Serializer):
-    """Serializer for updating invoice items"""
-    id = serializers.IntegerField(required=False, allow_null=True, help_text="Item ID if updating existing item")
-    item_code = serializers.CharField(help_text="Item code for matching if no ID provided")
+    """Serializer for updating invoice items - matches by item_code"""
+    item_code = serializers.CharField(help_text="Item code for matching existing items")
     name = serializers.CharField(required=False)
     quantity = serializers.IntegerField(required=False)
     mrp = serializers.FloatField(required=False)
@@ -138,18 +137,11 @@ class InvoiceUpdateSerializer(serializers.Serializer):
             processed_item_ids = []
             
             for item_data in items_data:
-                item_id = item_data.get('id')
                 item_code = item_data.get('item_code')
                 
-                # Try to find existing item by ID or item_code
+                # Try to find existing item by item_code
                 existing_item = None
-                if item_id:
-                    try:
-                        existing_item = InvoiceItem.objects.get(id=item_id, invoice=invoice)
-                    except InvoiceItem.DoesNotExist:
-                        pass
-                
-                if not existing_item and item_code:
+                if item_code:
                     existing_item = InvoiceItem.objects.filter(
                         invoice=invoice, 
                         item_code=item_code
