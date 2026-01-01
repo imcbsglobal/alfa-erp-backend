@@ -13,6 +13,7 @@ class InvoiceItemUpdateSerializer(serializers.Serializer):
     """Serializer for updating invoice items - matches by item_code"""
     item_code = serializers.CharField(help_text="Item code for matching existing items")
     name = serializers.CharField(required=False)
+    barcode = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     quantity = serializers.IntegerField(required=False)
     mrp = serializers.FloatField(required=False)
     batch_no = serializers.CharField(required=False, allow_blank=True)
@@ -149,7 +150,7 @@ class InvoiceUpdateSerializer(serializers.Serializer):
                 
                 if existing_item:
                     # Update existing item
-                    for field in ['name', 'quantity', 'mrp', 'batch_no', 'expiry_date', 
+                    for field in ['name', 'barcode', 'quantity', 'mrp', 'batch_no', 'expiry_date', 
                                   'company_name', 'packing', 'shelf_location', 'remarks']:
                         if field in item_data:
                             setattr(existing_item, field, item_data[field])
@@ -168,7 +169,8 @@ class InvoiceUpdateSerializer(serializers.Serializer):
                         company_name=item_data.get('company_name', ''),
                         packing=item_data.get('packing', ''),
                         shelf_location=item_data.get('shelf_location', ''),
-                        remarks=item_data.get('remarks', '')
+                        remarks=item_data.get('remarks', ''),
+                        barcode=item_data.get('barcode', '')
                     )
                     processed_item_ids.append(new_item.id)
             

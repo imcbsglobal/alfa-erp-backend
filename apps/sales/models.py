@@ -109,6 +109,7 @@ class InvoiceItem(models.Model):
     invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name="items")
     name = models.CharField(max_length=255, help_text="Item/product name")
     item_code = models.CharField(max_length=100)
+    barcode = models.CharField(max_length=100, blank=True, null=True, help_text="Item barcode")
     quantity = models.IntegerField()
     mrp = models.FloatField()
     company_name = models.CharField(max_length=100, blank=True)

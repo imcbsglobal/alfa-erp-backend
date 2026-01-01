@@ -8,7 +8,7 @@ Behavior:
   - The `customer` record is upserted (`update_or_create` by `code`).
   - The `salesman` is `get_or_create` by name.
   - Invoice-level fields (`invoice_date`, `salesman`, `customer`, `created_by`, `remarks`) are updated.
-  - Existing `InvoiceItem` rows for that invoice are deleted and replaced with the incoming items (full replace).
+  - Existing `InvoiceItem` rows for that invoice are deleted and replaced with the incoming items (full replace). InvoiceItem rows can include fields such as `item_code`, `barcode`, `quantity`, `mrp`, `company_name`, `packing`, `shelf_location`, `batch_no`, `expiry_date`, and `remarks`.
   - The authenticated `created_user` will be set if available.
   - An SSE event is emitted with the updated invoice payload.
 

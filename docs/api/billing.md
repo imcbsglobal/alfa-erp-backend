@@ -69,6 +69,7 @@ Retrieve a paginated list of invoices for the billing section.
           "id": 1,
           "name": "Paracetamol 500mg",
           "item_code": "MED001",
+          "barcode": "BC-MED001",
           "quantity": 100,
           "mrp": 5.50,
           "company_name": "PharmaCo",

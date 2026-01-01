@@ -46,6 +46,7 @@ Sample Payload
     {
       "name": "Paracetamol 650mg",
       "item_code": "PR650",
+      "barcode": "BC-PR650",
       "quantity": 20,
       "mrp": 3.50,
       "company_name": "Sun Pharma",
@@ -56,6 +57,7 @@ Sample Payload
     {
       "name": "Otrivin Nasal Spray",
       "item_code": "OTN10",
+      "barcode": "BC-OTN10",
       "quantity": 10,
       "mrp": 85.00,
       "company_name": "Novartis",
@@ -100,8 +102,8 @@ Example payload:
 {
   "invoice_no": "INV-001",
   "items": [
-    { "item_code": "MED001", "mrp": 145.5, "batch_no": "B456" },
-    { "item_code": "MED002", "quantity": 2, "mrp": 55 }
+    { "item_code": "MED001", "barcode": "BC-MED001", "mrp": 145.5, "batch_no": "B456" },
+    { "item_code": "MED002", "barcode": "BC-MED002", "quantity": 2, "mrp": 55 }
   ],
   "replace_items": false,
   "resolution_notes": "Fixed batch number and updated MRP"
