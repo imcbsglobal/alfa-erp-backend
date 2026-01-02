@@ -132,6 +132,7 @@ class Command(BaseCommand):
                     invoice=invoice,
                     item_code=item_code,
                     name=name,
+                    barcode=f"BC-{item_code}",
                     company_name=company,
                     packing=packing,
                     quantity=random.randint(1, 10),
