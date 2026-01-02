@@ -74,7 +74,7 @@ class InvoiceListSerializer(serializers.ModelSerializer):
     def get_return_info(self, obj):
         """Get return information if invoice has been returned"""
         try:
-            return_obj = obj.invoice_return
+            return_obj = obj.invoice_returns.first()  # Get latest return
             return InvoiceReturnSerializer(return_obj).data
         except:
             return None
@@ -745,7 +745,7 @@ class ReturnToBillingSerializer(serializers.Serializer):
             })
 
         # Check if already in review (has InvoiceReturn record)
-        if invoice.billing_status == 'REVIEW' or hasattr(invoice, 'invoice_return'):
+        if invoice.billing_status == 'REVIEW' or invoice.invoice_returns.filter(resolved_at__isnull=True).exists():
             raise serializers.ValidationError({
                 "invoice_no": "Invoice has already been sent for review."
             })

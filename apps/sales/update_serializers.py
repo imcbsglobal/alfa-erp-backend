@@ -87,7 +87,7 @@ class InvoiceUpdateSerializer(serializers.Serializer):
         #     })
         
         # Check if invoice has an InvoiceReturn record
-        # if not hasattr(invoice, 'invoice_return'):
+        # if not invoice.invoice_returns.exists():
         #     raise serializers.ValidationError({
         #         "invoice_no": "Invoice has no return record. Only returned invoices can be updated via this endpoint."
         #     })
@@ -99,7 +99,11 @@ class InvoiceUpdateSerializer(serializers.Serializer):
     def update(self, instance, validated_data):
         """Update the invoice with corrections"""
         invoice = validated_data['invoice']
-        invoice_return = invoice.invoice_return
+        # Get the latest unresolved return record
+        invoice_return = invoice.invoice_returns.filter(resolved_at__isnull=True).order_by('-returned_at').first()
+        if not invoice_return:
+            # If no active return, get the latest one
+            invoice_return = invoice.invoice_returns.order_by('-returned_at').first()
         
         # Update basic invoice fields
         if 'invoice_date' in validated_data:
