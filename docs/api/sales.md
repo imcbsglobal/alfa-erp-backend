@@ -224,7 +224,7 @@ API key (`X-API-KEY`) or JWT (HasAPIKeyOrAuthenticated). External systems should
 
 ### Behavior
 - Updates invoice fields (date, priority, remarks), customer, salesman.
-- Updates/creates invoice items (match by `id` or `item_code`). Optionally `replace_items=true` to remove items not in request.
+- Updates/creates invoice items (match by `barcode` preferred, or by `id`/`item_code` as fallback). Optionally `replace_items=true` to remove items not in request.
 - Sets `InvoiceReturn.resolution_notes`, `resolved_at` and `resolved_by`.
 - Changes invoice `status` back to the workflow position it came from (e.g., PICKING -> `INVOICED`, PACKING -> `PICKED`, DELIVERY -> `PACKED`), and sets `billing_status` to `RE_INVOICED`.
 - Emits SSE events (`invoice_updated` and full invoice payload) to `invoices` channel.

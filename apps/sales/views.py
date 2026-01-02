@@ -375,7 +375,8 @@ class UpdateInvoiceView(APIView):
         "priority": "HIGH",  // optional
         "items": [
             {
-                "item_code": "MED001",  // required - used to match existing items
+                "barcode": "BC-MED001",  // preferred - used to match existing items; item_code used as fallback
+                "item_code": "MED001",   // optional fallback
                 "quantity": 50,
                 "mrp": 145.50,
                 "batch_no": "BATCH456",
@@ -451,14 +452,17 @@ class UpdateInvoiceView(APIView):
             "success": True,
             "message": f"Invoice {invoice.invoice_no} updated successfully",
             "data": {
-                "id": invoice.id,
-                "invoice_no": invoice.invoice_no,
-                "status": invoice.status,
-                "billing_status": invoice.billing_status,
-                "total_amount": total_amount,
-                "items_count": invoice.items.count(),
-                "returned_from_section": invoice.invoice_return.returned_from_section,
-                "resolution_notes": invoice.invoice_return.resolution_notes
+                "invoice": invoice_data,
+                "summary": {
+                    "id": invoice.id,
+                    "invoice_no": invoice.invoice_no,
+                    "status": invoice.status,
+                    "billing_status": invoice.billing_status,
+                    "total_amount": total_amount,
+                    "items_count": invoice.items.count(),
+                    "returned_from_section": invoice.invoice_return.returned_from_section,
+                    "resolution_notes": invoice.invoice_return.resolution_notes
+                }
             }
         }, status=status.HTTP_200_OK)
 

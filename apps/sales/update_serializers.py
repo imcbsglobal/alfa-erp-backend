@@ -10,10 +10,10 @@ from django.db import transaction
 
 
 class InvoiceItemUpdateSerializer(serializers.Serializer):
-    """Serializer for updating invoice items - matches by item_code"""
-    item_code = serializers.CharField(help_text="Item code for matching existing items")
+    """Serializer for updating invoice items - matches by barcode (preferred) or item_code as fallback"""
+    item_code = serializers.CharField(required=False, allow_blank=True, help_text="Item code (optional). Used as fallback when barcode is not provided.")
     name = serializers.CharField(required=False)
-    barcode = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    barcode = serializers.CharField(required=False, allow_blank=True, allow_null=True, help_text="Barcode (preferred unique identifier for matching items)")
     quantity = serializers.IntegerField(required=False)
     mrp = serializers.FloatField(required=False)
     batch_no = serializers.CharField(required=False, allow_blank=True)
@@ -138,19 +138,19 @@ class InvoiceUpdateSerializer(serializers.Serializer):
             processed_item_ids = []
             
             for item_data in items_data:
+                barcode = item_data.get('barcode')
                 item_code = item_data.get('item_code')
                 
-                # Try to find existing item by item_code
+                # Try to find existing item by barcode first (preferred), then by item_code
                 existing_item = None
-                if item_code:
-                    existing_item = InvoiceItem.objects.filter(
-                        invoice=invoice, 
-                        item_code=item_code
-                    ).first()
+                if barcode:
+                    existing_item = InvoiceItem.objects.filter(invoice=invoice, barcode=barcode).first()
+                if not existing_item and item_code:
+                    existing_item = InvoiceItem.objects.filter(invoice=invoice, item_code=item_code).first()
                 
                 if existing_item:
-                    # Update existing item
-                    for field in ['name', 'barcode', 'quantity', 'mrp', 'batch_no', 'expiry_date', 
+                    # Update existing item - allow updating barcode and item_code fields if provided
+                    for field in ['name', 'barcode', 'item_code', 'quantity', 'mrp', 'batch_no', 'expiry_date', 
                                   'company_name', 'packing', 'shelf_location', 'remarks']:
                         if field in item_data:
                             setattr(existing_item, field, item_data[field])
@@ -161,7 +161,7 @@ class InvoiceUpdateSerializer(serializers.Serializer):
                     new_item = InvoiceItem.objects.create(
                         invoice=invoice,
                         name=item_data.get('name', ''),
-                        item_code=item_code,
+                        item_code=item_data.get('item_code', '') or '',
                         quantity=item_data.get('quantity', 1),
                         mrp=item_data.get('mrp', 0.0),
                         batch_no=item_data.get('batch_no', ''),
@@ -170,7 +170,7 @@ class InvoiceUpdateSerializer(serializers.Serializer):
                         packing=item_data.get('packing', ''),
                         shelf_location=item_data.get('shelf_location', ''),
                         remarks=item_data.get('remarks', ''),
-                        barcode=item_data.get('barcode', '')
+                        barcode=item_data.get('barcode', '') or ''
                     )
                     processed_item_ids.append(new_item.id)
             
