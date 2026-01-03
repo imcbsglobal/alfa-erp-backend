@@ -167,10 +167,10 @@ class MyActivePickingView(APIView):
                 }, status=status.HTTP_403_FORBIDDEN)
             target_user = requested
 
-        # Check for active picking session
+        # Check for active picking session (PREPARING or REVIEW)
         picking_session = PickingSession.objects.filter(
             picker=target_user,
-            picking_status='PREPARING'
+            picking_status__in=['PREPARING', 'REVIEW']
         ).select_related('invoice__customer', 'invoice__salesman').prefetch_related('invoice__items').first()
 
         if picking_session:
@@ -237,10 +237,10 @@ class MyActivePackingView(APIView):
                 }, status=status.HTTP_403_FORBIDDEN)
             target_user = requested
 
-        # Check for active packing session
+        # Check for active packing session (IN_PROGRESS or REVIEW)
         packing_session = PackingSession.objects.filter(
             packer=target_user,
-            packing_status='IN_PROGRESS'
+            packing_status__in=['IN_PROGRESS', 'REVIEW']
         ).select_related('invoice__customer', 'invoice__salesman').prefetch_related('invoice__items').first()
 
         if packing_session:
@@ -375,8 +375,7 @@ class UpdateInvoiceView(APIView):
         "priority": "HIGH",  // optional
         "items": [
             {
-                "id": 123,  // optional - if provided, updates this item
-                "item_code": "MED001",
+                "item_code": "MED001",  // required - used to match existing items
                 "quantity": 50,
                 "mrp": 145.50,
                 "batch_no": "BATCH456",
@@ -497,7 +496,7 @@ class StartPickingView(APIView):
         if user:
             existing_session = PickingSession.objects.filter(
                 picker=user,
-                picking_status='PREPARING'
+                picking_status__in=['PREPARING', 'REVIEW']
             ).select_related('invoice').first()
             
             if existing_session:
@@ -643,7 +642,7 @@ class StartPackingView(APIView):
         # Check if this user already has any active packing session
         existing_session = PackingSession.objects.filter(
             packer=user,
-            packing_status='IN_PROGRESS'
+            packing_status__in=['IN_PROGRESS', 'REVIEW']
         ).select_related('invoice').first()
         
         if existing_session:
@@ -1274,14 +1273,14 @@ class ReturnToBillingView(APIView):
         if hasattr(invoice, 'pickingsession'):
             picking_session = invoice.pickingsession
             if picking_session.picking_status == 'PREPARING':
-                picking_session.picking_status = 'CANCELLED'
+                picking_session.picking_status = 'REVIEW'
                 picking_session.notes = f"Cancelled due to review needed: {return_reason}"
                 picking_session.save()
         
         if hasattr(invoice, 'packingsession'):
             packing_session = invoice.packingsession
             if packing_session.packing_status == 'IN_PROGRESS':
-                packing_session.packing_status = 'CANCELLED'
+                packing_session.packing_status = 'REVIEW'
                 packing_session.notes = f"Cancelled due to review needed: {return_reason}"
                 packing_session.save()
         
