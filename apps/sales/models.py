@@ -80,8 +80,9 @@ class InvoiceReturn(models.Model):
     """
     Separate model to track invoice returns for review/corrections.
     This keeps the Invoice model clean and allows for detailed return tracking.
+    Multiple returns allowed - tracks full history of invoice reviews.
     """
-    invoice = models.OneToOneField(Invoice, on_delete=models.CASCADE, related_name="invoice_return")
+    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name="invoice_returns")
     return_reason = models.TextField(help_text="Reason for sending invoice to review")
     returned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="returned_invoices", help_text="User who sent the invoice for review")
     returned_at = models.DateTimeField(auto_now_add=True, help_text="Timestamp when invoice was sent for review")
@@ -109,6 +110,7 @@ class InvoiceItem(models.Model):
     invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name="items")
     name = models.CharField(max_length=255, help_text="Item/product name")
     item_code = models.CharField(max_length=100)
+    barcode = models.CharField(max_length=100, blank=True, null=True, help_text="Item barcode")
     quantity = models.IntegerField()
     mrp = models.FloatField()
     company_name = models.CharField(max_length=100, blank=True)

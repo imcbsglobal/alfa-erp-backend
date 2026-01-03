@@ -137,6 +137,7 @@ GET /api/sales/invoices/?status=PENDING&created_by=admin&page=2
           "id": 45,
           "name": "Paracetamol 650mg",
           "item_code": "PR650",
+          "barcode": "BC-PR650",
           "quantity": 20,
           "mrp": 3.50,
           "company_name": "Sun Pharma",
@@ -148,6 +149,7 @@ GET /api/sales/invoices/?status=PENDING&created_by=admin&page=2
           "id": 46,
           "name": "Otrivin Nasal Spray",
           "item_code": "OTN10",
+          "barcode": "BC-OTN10",
           "quantity": 10,
           "mrp": 85.00,
           "company_name": "Novartis",
@@ -222,7 +224,7 @@ API key (`X-API-KEY`) or JWT (HasAPIKeyOrAuthenticated). External systems should
 
 ### Behavior
 - Updates invoice fields (date, priority, remarks), customer, salesman.
-- Updates/creates invoice items (match by `id` or `item_code`). Optionally `replace_items=true` to remove items not in request.
+- Updates/creates invoice items (match by `barcode` preferred, or by `id`/`item_code` as fallback). Optionally `replace_items=true` to remove items not in request.
 - Sets `InvoiceReturn.resolution_notes`, `resolved_at` and `resolved_by`.
 - Changes invoice `status` back to the workflow position it came from (e.g., PICKING -> `INVOICED`, PACKING -> `PICKED`, DELIVERY -> `PACKED`), and sets `billing_status` to `RE_INVOICED`.
 - Emits SSE events (`invoice_updated` and full invoice payload) to `invoices` channel.
@@ -233,8 +235,8 @@ API key (`X-API-KEY`) or JWT (HasAPIKeyOrAuthenticated). External systems should
   "invoice_no": "INV-001",
   "invoice_date": "2025-12-23",
   "items": [
-    { "id": 12, "item_code": "MED001", "mrp": 145.5, "batch_no": "B456" },
-    { "item_code": "NEW001", "name": "New Item", "quantity": 2, "mrp": 55.0 }
+    { "id": 12, "item_code": "MED001", "barcode": "BC-MED001", "mrp": 145.5, "batch_no": "B456" },
+    { "item_code": "NEW001", "name": "New Item", "barcode": "BC-NEW001", "quantity": 2, "mrp": 55.0 }
   ],
   "replace_items": false,
   "resolution_notes": "Fixed batch numbers and updated MRP"
@@ -266,7 +268,7 @@ curl -X PATCH "http://localhost:8000/api/sales/update/invoice/" \
   -H "X-API-KEY: your-import-api-key" \
   -d '{
     "invoice_no": "INV-001",
-    "items": [{"item_code": "MED001", "mrp": 145.5}],
+    "items": [{"item_code": "MED001", "barcode": "BC-MED001", "mrp": 145.5 }],
     "resolution_notes": "Fixed price and batch"
   }'
 ```
@@ -321,6 +323,7 @@ Required (Bearer token)
           "id": 45,
           "name": "Paracetamol 650mg",
           "item_code": "PR650",
+          "barcode": "BC-PR650",
           "quantity": 20,
           "shelf_location": "R-12"
         }
@@ -507,6 +510,7 @@ Set the key on the server using the `SALES_IMPORT_API_KEY` environment variable 
     {
       "name": "Paracetamol 650mg",
       "item_code": "PR650",
+      "barcode": "BC-PR650",
       "quantity": 20,
       "mrp": 3.50,
       "company_name": "Sun Pharma",
@@ -517,6 +521,7 @@ Set the key on the server using the `SALES_IMPORT_API_KEY` environment variable 
     {
       "name": "Otrivin Nasal Spray",
       "item_code": "OTN10",
+      "barcode": "BC-OTN10",
       "quantity": 10,
       "mrp": 85.00,
       "company_name": "Novartis",
@@ -606,6 +611,7 @@ Example payload (JSON):
       "id": 45,
       "name": "Paracetamol 650mg",
       "item_code": "PR650",
+      "barcode": "BC-PR650",
       "quantity": 20,
       "mrp": 3.50,
       "company_name": "Sun Pharma",
@@ -617,6 +623,7 @@ Example payload (JSON):
       "id": 46,
       "name": "Otrivin Nasal Spray",
       "item_code": "OTN10",
+      "barcode": "BC-OTN10",
       "quantity": 10,
       "mrp": 85.00,
       "company_name": "Novartis",
@@ -958,7 +965,7 @@ es.onmessage = (evt) => {
 **InvoiceItem**
 - `invoice` (FK)
 - `name` - Item/product name
-- `item_code`, `quantity`, `mrp`, `company_name`, `packing`, `shelf_location`, `remarks`
+- `item_code`, `barcode`, `quantity`, `mrp`, `company_name`, `packing`, `shelf_location`, `batch_no`, `expiry_date`, `remarks`
 
 ---
 
@@ -1035,6 +1042,7 @@ GET /api/sales/picking/history/?page=2&page_size=20
           "id": 201,
           "name": "Paracetamol 500mg",
           "item_code": "P500",
+          "barcode": "BC-P500",
           "quantity": 2,
           "mrp": 50.0,
           "company_name": "ACME",
@@ -1312,6 +1320,7 @@ GET /api/sales/delivery/history/?search=driver1@gmail.com
           "id": 201,
           "name": "Paracetamol 500mg",
           "item_code": "P500",
+          "barcode": "BC-P500",
           "quantity": 2,
           "mrp": 50.0,
           "company_name": "ACME",

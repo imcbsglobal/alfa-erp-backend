@@ -375,7 +375,8 @@ class UpdateInvoiceView(APIView):
         "priority": "HIGH",  // optional
         "items": [
             {
-                "item_code": "MED001",  // required - used to match existing items
+                "barcode": "BC-MED001",  // preferred - used to match existing items; item_code used as fallback
+                "item_code": "MED001",   // optional fallback
                 "quantity": 50,
                 "mrp": 145.50,
                 "batch_no": "BATCH456",
@@ -420,8 +421,8 @@ class UpdateInvoiceView(APIView):
         # Send SSE event with updated invoice
         try:
             invoice_refreshed = Invoice.objects.select_related(
-                'customer', 'salesman', 'invoice_return', 'invoice_return__returned_by'
-            ).prefetch_related('items').get(id=invoice.id)
+                'customer', 'salesman'
+            ).prefetch_related('items', 'invoice_returns', 'invoice_returns__returned_by').get(id=invoice.id)
             
             invoice_data = InvoiceListSerializer(invoice_refreshed).data
             
@@ -451,14 +452,17 @@ class UpdateInvoiceView(APIView):
             "success": True,
             "message": f"Invoice {invoice.invoice_no} updated successfully",
             "data": {
-                "id": invoice.id,
-                "invoice_no": invoice.invoice_no,
-                "status": invoice.status,
-                "billing_status": invoice.billing_status,
-                "total_amount": total_amount,
-                "items_count": invoice.items.count(),
-                "returned_from_section": invoice.invoice_return.returned_from_section,
-                "resolution_notes": invoice.invoice_return.resolution_notes
+                "invoice": invoice_data,
+                "summary": {
+                    "id": invoice.id,
+                    "invoice_no": invoice.invoice_no,
+                    "status": invoice.status,
+                    "billing_status": invoice.billing_status,
+                    "total_amount": total_amount,
+                    "items_count": invoice.items.count(),
+                    "returned_from_section": invoice.invoice_returns.order_by('-returned_at').first().returned_from_section if invoice.invoice_returns.exists() else None,
+                    "resolution_notes": invoice.invoice_returns.order_by('-returned_at').first().resolution_notes if invoice.invoice_returns.exists() else None
+                }
             }
         }, status=status.HTTP_200_OK)
 
@@ -1367,8 +1371,8 @@ class BillingInvoicesView(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
         queryset = Invoice.objects.select_related(
-            'customer', 'salesman', 'created_user', 'invoice_return', 'invoice_return__returned_by'
-        ).prefetch_related('items').order_by('-created_at')
+            'customer', 'salesman', 'created_user'
+        ).prefetch_related('items', 'invoice_returns', 'invoice_returns__returned_by').order_by('-created_at')
         
         # If user is not admin, filter to only show their own invoices
         if not user.is_admin_or_superadmin():
@@ -1486,8 +1490,8 @@ class ReturnToBillingView(APIView):
         try:
             # Refresh invoice with all relations
             invoice_refreshed = Invoice.objects.select_related(
-                'customer', 'salesman', 'invoice_return', 'invoice_return__returned_by'
-            ).prefetch_related('items').get(id=invoice.id)
+                'customer', 'salesman'
+            ).prefetch_related('items', 'invoice_returns', 'invoice_returns__returned_by').get(id=invoice.id)
             
             # Serialize full invoice data with picker/packer info
             invoice_data = InvoiceListSerializer(invoice_refreshed).data

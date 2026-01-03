@@ -71,6 +71,7 @@ curl -H "Authorization: Bearer YOUR_TOKEN" \
           "id": 201,
           "name": "Paracetamol 500mg",
           "item_code": "P500",
+          "barcode": "BC-P500",
           "quantity": 2,
           "mrp": 50.0,
           "company_name": "ACME",

@@ -14,7 +14,7 @@ class InvoiceItemSerializer(serializers.ModelSerializer):
     """Serializer for invoice line items"""
     class Meta:
         model = InvoiceItem
-        fields = ['id', 'name', 'item_code', 'quantity', 'mrp', 'company_name', 'packing', 'shelf_location', 'remarks', 'batch_no', 'expiry_date']
+        fields = ['id', 'name', 'item_code', 'barcode', 'quantity', 'mrp', 'company_name', 'packing', 'shelf_location', 'remarks', 'batch_no', 'expiry_date']
 
 
 class CustomerReadSerializer(serializers.ModelSerializer):
@@ -74,7 +74,7 @@ class InvoiceListSerializer(serializers.ModelSerializer):
     def get_return_info(self, obj):
         """Get return information if invoice has been returned"""
         try:
-            return_obj = obj.invoice_return
+            return_obj = obj.invoice_returns.first()  # Get latest return
             return InvoiceReturnSerializer(return_obj).data
         except:
             return None
@@ -253,6 +253,7 @@ class ItemSerializer(serializers.Serializer):
     expiry_date = serializers.DateField(required=False, allow_null=True)
     company_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
     packing = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    barcode = serializers.CharField(required=False, allow_blank=True)
 
 class InvoiceImportSerializer(serializers.Serializer):
     invoice_no = serializers.CharField()
@@ -840,7 +841,7 @@ class ReturnToBillingSerializer(serializers.Serializer):
             })
 
         # Check if already in review (has InvoiceReturn record)
-        if invoice.billing_status == 'REVIEW' or hasattr(invoice, 'invoice_return'):
+        if invoice.billing_status == 'REVIEW' or invoice.invoice_returns.filter(resolved_at__isnull=True).exists():
             raise serializers.ValidationError({
                 "invoice_no": "Invoice has already been sent for review."
             })
