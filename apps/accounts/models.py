@@ -93,7 +93,8 @@ class User(AbstractBaseUser, PermissionsMixin):
         # Operational roles for warehouse / logistics
         PICKER = 'PICKER', 'Picker'  # Handles picking items from warehouse
         PACKER = 'PACKER', 'Packer'  # Handles packing picked items
-        DRIVER = 'DRIVER', 'Driver'  # Handles delivery / transport
+        DRIVER = 'DRIVER', 'Driver'  # Handles transport
+        DELIVERY = 'DELIVERY', 'Delivery'  # Handles delivery/logistics
         BILLING = 'BILLING', 'Billing'  # Handles invoicing / billing tasks
         
 

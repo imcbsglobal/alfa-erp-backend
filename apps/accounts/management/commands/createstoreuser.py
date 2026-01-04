@@ -11,7 +11,7 @@ import getpass
 
 
 class Command(BaseCommand):
-    help = 'Create a store user with a specific role (PICKER, PACKER, DRIVER, BILLING, etc.)'
+    help = 'Create a store user with a specific role (PICKER, PACKER, DRIVER, DELIVERY, BILLING, etc.)'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -154,9 +154,9 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.ERROR('Passwords do not match. Try again.'))
                 continue
 
-            if len(password) < 6:
-                self.stdout.write(self.style.ERROR('Password must be at least 8 characters'))
-                continue
+            # if len(password) < 6:
+            #     self.stdout.write(self.style.ERROR('Password must be at least 8 characters'))
+            #     continue
 
             return password
 

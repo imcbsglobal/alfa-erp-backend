@@ -34,7 +34,7 @@ Notes:
   - Set the password later via administrative tooling or a script (`manage.py changepassword`), or
   - Modify the command to accept a `--password` argument (recommended for CI/automation) — see *Future improvements* below.
 
-Available roles (as of this project): `ADMIN`, `USER`, `SUPERADMIN`, `PICKER`, `PACKER`, `DRIVER`, `BILLING`.
+Available roles (as of this project): `ADMIN`, `USER`, `SUPERADMIN`, `PICKER`, `PACKER`, `DRIVER`, `DELIVERY`, `BILLING`.
 
 Examples:
 
@@ -52,9 +52,10 @@ Available roles:
   4. Picker (PICKER)
   5. Packer (PACKER)
   6. Driver (DRIVER)
-  7. Billing (BILLING)
+  7. Delivery (DELIVERY)
+  8. Billing (BILLING)
 
-Select role (1-7): 4
+Select role (1-8): 4
 Name (optional, press Enter to skip): John Picker
 Password:
 Password (again):
