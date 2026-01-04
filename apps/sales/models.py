@@ -174,6 +174,10 @@ class PackingSession(models.Model):
     def __str__(self):
         return f"Packing - {self.invoice.invoice_no}"
 
+# Add these fields to your DeliverySession model in models.py
+
+# Add these fields to your DeliverySession model in models.py
+
 class DeliverySession(models.Model):
     invoice = models.OneToOneField(Invoice, on_delete=models.CASCADE)
     delivery_type = models.CharField(
@@ -185,6 +189,8 @@ class DeliverySession(models.Model):
         ],
         default="DIRECT"
     )
+    
+    # Existing fields
     assigned_to = models.ForeignKey(
         User, 
         on_delete=models.SET_NULL, 
@@ -209,6 +215,7 @@ class DeliverySession(models.Model):
         max_length=20,
         choices=[
             ("PENDING", "Pending"),
+            ("TO_CONSIDER", "To Consider"),  # ✅ NEW: Waiting for staff assignment
             ("IN_TRANSIT", "In Transit"),
             ("DELIVERED", "Delivered"),
         ],
@@ -216,6 +223,23 @@ class DeliverySession(models.Model):
     )
     notes = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    
+    # ✅ NEW FIELDS FOR COUNTER PICKUP
+    counter_sub_mode = models.CharField(
+        max_length=20,
+        choices=[
+            ("patient", "Direct Patient"),
+            ("company", "Direct Company"),
+        ],
+        blank=True,
+        null=True,
+        help_text="Sub-mode for counter pickup: patient or company"
+    )
+    pickup_person_username = models.CharField(max_length=150, blank=True, null=True)
+    pickup_person_name = models.CharField(max_length=150, blank=True, null=True)
+    pickup_person_phone = models.CharField(max_length=20, blank=True, null=True)
+    pickup_company_name = models.CharField(max_length=255, blank=True, null=True)
+    pickup_company_id = models.CharField(max_length=100, blank=True, null=True)
     
     def __str__(self):
         return f"Delivery - {self.invoice.invoice_no}"

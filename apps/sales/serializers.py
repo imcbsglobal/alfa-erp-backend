@@ -121,32 +121,57 @@ class InvoiceListSerializer(serializers.ModelSerializer):
         try:
             delivery = obj.deliverysession
             
-            # For DISPATCHED status - show who dispatched (assigned_to)
+            # ✅ Return delivery info if session exists (regardless of invoice status)
+            # This ensures delivery_info is always populated when a delivery session exists
+            
+            base_info = {
+                "delivery_type": delivery.delivery_type,
+                "delivery_status": delivery.delivery_status,
+                "courier_name": delivery.courier_name,
+                "tracking_no": delivery.tracking_no,
+                "start_time": delivery.start_time,
+                "end_time": delivery.end_time,
+            }
+            
+            # Add counter pickup specific info
+            if delivery.delivery_type == 'DIRECT':
+                base_info.update({
+                    "counter_sub_mode": delivery.counter_sub_mode,
+                    "pickup_person_username": delivery.pickup_person_username,
+                    "pickup_person_name": delivery.pickup_person_name,
+                    "pickup_person_phone": delivery.pickup_person_phone,
+                    "pickup_company_name": delivery.pickup_company_name,
+                    "pickup_company_id": delivery.pickup_company_id,
+                })
+            
+            # Add person info based on status
             if obj.status == 'DISPATCHED':
-                return {
+                base_info.update({
                     "name": delivery.assigned_to.name if delivery.assigned_to else None,
                     "email": delivery.assigned_to.email if delivery.assigned_to else None,
-                    "delivery_type": delivery.delivery_type,
                     "status": "DISPATCHED",
                     "time": delivery.start_time,
-                    "courier_name": delivery.courier_name,
-                    "tracking_no": delivery.tracking_no,
-                }
-            
-            # For DELIVERED status - show who delivered (delivered_by)
-            if obj.status == 'DELIVERED':
-                return {
+                })
+            elif obj.status == 'DELIVERED':
+                base_info.update({
                     "name": delivery.delivered_by.name if delivery.delivered_by else None,
                     "email": delivery.delivered_by.email if delivery.delivered_by else None,
-                    "delivery_type": delivery.delivery_type,
                     "status": "DELIVERED",
                     "time": delivery.end_time,
-                    "courier_name": delivery.courier_name,
-                    "tracking_no": delivery.tracking_no,
-                }
+                })
+            elif delivery.delivery_status == 'TO_CONSIDER':
+                base_info.update({
+                    "name": delivery.assigned_to.name if delivery.assigned_to else None,
+                    "email": delivery.assigned_to.email if delivery.assigned_to else None,
+                    "status": "TO_CONSIDER",
+                    "time": delivery.start_time,
+                })
             
+            return base_info
+            
+        except DeliverySession.DoesNotExist:
             return None
-        except:
+        except Exception:
             return None
     
     def get_current_handler(self, obj):
@@ -345,6 +370,7 @@ class CompletePickingSerializer(serializers.Serializer):
     invoice_no = serializers.CharField()
     user_email = serializers.EmailField(help_text="Scanned user email for verification")
     notes = serializers.CharField(required=False, allow_blank=True)
+    is_repick = serializers.BooleanField(required=False, default=False)  # ✅ NEW FLAG
     
     def validate(self, data):
         # Validate invoice exists
@@ -353,11 +379,7 @@ class CompletePickingSerializer(serializers.Serializer):
         except Invoice.DoesNotExist:
             raise serializers.ValidationError({"invoice_no": "Invoice not found."})
         
-        # Check if picking session exists
-        try:
-            picking_session = PickingSession.objects.get(invoice=invoice)
-        except PickingSession.DoesNotExist:
-            raise serializers.ValidationError({"invoice_no": "No picking session found for this invoice."})
+        is_repick = data.get('is_repick', False)
         
         # Verify user email
         try:
@@ -365,21 +387,53 @@ class CompletePickingSerializer(serializers.Serializer):
         except User.DoesNotExist:
             raise serializers.ValidationError({"user_email": "User not found. Please scan a valid email."})
         
-        # Verify it's the same user who started picking
+        # ✅ For re-invoiced bills, create or reset picking session automatically
+        if is_repick and invoice.billing_status == 'RE_INVOICED':
+            # Check if picking session exists
+            if hasattr(invoice, 'pickingsession'):
+                picking_session = invoice.pickingsession
+                # Reset the existing session for re-pick
+                picking_session.picker = user
+                picking_session.start_time = timezone.now()
+                picking_session.end_time = None
+                picking_session.picking_status = "PREPARING"
+                picking_session.notes = (picking_session.notes or '') + "\nRe-started for re-invoiced bill"
+                picking_session.save()
+            else:
+                # Create new picking session
+                picking_session = PickingSession.objects.create(
+                    invoice=invoice,
+                    picker=user,
+                    start_time=timezone.now(),
+                    picking_status="PREPARING",
+                    notes="Auto-started for re-invoiced bill",
+                    selected_items=[]
+                )
+            
+            # Update invoice status
+            invoice.status = "PICKING"
+            invoice.save(update_fields=["status"])
+        
+        # Check if picking session exists
+        try:
+            picking_session = PickingSession.objects.get(invoice=invoice)
+        except PickingSession.DoesNotExist:
+            raise serializers.ValidationError({"invoice_no": "No picking session found for this invoice."})
+        
+        # Verify it's the same user who started picking (or re-pick user)
         if picking_session.picker and picking_session.picker.email != user.email:
             raise serializers.ValidationError({
                 "user_email": f"Email mismatch. This invoice was started by {picking_session.picker.name} ({picking_session.picker.email}). Please scan the correct email."
             })
         
-        # Check picking status
-        if picking_session.picking_status == "PICKED":
+        # ✅ Only check if already completed for non-repick cases
+        if not is_repick and picking_session.picking_status == "PICKED":
             raise serializers.ValidationError({"invoice_no": "Picking already completed for this invoice."})
         
         data['invoice'] = invoice
         data['picking_session'] = picking_session
         data['user'] = user
         return data
-
 
 # ===== PACKING SERIALIZERS =====
 
@@ -482,13 +536,31 @@ class CompletePackingSerializer(serializers.Serializer):
 
 # ===== DELIVERY SERIALIZERS =====
 
+# Update these serializers in serializers.py
+
+# Update these serializers in serializers.py
+
 class DeliverySessionCreateSerializer(serializers.Serializer):
-    """Start delivery session - requires user email scan (optional for courier)"""
+    """Start delivery session - handles counter pickup and delivery modes"""
     invoice_no = serializers.CharField()
-    user_email = serializers.EmailField(required=False, allow_blank=True, help_text="Scanned user email (required for DIRECT/INTERNAL delivery)")
     delivery_type = serializers.ChoiceField(choices=['DIRECT', 'COURIER', 'INTERNAL'])
+    
+    # For courier delivery
     courier_name = serializers.CharField(required=False, allow_blank=True)
     tracking_no = serializers.CharField(required=False, allow_blank=True)
+    
+    # For counter pickup (DIRECT)
+    counter_sub_mode = serializers.ChoiceField(
+        choices=['patient', 'company'], 
+        required=False, 
+        allow_blank=True
+    )
+    pickup_person_username = serializers.CharField(required=False, allow_blank=True)
+    pickup_person_name = serializers.CharField(required=False, allow_blank=True)
+    pickup_person_phone = serializers.CharField(required=False, allow_blank=True)
+    pickup_company_name = serializers.CharField(required=False, allow_blank=True)
+    pickup_company_id = serializers.CharField(required=False, allow_blank=True)
+    
     notes = serializers.CharField(required=False, allow_blank=True)
     
     def validate(self, data):
@@ -506,25 +578,47 @@ class DeliverySessionCreateSerializer(serializers.Serializer):
         
         # Prevent duplicate delivery session
         if hasattr(invoice, 'deliverysession'):
-            raise serializers.ValidationError({"invoice_no": "Delivery session already exists for this invoice."})
+            raise serializers.ValidationError({
+                "invoice_no": "Delivery session already exists for this invoice."
+            })
         
         delivery_type = data.get('delivery_type')
-        user_email = data.get('user_email')
         
-        # For DIRECT and INTERNAL, user_email is required
-        if delivery_type in ['DIRECT', 'INTERNAL']:
-            if not user_email:
-                raise serializers.ValidationError({"user_email": "User email scan is required for DIRECT/INTERNAL delivery."})
-            try:
-                user = User.objects.get(email=user_email)
-                data['user'] = user
-            except User.DoesNotExist:
-                raise serializers.ValidationError({"user_email": "User not found. Please scan a valid email."})
+        # For DIRECT (counter pickup), validate required fields
+        if delivery_type == 'DIRECT':
+            counter_sub_mode = data.get('counter_sub_mode')
+            if not counter_sub_mode:
+                raise serializers.ValidationError({
+                    "counter_sub_mode": "Counter sub-mode (patient/company) is required for counter pickup."
+                })
+            
+            # Validate required fields for counter pickup
+            if not data.get('pickup_person_username'):
+                raise serializers.ValidationError({
+                    "pickup_person_username": "Username is required for counter pickup."
+                })
+            if not data.get('pickup_person_name'):
+                raise serializers.ValidationError({
+                    "pickup_person_name": "Person name is required for counter pickup."
+                })
+            if not data.get('pickup_person_phone'):
+                raise serializers.ValidationError({
+                    "pickup_person_phone": "Phone number is required for counter pickup."
+                })
+            
+            # For company pickup, validate company details
+            if counter_sub_mode == 'company':
+                if not data.get('pickup_company_name'):
+                    raise serializers.ValidationError({
+                        "pickup_company_name": "Company name is required for company pickup."
+                    })
+                if not data.get('pickup_company_id'):
+                    raise serializers.ValidationError({
+                        "pickup_company_id": "Company ID is required for company pickup."
+                    })
         
-        # For COURIER, courier_name is helpful
-        if delivery_type == 'COURIER':
-            if not data.get('courier_name'):
-                raise serializers.ValidationError({"courier_name": "Courier name is required for COURIER delivery."})
+        # For COURIER, courier_name is optional (will be added when staff completes delivery)
+        # No additional validation needed here
         
         data['invoice'] = invoice
         return data
@@ -534,8 +628,8 @@ class DeliverySessionReadSerializer(serializers.ModelSerializer):
     """Read serializer for delivery session details"""
     assigned_to_name = serializers.CharField(source='assigned_to.name', read_only=True)
     assigned_to_email = serializers.CharField(source='assigned_to.email', read_only=True)
-    delivered_by_name = serializers.CharField(source='delivered_by.name', read_only=True)  # ✅ ADD
-    delivered_by_email = serializers.CharField(source='delivered_by.email', read_only=True)  # ✅ ADD
+    delivered_by_name = serializers.CharField(source='delivered_by.name', read_only=True)
+    delivered_by_email = serializers.CharField(source='delivered_by.email', read_only=True)
     invoice_no = serializers.CharField(source='invoice.invoice_no', read_only=True)
     duration_minutes = serializers.SerializerMethodField()
     
@@ -544,10 +638,13 @@ class DeliverySessionReadSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'invoice', 'invoice_no', 'delivery_type', 
             'assigned_to', 'assigned_to_name', 'assigned_to_email',
-            'delivered_by', 'delivered_by_name', 'delivered_by_email',  # ✅ ADD THESE
+            'delivered_by', 'delivered_by_name', 'delivered_by_email',
             'courier_name', 'tracking_no',
             'start_time', 'end_time', 'delivery_status', 'notes',
-            'duration_minutes', 'created_at'
+            'duration_minutes', 'created_at',
+            # Counter pickup fields
+            'counter_sub_mode', 'pickup_person_username', 'pickup_person_name',
+            'pickup_person_phone', 'pickup_company_name', 'pickup_company_id'
         ]
     
     def get_duration_minutes(self, obj):
@@ -555,7 +652,6 @@ class DeliverySessionReadSerializer(serializers.ModelSerializer):
             delta = obj.end_time - obj.start_time
             return round(delta.total_seconds() / 60, 2)
         return None
-
 
 class CompleteDeliverySerializer(serializers.Serializer):
     """Complete delivery - requires user email scan for verification"""

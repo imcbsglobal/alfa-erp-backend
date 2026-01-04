@@ -548,7 +548,8 @@ class CompletePickingView(APIView):
     Body: {
         "invoice_no": "INV-001",
         "user_email": "john.doe@company.com",
-        "notes": "Picking completed"
+        "notes": "Picking completed",
+        "is_repick": false  // Set to true for re-invoiced bills
     }
     """
     permission_classes = [IsAuthenticated]
@@ -567,6 +568,7 @@ class CompletePickingView(APIView):
         picking_session = validated_data['picking_session']
         invoice = validated_data['invoice']
         notes = validated_data.get('notes', '')
+        is_repick = validated_data.get('is_repick', False)
         
         # Update picking session
         picking_session.end_time = timezone.now()
@@ -577,7 +579,19 @@ class CompletePickingView(APIView):
         
         # Update invoice status
         invoice.status = "PICKED"
-        invoice.save(update_fields=['status'])
+        
+        # Update billing status if this was a re-pick
+        if is_repick and invoice.billing_status == 'RE_INVOICED':
+            invoice.billing_status = 'BILLED'
+            
+            # Update the InvoiceReturn record
+            if hasattr(invoice, 'invoice_return'):
+                invoice_return = invoice.invoice_return
+                invoice_return.resolved_at = timezone.now()
+                invoice_return.resolved_by = request.user
+                invoice_return.save()
+        
+        invoice.save(update_fields=['status', 'billing_status'])
         
         
         # Emit SSE event
@@ -595,7 +609,7 @@ class CompletePickingView(APIView):
         response_serializer = PickingSessionReadSerializer(picking_session)
         return Response({
             "success": True,
-            "message": f"Picking completed for {invoice.invoice_no}",
+            "message": f"Picking completed for {invoice.invoice_no}" + (" (Re-pick completed)" if is_repick else ""),
             "data": response_serializer.data
         }, status=status.HTTP_200_OK)
 
@@ -678,7 +692,6 @@ class StartPackingView(APIView):
             "data": response_serializer.data
         }, status=status.HTTP_201_CREATED)
 
-
 class CompletePackingView(APIView):
     """
     POST /api/sales/packing/complete/
@@ -739,17 +752,40 @@ class CompletePackingView(APIView):
 
 # ===== DELIVERY WORKFLOW =====
 
+# Update this view in views.py
+
+# Add these views to your views.py
+
 class StartDeliveryView(APIView):
     """
     POST /api/sales/delivery/start/
-    Start delivery session - User scans their email (required for DIRECT/INTERNAL)
-    Body: {
+    Start delivery session
+    
+    For Counter Pickup (DIRECT) - Completes immediately:
+    {
         "invoice_no": "INV-001",
-        "user_email": "driver@company.com",  # Required for DIRECT/INTERNAL
-        "delivery_type": "DIRECT",  # DIRECT, COURIER, INTERNAL
-        "courier_name": "DHL",      # For COURIER type
-        "tracking_no": "TRK123",    # Optional
-        "notes": "Starting delivery"
+        "delivery_type": "DIRECT",
+        "counter_sub_mode": "patient" or "company",
+        "pickup_person_username": "scan_or_entered_username",
+        "pickup_person_name": "John Doe",
+        "pickup_person_phone": "1234567890",
+        "pickup_company_name": "ABC Corp",  // only for company mode
+        "pickup_company_id": "COMP123",     // only for company mode
+        "notes": "Optional notes"
+    }
+    
+    For Courier (COURIER) - Moves to consider list:
+    {
+        "invoice_no": "INV-001",
+        "delivery_type": "COURIER",
+        "notes": "Optional notes"
+    }
+    
+    For Internal Delivery (INTERNAL) - Moves to consider list:
+    {
+        "invoice_no": "INV-001",
+        "delivery_type": "INTERNAL",
+        "notes": "Optional notes"
     }
     """
     permission_classes = [IsAuthenticated]
@@ -766,31 +802,68 @@ class StartDeliveryView(APIView):
         
         validated_data = serializer.validated_data
         invoice = validated_data['invoice']
-        user = validated_data.get('user')
         delivery_type = validated_data['delivery_type']
-        courier_name = validated_data.get('courier_name', '')
-        tracking_no = validated_data.get('tracking_no', '')
-        notes = validated_data.get('notes', '')
+        
+        # Prepare delivery session data
+        delivery_data = {
+            'invoice': invoice,
+            'delivery_type': delivery_type,
+            'notes': validated_data.get('notes', ''),
+            'assigned_to': request.user,  # Person who initiated delivery
+        }
+        
+        # For Counter Pickup (DIRECT) - Complete immediately
+        if delivery_type == 'DIRECT':
+            delivery_data.update({
+                'counter_sub_mode': validated_data.get('counter_sub_mode'),
+                'pickup_person_username': validated_data.get('pickup_person_username'),
+                'pickup_person_name': validated_data.get('pickup_person_name'),
+                'pickup_person_phone': validated_data.get('pickup_person_phone'),
+                'pickup_company_name': validated_data.get('pickup_company_name', ''),
+                'pickup_company_id': validated_data.get('pickup_company_id', ''),
+                'start_time': timezone.now(),
+                'end_time': timezone.now(),  # Counter pickup completes immediately
+                'delivery_status': 'DELIVERED',  # Mark as delivered immediately
+                'delivered_by': request.user,  # Same person who processed it
+            })
+            
+            # Update invoice status to DELIVERED for counter pickup
+            invoice.status = "DELIVERED"
+            message = f"Counter pickup completed - {validated_data.get('counter_sub_mode')}"
+            
+        # For Courier Delivery - Move to consider list (TO_CONSIDER)
+        elif delivery_type == 'COURIER':
+            delivery_data.update({
+                'start_time': timezone.now(),
+                'delivery_status': 'TO_CONSIDER',  # ✅ Waiting for staff assignment
+            })
+            
+            # Keep invoice status as PACKED (not yet dispatched)
+            invoice.status = "PACKED"
+            message = "Invoice moved to Courier Delivery consider list. Assign staff to proceed."
+            
+        # For Internal Delivery - Move to consider list (TO_CONSIDER)
+        elif delivery_type == 'INTERNAL':
+            delivery_data.update({
+                'start_time': timezone.now(),
+                'delivery_status': 'TO_CONSIDER',  # ✅ Waiting for staff assignment
+            })
+            
+            # Keep invoice status as PACKED (not yet dispatched)
+            invoice.status = "PACKED"
+            message = "Invoice moved to Company Delivery consider list. Assign staff to proceed."
         
         # Create delivery session
-        delivery_session = DeliverySession.objects.create(
-            invoice=invoice,
-            delivery_type=delivery_type,
-            assigned_to=user,
-            courier_name=courier_name,
-            tracking_no=tracking_no,
-            start_time=timezone.now(),
-            delivery_status="IN_TRANSIT",
-            notes=notes
-        )
+        delivery_session = DeliverySession.objects.create(**delivery_data)
         
-        # Update invoice status
-        invoice.status = "DISPATCHED"
+        # Save invoice status
         invoice.save(update_fields=['status'])
         
         # Emit SSE event
         try:
-            invoice_refreshed = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(id=invoice.id)
+            invoice_refreshed = Invoice.objects.select_related(
+                'customer', 'salesman'
+            ).prefetch_related('items').get(id=invoice.id)
             invoice_data = InvoiceListSerializer(invoice_refreshed).data
             django_eventstream.send_event(
                 INVOICE_CHANNEL,
@@ -801,13 +874,151 @@ class StartDeliveryView(APIView):
             logger.exception("Failed to emit delivery start event")
         
         response_serializer = DeliverySessionReadSerializer(delivery_session)
+        
         return Response({
             "success": True,
-            "message": f"Delivery started - {delivery_type}",
+            "message": message,
             "data": response_serializer.data
         }, status=status.HTTP_201_CREATED)
 
 
+class DeliveryConsiderListView(generics.ListAPIView):
+    """
+    GET /api/sales/delivery/consider-list/
+    
+    List invoices in the delivery consider list (waiting for staff assignment)
+    
+    Query Parameters:
+    - delivery_type: Filter by delivery type (COURIER, INTERNAL)
+    - search: Search by invoice number or customer name
+    - page: Page number
+    - page_size: Items per page
+    """
+    serializer_class = InvoiceListSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = InvoiceListPagination
+    
+    def get_queryset(self):
+        # Get invoices that have delivery sessions with TO_CONSIDER status
+        queryset = Invoice.objects.filter(
+            deliverysession__delivery_status='TO_CONSIDER'
+        ).select_related(
+            'customer', 'salesman', 'deliverysession'
+        ).prefetch_related('items').order_by('-deliverysession__created_at')
+        
+        # Filter by delivery type
+        delivery_type = self.request.query_params.get('delivery_type', '').upper()
+        if delivery_type and delivery_type in ['COURIER', 'INTERNAL']:
+            queryset = queryset.filter(deliverysession__delivery_type=delivery_type)
+        
+        # Search filter
+        search = self.request.query_params.get('search', '').strip()
+        if search:
+            from django.db.models import Q
+            queryset = queryset.filter(
+                Q(invoice_no__icontains=search) |
+                Q(customer__name__icontains=search) |
+                Q(customer__phone1__icontains=search)
+            )
+        
+        return queryset
+
+
+class AssignDeliveryStaffView(APIView):
+    """
+    POST /api/sales/delivery/assign/
+    
+    Assign staff to a delivery in the consider list
+    
+    Request Body:
+    {
+        "invoice_no": "INV-001",
+        "user_email": "staff@company.com",
+        "delivery_type": "COURIER"  // COURIER or INTERNAL
+    }
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        invoice_no = request.data.get('invoice_no')
+        user_email = request.data.get('user_email')
+        
+        if not invoice_no or not user_email:
+            return Response({
+                "success": False,
+                "message": "invoice_no and user_email are required"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Validate invoice
+        try:
+            invoice = Invoice.objects.get(invoice_no=invoice_no)
+        except Invoice.DoesNotExist:
+            return Response({
+                "success": False,
+                "message": "Invoice not found"
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Validate user
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        try:
+            assigned_user = User.objects.get(email=user_email)
+        except User.DoesNotExist:
+            return Response({
+                "success": False,
+                "message": "User not found. Please provide a valid email."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get delivery session
+        try:
+            delivery_session = DeliverySession.objects.get(invoice=invoice)
+        except DeliverySession.DoesNotExist:
+            return Response({
+                "success": False,
+                "message": "No delivery session found for this invoice"
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if already assigned
+        if delivery_session.delivery_status != 'TO_CONSIDER':
+            return Response({
+                "success": False,
+                "message": f"Delivery is already in {delivery_session.delivery_status} status"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Assign staff and update status
+        delivery_session.assigned_to = assigned_user
+        delivery_session.delivery_status = 'IN_TRANSIT'
+        delivery_session.start_time = timezone.now()
+        delivery_session.save()
+        
+        # Update invoice status to DISPATCHED
+        invoice.status = 'DISPATCHED'
+        invoice.save(update_fields=['status'])
+        
+        # Emit SSE event
+        try:
+            invoice_refreshed = Invoice.objects.select_related(
+                'customer', 'salesman'
+            ).prefetch_related('items').get(id=invoice.id)
+            invoice_data = InvoiceListSerializer(invoice_refreshed).data
+            django_eventstream.send_event(
+                INVOICE_CHANNEL,
+                'message',
+                invoice_data
+            )
+        except Exception:
+            logger.exception("Failed to emit delivery assignment event")
+        
+        return Response({
+            "success": True,
+            "message": f"Staff {assigned_user.name} assigned to {delivery_session.get_delivery_type_display()}",
+            "data": {
+                "invoice_no": invoice.invoice_no,
+                "assigned_to": assigned_user.email,
+                "delivery_type": delivery_session.delivery_type,
+                "delivery_status": delivery_session.delivery_status
+            }
+        }, status=status.HTTP_200_OK)
 class CompleteDeliveryView(APIView):
     """
     POST /api/sales/delivery/complete/

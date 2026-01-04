@@ -21,6 +21,8 @@ from .views import (
     BillingInvoicesView,
     ReturnToBillingView,
     CourierViewSet,
+    DeliveryConsiderListView,
+    AssignDeliveryStaffView,
 )
 
 router = DefaultRouter()
@@ -54,7 +56,8 @@ urlpatterns = [
     path("delivery/start/", StartDeliveryView.as_view(), name="delivery-start"),
     path("delivery/complete/", CompleteDeliveryView.as_view(), name="delivery-complete"),
     path("delivery/history/", DeliveryHistoryView.as_view(), name="delivery-history"),
-
+    path("delivery/consider-list/", DeliveryConsiderListView.as_view(), name="delivery-consider-list"),
+    path("delivery/assign/", AssignDeliveryStaffView.as_view(), name="delivery-assign-staff"),
     # Billing endpoints
     path("billing/invoices/", BillingInvoicesView.as_view(), name="billing-invoices"),
     path("billing/return/", ReturnToBillingView.as_view(), name="billing-return"),
