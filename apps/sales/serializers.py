@@ -660,6 +660,10 @@ class CompleteDeliverySerializer(serializers.Serializer):
     delivery_status = serializers.ChoiceField(choices=['DELIVERED', 'IN_TRANSIT'], default='DELIVERED')
     notes = serializers.CharField(required=False, allow_blank=True)
     
+    # Courier-specific fields
+    courier_name = serializers.CharField(required=False, allow_blank=True, help_text="Courier name for COURIER delivery type")
+    tracking_no = serializers.CharField(required=False, allow_blank=True, help_text="Tracking number for COURIER delivery")
+    
     def validate(self, data):
         # Validate invoice
         try:
@@ -672,6 +676,14 @@ class CompleteDeliverySerializer(serializers.Serializer):
             delivery_session = DeliverySession.objects.get(invoice=invoice)
         except DeliverySession.DoesNotExist:
             raise serializers.ValidationError({"invoice_no": "No delivery session found for this invoice."})
+        
+        # Validate courier details for COURIER type deliveries
+        if delivery_session.delivery_type == 'COURIER' and data.get('delivery_status') == 'DELIVERED':
+            courier_name = data.get('courier_name', '').strip()
+            if not courier_name:
+                raise serializers.ValidationError({
+                    "courier_name": "Courier name is required for completing courier deliveries."
+                })
         
         # If user_email provided, verify
         user_email = data.get('user_email')
@@ -695,7 +707,6 @@ class CompleteDeliverySerializer(serializers.Serializer):
         data['invoice'] = invoice
         data['delivery_session'] = delivery_session
         return data
-
 
 # ===== History Serializers =====
 

@@ -924,32 +924,57 @@ class DeliveryConsiderListView(generics.ListAPIView):
         return queryset
 
 
+from apps.accounts.models import Courier
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from django.utils import timezone
+
+# In views.py - Update AssignDeliveryStaffView
+
 class AssignDeliveryStaffView(APIView):
     """
     POST /api/sales/delivery/assign/
     
-    Assign staff to a delivery in the consider list
+    Assign a staff member or courier to handle a delivery
     
-    Request Body:
+    For INTERNAL (Company Delivery):
+    - Assigns staff and moves to IN_TRANSIT
+    - Invoice becomes DISPATCHED
+    - Shows in staff's "My Deliveries" page
+    
+    For COURIER:
+    - Just records the courier assignment
+    - Stays in TO_CONSIDER status
+    - Waits for slip upload to complete
+    
+    Body:
     {
         "invoice_no": "INV-001",
-        "user_email": "staff@company.com",
-        "delivery_type": "COURIER"  // COURIER or INTERNAL
+        "user_email": "staff@company.com",  # For INTERNAL
+        "courier_id": "courier_uuid",        # For COURIER
+        "delivery_type": "INTERNAL" or "COURIER"
     }
     """
     permission_classes = [IsAuthenticated]
     
     def post(self, request):
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        
         invoice_no = request.data.get('invoice_no')
         user_email = request.data.get('user_email')
+        courier_id = request.data.get('courier_id')
+        delivery_type = request.data.get('delivery_type', 'INTERNAL')
         
-        if not invoice_no or not user_email:
+        if not invoice_no:
             return Response({
                 "success": False,
-                "message": "invoice_no and user_email are required"
+                "message": "invoice_no is required"
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Validate invoice
+        # Get invoice
         try:
             invoice = Invoice.objects.get(invoice_no=invoice_no)
         except Invoice.DoesNotExist:
@@ -958,44 +983,86 @@ class AssignDeliveryStaffView(APIView):
                 "message": "Invoice not found"
             }, status=status.HTTP_404_NOT_FOUND)
         
-        # Validate user
-        from django.contrib.auth import get_user_model
-        User = get_user_model()
-        try:
-            assigned_user = User.objects.get(email=user_email)
-        except User.DoesNotExist:
-            return Response({
-                "success": False,
-                "message": "User not found. Please provide a valid email."
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
         # Get delivery session
         try:
-            delivery_session = DeliverySession.objects.get(invoice=invoice)
+            delivery = DeliverySession.objects.get(invoice=invoice)
         except DeliverySession.DoesNotExist:
             return Response({
                 "success": False,
-                "message": "No delivery session found for this invoice"
+                "message": "Delivery session not found"
             }, status=status.HTTP_404_NOT_FOUND)
         
-        # Check if already assigned
-        if delivery_session.delivery_status != 'TO_CONSIDER':
+        # Check if delivery is in TO_CONSIDER status
+        if delivery.delivery_status != 'TO_CONSIDER':
             return Response({
                 "success": False,
-                "message": f"Delivery is already in {delivery_session.delivery_status} status"
+                "message": f"Delivery is not in consider list. Current status: {delivery.delivery_status}"
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Assign staff and update status
-        delivery_session.assigned_to = assigned_user
-        delivery_session.delivery_status = 'IN_TRANSIT'
-        delivery_session.start_time = timezone.now()
-        delivery_session.save()
+        # ✅ HANDLE INTERNAL (COMPANY DELIVERY)
+        if delivery.delivery_type == 'INTERNAL':
+            if not user_email:
+                return Response({
+                    "success": False,
+                    "message": "user_email is required for company delivery"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get user by email
+            try:
+                assigned_user = User.objects.get(email=user_email)
+            except User.DoesNotExist:
+                return Response({
+                    "success": False,
+                    "message": "User not found with this email"
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # ✅ Move to IN_TRANSIT - shows in "My Deliveries"
+            delivery.assigned_to = assigned_user
+            delivery.delivery_status = 'IN_TRANSIT'
+            delivery.start_time = timezone.now()
+            delivery.save()
+            
+            # ✅ Update invoice to DISPATCHED
+            invoice.status = 'DISPATCHED'
+            invoice.save(update_fields=['status'])
+            
+            message = f"Company delivery assigned to {assigned_user.name}. Delivery moved to their active tasks."
         
-        # Update invoice status to DISPATCHED
-        invoice.status = 'DISPATCHED'
-        invoice.save(update_fields=['status'])
+        # ✅ HANDLE COURIER
+        elif delivery.delivery_type == 'COURIER':
+            if not courier_id:
+                return Response({
+                    "success": False,
+                    "message": "courier_id is required for courier delivery"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get courier
+            try:
+                courier = Courier.objects.get(courier_id=courier_id)
+            except Courier.DoesNotExist:
+                return Response({
+                    "success": False,
+                    "message": "Courier not found"
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # ✅ Just record courier assignment, keep in TO_CONSIDER
+            # Waiting for slip upload to complete the delivery
+            delivery.courier_name = courier.courier_name
+            delivery.assigned_to = request.user  # Who assigned the courier
+            # ✅ DON'T change status - stays TO_CONSIDER
+            delivery.save()
+            
+            # ✅ DON'T change invoice status yet
+            
+            message = f"Courier '{courier.courier_name}' assigned. Please upload courier slip to complete delivery."
         
-        # Emit SSE event
+        else:
+            return Response({
+                "success": False,
+                "message": f"Invalid delivery type: {delivery.delivery_type}"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Send SSE event
         try:
             invoice_refreshed = Invoice.objects.select_related(
                 'customer', 'salesman'
@@ -1011,14 +1078,113 @@ class AssignDeliveryStaffView(APIView):
         
         return Response({
             "success": True,
-            "message": f"Staff {assigned_user.name} assigned to {delivery_session.get_delivery_type_display()}",
+            "message": message,
             "data": {
                 "invoice_no": invoice.invoice_no,
-                "assigned_to": assigned_user.email,
-                "delivery_type": delivery_session.delivery_type,
-                "delivery_status": delivery_session.delivery_status
+                "delivery_status": delivery.delivery_status,
+                "delivery_type": delivery.delivery_type,
+                "invoice_status": invoice.status
             }
         }, status=status.HTTP_200_OK)
+
+
+class UploadCourierSlipView(APIView):
+    """
+    POST /api/sales/delivery/upload-slip/
+    
+    Upload courier slip and COMPLETE courier delivery
+    This moves the delivery directly to DELIVERED status and history
+    
+    Body (FormData):
+    - invoice_no: Invoice number
+    - courier_slip: File (image or PDF)
+    - tracking_no: Tracking number (optional)
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        invoice_no = request.data.get("invoice_no")
+        slip = request.FILES.get("courier_slip")
+        tracking_no = request.data.get("tracking_no", "")
+
+        if not invoice_no or not slip:
+            return Response({
+                "success": False,
+                "message": "invoice_no and courier_slip are required"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            invoice = Invoice.objects.get(invoice_no=invoice_no)
+        except Invoice.DoesNotExist:
+            return Response({
+                "success": False,
+                "message": "Invoice not found"
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            delivery = DeliverySession.objects.get(invoice=invoice)
+        except DeliverySession.DoesNotExist:
+            return Response({
+                "success": False,
+                "message": "Delivery session not found"
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # ✅ Validate this is a COURIER delivery
+        if delivery.delivery_type != 'COURIER':
+            return Response({
+                "success": False,
+                "message": "This endpoint is only for courier deliveries"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # ✅ Check if courier was assigned
+        if not delivery.courier_name:
+            return Response({
+                "success": False,
+                "message": "Please assign a courier first before uploading slip"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # ✅ Complete the courier delivery
+        delivery.courier_slip = slip
+        if tracking_no:
+            delivery.tracking_no = tracking_no
+        
+        # ✅ Mark as DELIVERED - goes directly to history
+        delivery.delivery_status = "DELIVERED"
+        delivery.start_time = delivery.start_time or timezone.now()
+        delivery.end_time = timezone.now()
+        delivery.delivered_by = request.user
+        delivery.save()
+
+        # ✅ Update invoice to DELIVERED
+        invoice.status = "DELIVERED"
+        invoice.save(update_fields=["status"])
+
+        # Send SSE event
+        try:
+            invoice_refreshed = Invoice.objects.select_related(
+                'customer', 'salesman'
+            ).prefetch_related('items').get(id=invoice.id)
+            invoice_data = InvoiceListSerializer(invoice_refreshed).data
+            django_eventstream.send_event(
+                INVOICE_CHANNEL,
+                'message',
+                invoice_data
+            )
+        except Exception:
+            logger.exception("Failed to emit courier delivery complete event")
+
+        return Response({
+            "success": True,
+            "message": "Courier slip uploaded. Delivery completed and moved to history.",
+            "data": {
+                "invoice_no": invoice.invoice_no,
+                "invoice_status": invoice.status,
+                "delivery_status": delivery.delivery_status,
+                "courier_name": delivery.courier_name,
+                "tracking_no": delivery.tracking_no
+            }
+        }, status=status.HTTP_200_OK)
+        
 class CompleteDeliveryView(APIView):
     """
     POST /api/sales/delivery/complete/
@@ -1027,6 +1193,8 @@ class CompleteDeliveryView(APIView):
         "invoice_no": "INV-001",
         "user_email": "driver@company.com",  # Optional for COURIER
         "delivery_status": "DELIVERED",  # DELIVERED or IN_TRANSIT
+        "courier_name": "DHL",  # Required for COURIER type
+        "tracking_no": "ABC123",  # Optional for COURIER type
         "notes": "Delivered to customer"
     }
     """
@@ -1048,12 +1216,24 @@ class CompleteDeliveryView(APIView):
         delivery_status = validated_data.get('delivery_status', 'DELIVERED')
         notes = validated_data.get('notes', '')
         
-        # ✅ SET delivered_by to the user who completed delivery
+        # Update courier information if provided (for COURIER deliveries)
+        if delivery_session.delivery_type == 'COURIER':
+            courier_name = validated_data.get('courier_name', '').strip()
+            tracking_no = validated_data.get('tracking_no', '').strip()
+            
+            if courier_name:
+                delivery_session.courier_name = courier_name
+            if tracking_no:
+                delivery_session.tracking_no = tracking_no
+        
+        # Set delivered_by to the user who completed delivery
         delivery_session.delivered_by = request.user
         delivery_session.end_time = timezone.now()
         delivery_session.delivery_status = delivery_status
+        
         if notes:
             delivery_session.notes = (delivery_session.notes or '') + f"\n{notes}"
+        
         delivery_session.save()
         
         # Update invoice status
