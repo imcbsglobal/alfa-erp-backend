@@ -939,16 +939,6 @@ class AssignDeliveryStaffView(APIView):
     
     Assign a staff member or courier to handle a delivery
     
-    For INTERNAL (Company Delivery):
-    - Assigns staff and moves to IN_TRANSIT
-    - Invoice becomes DISPATCHED
-    - Shows in staff's "My Deliveries" page
-    
-    For COURIER:
-    - Just records the courier assignment
-    - Stays in TO_CONSIDER status
-    - Waits for slip upload to complete
-    
     Body:
     {
         "invoice_no": "INV-001",
@@ -968,6 +958,7 @@ class AssignDeliveryStaffView(APIView):
         courier_id = request.data.get('courier_id')
         delivery_type = request.data.get('delivery_type', 'INTERNAL')
         
+        # Validation
         if not invoice_no:
             return Response({
                 "success": False,
@@ -992,6 +983,13 @@ class AssignDeliveryStaffView(APIView):
                 "message": "Delivery session not found"
             }, status=status.HTTP_404_NOT_FOUND)
         
+        # Validate delivery type matches
+        if delivery.delivery_type != delivery_type:
+            return Response({
+                "success": False,
+                "message": f"Delivery type mismatch. Expected {delivery.delivery_type}, got {delivery_type}"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         # Check if delivery is in TO_CONSIDER status
         if delivery.delivery_status != 'TO_CONSIDER':
             return Response({
@@ -999,7 +997,7 @@ class AssignDeliveryStaffView(APIView):
                 "message": f"Delivery is not in consider list. Current status: {delivery.delivery_status}"
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # ✅ HANDLE INTERNAL (COMPANY DELIVERY)
+        # HANDLE INTERNAL (COMPANY DELIVERY)
         if delivery.delivery_type == 'INTERNAL':
             if not user_email:
                 return Response({
@@ -1007,7 +1005,6 @@ class AssignDeliveryStaffView(APIView):
                     "message": "user_email is required for company delivery"
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Get user by email
             try:
                 assigned_user = User.objects.get(email=user_email)
             except User.DoesNotExist:
@@ -1016,19 +1013,17 @@ class AssignDeliveryStaffView(APIView):
                     "message": "User not found with this email"
                 }, status=status.HTTP_404_NOT_FOUND)
             
-            # ✅ Move to IN_TRANSIT - shows in "My Deliveries"
             delivery.assigned_to = assigned_user
             delivery.delivery_status = 'IN_TRANSIT'
             delivery.start_time = timezone.now()
             delivery.save()
             
-            # ✅ Update invoice to DISPATCHED
             invoice.status = 'DISPATCHED'
             invoice.save(update_fields=['status'])
             
             message = f"Company delivery assigned to {assigned_user.name}. Delivery moved to their active tasks."
         
-        # ✅ HANDLE COURIER
+        # HANDLE COURIER
         elif delivery.delivery_type == 'COURIER':
             if not courier_id:
                 return Response({
@@ -1036,7 +1031,6 @@ class AssignDeliveryStaffView(APIView):
                     "message": "courier_id is required for courier delivery"
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Get courier
             try:
                 courier = Courier.objects.get(courier_id=courier_id)
             except Courier.DoesNotExist:
@@ -1045,14 +1039,11 @@ class AssignDeliveryStaffView(APIView):
                     "message": "Courier not found"
                 }, status=status.HTTP_404_NOT_FOUND)
             
-            # ✅ Just record courier assignment, keep in TO_CONSIDER
-            # Waiting for slip upload to complete the delivery
+            # Record courier assignment, keep in TO_CONSIDER
             delivery.courier_name = courier.courier_name
-            delivery.assigned_to = request.user  # Who assigned the courier
-            # ✅ DON'T change status - stays TO_CONSIDER
+            delivery.assigned_to = request.user
+            # Keep status as TO_CONSIDER - waiting for slip upload
             delivery.save()
-            
-            # ✅ DON'T change invoice status yet
             
             message = f"Courier '{courier.courier_name}' assigned. Please upload courier slip to complete delivery."
         
@@ -1083,10 +1074,10 @@ class AssignDeliveryStaffView(APIView):
                 "invoice_no": invoice.invoice_no,
                 "delivery_status": delivery.delivery_status,
                 "delivery_type": delivery.delivery_type,
-                "invoice_status": invoice.status
+                "invoice_status": invoice.status,
+                "courier_name": delivery.courier_name if delivery.delivery_type == 'COURIER' else None
             }
         }, status=status.HTTP_200_OK)
-
 
 class UploadCourierSlipView(APIView):
     """
