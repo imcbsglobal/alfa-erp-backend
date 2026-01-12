@@ -802,6 +802,7 @@ class DeliveryHistorySerializer(serializers.ModelSerializer):
     items = InvoiceItemSerializer(source='invoice.items', many=True, read_only=True)
     total_amount = serializers.SerializerMethodField()
     duration = serializers.SerializerMethodField()
+    courier_slip_url = serializers.SerializerMethodField()  # ✅ NEW FIELD
     
     class Meta:
         model = DeliverySession
@@ -810,7 +811,8 @@ class DeliveryHistorySerializer(serializers.ModelSerializer):
             'customer_name', 'customer_email', 'customer_phone', 'customer_address',
             'salesman_name', 'delivery_type', 'delivery_user_email', 'delivery_user_name',
             'courier_name', 'tracking_no', 'delivery_status', 'items', 'total_amount',
-            'start_time', 'end_time', 'duration', 'notes', 'created_at'
+            'start_time', 'end_time', 'duration', 'notes', 'created_at',
+            'courier_slip_url'  # ✅ ADD TO FIELDS
         ]
     
     def get_total_amount(self, obj):
@@ -822,7 +824,15 @@ class DeliveryHistorySerializer(serializers.ModelSerializer):
             delta = obj.end_time - obj.start_time
             return int(delta.total_seconds() // 60)  # duration in minutes
         return None
-
+    
+    def get_courier_slip_url(self, obj):
+        """Return the full URL of the courier slip if it exists"""
+        if obj.courier_slip:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.courier_slip.url)
+            return obj.courier_slip.url
+        return None
 
 # ===== Billing Serializers =====
 

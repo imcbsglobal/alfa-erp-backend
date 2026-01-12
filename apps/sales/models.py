@@ -235,6 +235,7 @@ class DeliverySession(models.Model):
         null=True,
         help_text="Sub-mode for counter pickup: patient or company"
     )
+    courier_slip = models.FileField(upload_to='courier_slips/', blank=True, null=True)
     pickup_person_username = models.CharField(max_length=150, blank=True, null=True)
     pickup_person_name = models.CharField(max_length=150, blank=True, null=True)
     pickup_person_phone = models.CharField(max_length=20, blank=True, null=True)
