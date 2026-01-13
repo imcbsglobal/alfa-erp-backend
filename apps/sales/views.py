@@ -1530,13 +1530,13 @@ class BillingInvoicesView(generics.ListAPIView):
     GET /api/sales/billing/invoices/
     List invoices for the billing section.
     
-    - Regular users see only their own created invoices (by created_by or created_user)
+    - Regular users see only invoices where they are the salesman
     - Admin/superadmin see all invoices
     
     Query Parameters:
     - status: Filter by invoice status (INVOICED, PICKING, etc.)
     - billing_status: Filter by billing status (BILLED, REVIEW, RE_INVOICED)
-    - created_by: Filter by created_by string field (for admin)
+    - salesman: Filter by salesman name (for admin)
     
     Authentication: Required
     """
@@ -1550,14 +1550,12 @@ class BillingInvoicesView(generics.ListAPIView):
             'customer', 'salesman', 'created_user'
         ).prefetch_related('items', 'invoice_returns', 'invoice_returns__returned_by').order_by('-created_at')
         
-        # If user is not admin, filter to only show their own invoices
+        # If user is not admin, filter to only show invoices where they are the salesman
         if not user.is_admin_or_superadmin():
-            # Filter by created_user or created_by matching user's email or name
+            # Filter by salesman matching user's name
             from django.db.models import Q
             queryset = queryset.filter(
-                Q(created_user=user) | 
-                Q(created_by=self.request.user.email) | 
-                Q(created_by__icontains=self.request.user.name)
+                salesman__name__iexact=user.name
             )
         
         # Filter by invoice status
@@ -1570,10 +1568,10 @@ class BillingInvoicesView(generics.ListAPIView):
         if billing_status_list:
             queryset = queryset.filter(billing_status__in=billing_status_list)
         
-        # Filter by created_by (for admin searches)
-        created_by = self.request.query_params.get('created_by')
-        if created_by and user.is_admin_or_superadmin():
-            queryset = queryset.filter(created_by__icontains=created_by)
+        # Filter by salesman (for admin searches)
+        salesman_name = self.request.query_params.get('salesman')
+        if salesman_name and user.is_admin_or_superadmin():
+            queryset = queryset.filter(salesman__name__icontains=salesman_name)
         
         return queryset
 
