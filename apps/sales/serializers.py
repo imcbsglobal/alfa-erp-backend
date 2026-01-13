@@ -663,6 +663,10 @@ class CompleteDeliverySerializer(serializers.Serializer):
     # Courier-specific fields
     courier_name = serializers.CharField(required=False, allow_blank=True, help_text="Courier name for COURIER delivery type")
     tracking_no = serializers.CharField(required=False, allow_blank=True, help_text="Tracking number for COURIER delivery")
+    delivery_latitude = serializers.DecimalField(max_digits=10, decimal_places=8, required=False, allow_null=True)
+    delivery_longitude = serializers.DecimalField(max_digits=11, decimal_places=8, required=False, allow_null=True)
+    delivery_location_address = serializers.CharField(required=False, allow_blank=True)
+    delivery_location_accuracy = serializers.FloatField(required=False, allow_null=True)
     
     def validate(self, data):
         # Validate invoice
@@ -812,7 +816,8 @@ class DeliveryHistorySerializer(serializers.ModelSerializer):
             'salesman_name', 'delivery_type', 'delivery_user_email', 'delivery_user_name',
             'courier_name', 'tracking_no', 'delivery_status', 'items', 'total_amount',
             'start_time', 'end_time', 'duration', 'notes', 'created_at',
-            'courier_slip_url'  # ✅ ADD TO FIELDS
+            'courier_slip_url','delivery_latitude', 'delivery_longitude', 
+            'delivery_location_address', 'delivery_location_accuracy'
         ]
     
     def get_total_amount(self, obj):

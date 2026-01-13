@@ -235,6 +235,30 @@ class DeliverySession(models.Model):
         null=True,
         help_text="Sub-mode for counter pickup: patient or company"
     )
+    delivery_latitude = models.DecimalField(
+        max_digits=10, 
+        decimal_places=8, 
+        null=True, 
+        blank=True,
+        help_text="Latitude where delivery was completed"
+    )
+    delivery_longitude = models.DecimalField(
+        max_digits=11, 
+        decimal_places=8, 
+        null=True, 
+        blank=True,
+        help_text="Longitude where delivery was completed"
+    )
+    delivery_location_address = models.TextField(
+        null=True, 
+        blank=True,
+        help_text="Reverse geocoded address of delivery location"
+    )
+    delivery_location_accuracy = models.FloatField(
+        null=True, 
+        blank=True,
+        help_text="GPS accuracy in meters"
+    )
     courier_slip = models.FileField(upload_to='courier_slips/', blank=True, null=True)
     pickup_person_username = models.CharField(max_length=150, blank=True, null=True)
     pickup_person_name = models.CharField(max_length=150, blank=True, null=True)

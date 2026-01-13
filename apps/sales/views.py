@@ -1216,7 +1216,12 @@ class CompleteDeliveryView(APIView):
                 delivery_session.courier_name = courier_name
             if tracking_no:
                 delivery_session.tracking_no = tracking_no
-        
+                
+        if delivery_session.delivery_type == 'INTERNAL':
+            delivery_session.delivery_latitude = validated_data.get('delivery_latitude')
+            delivery_session.delivery_longitude = validated_data.get('delivery_longitude')
+            delivery_session.delivery_location_address = validated_data.get('delivery_location_address', '')
+            delivery_session.delivery_location_accuracy = validated_data.get('delivery_location_accuracy')
         # Set delivered_by to the user who completed delivery
         delivery_session.delivered_by = request.user
         delivery_session.end_time = timezone.now()
