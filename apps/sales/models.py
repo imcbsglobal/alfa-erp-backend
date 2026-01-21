@@ -31,6 +31,7 @@ class Invoice(models.Model):
     created_user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_invoices")
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE)
     remarks = models.TextField(blank=True, null=True)
+    total = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Manually entered total amount")
     status = models.CharField(
         max_length=20,
         choices=[

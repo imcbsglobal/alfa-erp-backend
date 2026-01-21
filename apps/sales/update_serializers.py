@@ -51,6 +51,7 @@ class InvoiceUpdateSerializer(serializers.Serializer):
         required=False
     )
     remarks = serializers.CharField(required=False, allow_blank=True)
+    total = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True)
     
     # Customer updates (optional)
     customer = serializers.DictField(required=False, help_text="Customer data to update")
@@ -114,6 +115,9 @@ class InvoiceUpdateSerializer(serializers.Serializer):
         
         if 'remarks' in validated_data:
             invoice.remarks = validated_data['remarks']
+        
+        if 'total' in validated_data:
+            invoice.total = validated_data['total']
         
         # Update customer if provided
         if 'customer' in validated_data:
