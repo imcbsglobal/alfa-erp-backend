@@ -8,6 +8,32 @@ from django.contrib.auth import get_user_model
 User = get_user_model()
 
 
+def validate_user_has_menu_access(user, menu_code):
+    """
+    Validate that a user has access to a specific menu.
+    
+    Args:
+        user: User instance
+        menu_code: Menu code string (e.g., 'my_assigned_picking', 'my_assigned_packing')
+    
+    Returns:
+        bool: True if user has access, False otherwise
+    """
+    from apps.accesscontrol.models import UserMenu, MenuItem
+    
+    try:
+        # Check if menu exists and user has access to it
+        menu_item = MenuItem.objects.get(code=menu_code, is_active=True)
+        has_access = UserMenu.objects.filter(
+            user=user,
+            menu=menu_item,
+            is_active=True
+        ).exists()
+        return has_access
+    except MenuItem.DoesNotExist:
+        return False
+
+
 # ===== Serializers for list/detail views =====
 
 class InvoiceItemSerializer(serializers.ModelSerializer):
@@ -318,6 +344,12 @@ class PickingSessionCreateSerializer(serializers.Serializer):
             user = User.objects.get(email=data['user_email'])
         except User.DoesNotExist:
             raise serializers.ValidationError({"user_email": "User not found. Please scan a valid email."})
+        
+        # Validate menu access - user must have 'my_assigned_picking' menu access
+        if not validate_user_has_menu_access(user, 'my_assigned_picking'):
+            raise serializers.ValidationError({
+                "user_email": f"User {user.email} does not have access to picking functionality. Please contact admin to assign the 'My Assigned Picking' menu."
+            })
 
         data['invoice'] = invoice
         data['user'] = user
@@ -466,6 +498,12 @@ class PackingSessionCreateSerializer(serializers.Serializer):
             user = User.objects.get(email=data['user_email'])
         except User.DoesNotExist:
             raise serializers.ValidationError({"user_email": "User not found. Please scan a valid email."})
+        
+        # Validate menu access - user must have 'my_assigned_packing' menu access
+        if not validate_user_has_menu_access(user, 'my_assigned_packing'):
+            raise serializers.ValidationError({
+                "user_email": f"User {user.email} does not have access to packing functionality. Please contact admin to assign the 'My Assigned Packing' menu."
+            })
         
         data['invoice'] = invoice
         data['user'] = user
