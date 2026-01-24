@@ -508,7 +508,7 @@ class StartPickingView(APIView):
         if not serializer.is_valid():
             return Response({
                 "success": False,
-                "message": "Validation failed",
+                "message": "Privilege Not Given",
                 "errors": serializer.errors
             }, status=status.HTTP_400_BAD_REQUEST)
         

@@ -160,7 +160,7 @@ def not_found_response(message='Resource not found'):
     return error_response(message=message, status_code=status.HTTP_404_NOT_FOUND)
 
 
-def validation_error_response(errors, message='Validation failed'):
+def validation_error_response(errors, message='Validation failed 11'):
     """
     Shortcut for validation error response (400)
     
