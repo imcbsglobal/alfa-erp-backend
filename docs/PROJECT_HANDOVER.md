@@ -98,6 +98,10 @@ alfa-erp-backend/
 │   │   ├── events.py              # SSE event handling
 │   │   └── urls.py                # Sales routes
 │   ├── analytics/                 # Analytics (planned)
+│   ├── common/                    # Common utilities & developer tools
+│   │   ├── developer.py          # Developer Options API (SUPERADMIN)
+│   │   ├── urls.py               # Common app routes
+│   │   └── viewsets.py           # Common viewsets
 │   │   └── models.py              # Analytics models
 │   └── common/                    # Shared utilities
 │       ├── response.py            # Standardized API responses
@@ -638,6 +642,12 @@ python manage.py migrate --fake <app> <migration>
 | [docs/BILLING_QUICK_REFERENCE.md](BILLING_QUICK_REFERENCE.md) | Billing quick reference |
 | [docs/QUERY_FILTERING_IMPLEMENTATION.md](QUERY_FILTERING_IMPLEMENTATION.md) | Query filtering guide |
 | [docs/WORKER_FILTERING_IMPLEMENTATION.md](WORKER_FILTERING_IMPLEMENTATION.md) | Worker filtering guide |
+| [docs/DELIVERY_WORKFLOW_GUIDE.md](DELIVERY_WORKFLOW_GUIDE.md) | Complete delivery workflow guide |
+| [docs/DELIVERY_WORKFLOW_VISUAL.md](DELIVERY_WORKFLOW_VISUAL.md) | Visual delivery flow diagrams |
+| [docs/DELIVERY_IMPLEMENTATION_SUMMARY.md](DELIVERY_IMPLEMENTATION_SUMMARY.md) | Delivery feature summary |
+| [docs/DEVELOPER_OPTIONS.md](DEVELOPER_OPTIONS.md) | **NEW** Database management tools |
+| [docs/DEVELOPER_OPTIONS_QUICK_START.md](DEVELOPER_OPTIONS_QUICK_START.md) | **NEW** Developer tools quick start |
+| [docs/PERFORMANCE_OPTIMIZATION.md](PERFORMANCE_OPTIMIZATION.md) | Performance optimization guide |
 | [docs/createstoreuser.md](createstoreuser.md) | Store user creation command |
 | [docs/seed_and_clear_data.md](seed_and_clear_data.md) | Data seeding commands |
 | [docs/invoice_import.md](invoice_import.md) | Invoice import behavior |

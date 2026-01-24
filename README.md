@@ -23,6 +23,13 @@ Modern Django ASGI backend for ALFA ERP system with real-time updates, JWT authe
 - **Status Transitions**: Automated invoice state machine (CREATED → PICKED → PACKED → DELIVERED)
 - **User Verification**: Email-based identity verification at each workflow stage
 
+### Developer Tools
+- **Developer Options**: SUPERADMIN-only database management interface
+- **Table Statistics**: Real-time record counts across all tables
+- **Data Clearing**: Selective or complete database table truncation
+- **Sequence Reset**: Reset auto-increment IDs for clean testing
+- **Safety Features**: Transaction-safe with confirmation modals
+
 ### Infrastructure
 - **PostgreSQL Database**: Production-ready RDBMS with proper indexing
 - **Cloudflare R2 Storage**: Optional S3-compatible media storage
