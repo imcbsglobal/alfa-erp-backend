@@ -229,3 +229,10 @@ ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if 
 # Django Eventstream Configuration
 EVENTSTREAM_ALLOW_ORIGIN = '*'  # Configure based on your needs
 EVENTSTREAM_ALLOW_CREDENTIALS = True
+
+# Channel Layers for SSE - Using in-memory for development
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer"
+    }
+}

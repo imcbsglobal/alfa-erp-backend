@@ -70,7 +70,25 @@ class InvoiceListView(generics.ListAPIView):
     pagination_class = InvoiceListPagination
     
     def get_queryset(self):
-        queryset = Invoice.objects.select_related('customer', 'salesman', 'created_user').prefetch_related('items').order_by('-created_at')
+        # ✅ PERFORMANCE FIX: Prefetch all related session data to avoid N+1 queries
+        # Use prefetch_related for OneToOne fields that might not exist
+        queryset = Invoice.objects.select_related(
+            'customer', 
+            'salesman', 
+            'created_user'
+        ).prefetch_related(
+            'items',
+            'pickingsession',
+            'pickingsession__picker',
+            'packingsession',
+            'packingsession__packer',
+            'deliverysession',
+            'deliverysession__assigned_to',
+            'deliverysession__delivered_by',
+            'invoice_returns',
+            'invoice_returns__returned_by',
+            'invoice_returns__resolved_by'
+        ).order_by('-created_at')
         
         # Filter by status (supports multiple values: ?status=PENDING&status=PICKING)
         status_list = self.request.query_params.getlist('status')
@@ -346,7 +364,10 @@ class ImportInvoiceView(APIView):
                     "id": invoice.id,
                     "invoice_no": invoice.invoice_no,
                     "total_amount": total_amount,
-                    "priority": invoice.priority
+                    "priority": invoice.priority,
+                    "status": invoice.status,
+                    "billing_status": invoice.billing_status,
+                    "created_at": invoice.created_at
                 }
             },
             status=status.HTTP_201_CREATED
@@ -900,11 +921,24 @@ class DeliveryConsiderListView(generics.ListAPIView):
     
     def get_queryset(self):
         # Get invoices that have delivery sessions with TO_CONSIDER status
+        # ✅ PERFORMANCE FIX: Prefetch all related data
         queryset = Invoice.objects.filter(
             deliverysession__delivery_status='TO_CONSIDER'
         ).select_related(
-            'customer', 'salesman', 'deliverysession'
-        ).prefetch_related('items').order_by('-deliverysession__created_at')
+            'customer', 
+            'salesman', 
+            'created_user',
+            'deliverysession',
+            'pickingsession',
+            'packingsession'
+        ).prefetch_related(
+            'items',
+            'pickingsession__picker',
+            'packingsession__packer',
+            'deliverysession__assigned_to',
+            'deliverysession__delivered_by',
+            'invoice_returns'
+        ).order_by('-deliverysession__created_at')
         
         # Filter by delivery type
         delivery_type = self.request.query_params.get('delivery_type', '').upper()
@@ -1255,6 +1289,160 @@ class CompleteDeliveryView(APIView):
             "data": response_serializer.data
         }, status=status.HTTP_200_OK)
 
+class CancelSessionView(APIView):
+    """
+    POST /api/sales/cancel-session/
+    Cancel a session and DELETE it so invoice can be picked up by anyone
+    
+    Body:
+    {
+        "invoice_no": "INV-001",
+        "user_email": "user@example.com",
+        "session_type": "PICKING" or "PACKING" or "DELIVERY",
+        "cancel_reason": "Optional reason for cancellation"
+    }
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        invoice_no = request.data.get('invoice_no')
+        user_email = request.data.get('user_email')
+        session_type = request.data.get('session_type')
+        cancel_reason = request.data.get('cancel_reason', '')
+        
+        # Validate inputs
+        if not invoice_no or not session_type:
+            return Response({
+                "success": False,
+                "message": "invoice_no and session_type are required"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get invoice
+        try:
+            invoice = Invoice.objects.get(invoice_no=invoice_no)
+        except Invoice.DoesNotExist:
+            return Response({
+                "success": False,
+                "message": "Invoice not found"
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        try:
+            with transaction.atomic():
+                if session_type == 'PICKING':
+                    # Delete picking session so it can be picked by anyone
+                    try:
+                        picking_session = PickingSession.objects.get(invoice=invoice)
+                        
+                        # Store info for logging before deletion
+                        picker_email = picking_session.picker.email if picking_session.picker else "Unknown"
+                        
+                        # Delete the session completely
+                        picking_session.delete()
+                        
+                        # Return invoice to INVOICED status
+                        invoice.status = 'INVOICED'
+                        invoice.save(update_fields=['status'])
+                        
+                        message = f"Picking cancelled for {invoice_no}. Invoice returned to picking list and can be picked by anyone."
+                        logger.info(f"Picking session deleted for {invoice_no} by {picker_email}. Reason: {cancel_reason}")
+                        
+                    except PickingSession.DoesNotExist:
+                        return Response({
+                            "success": False,
+                            "message": "No picking session found for this invoice"
+                        }, status=status.HTTP_404_NOT_FOUND)
+                
+                elif session_type == 'PACKING':
+                    # Delete packing session so it can be packed by anyone
+                    try:
+                        packing_session = PackingSession.objects.get(invoice=invoice)
+                        
+                        # Store info for logging before deletion
+                        packer_email = packing_session.packer.email if packing_session.packer else "Unknown"
+                        
+                        # Delete the session completely
+                        packing_session.delete()
+                        
+                        # Return invoice to PICKED status (back to packing list)
+                        invoice.status = 'PICKED'
+                        invoice.save(update_fields=['status'])
+                        
+                        message = f"Packing cancelled for {invoice_no}. Invoice returned to packing list and can be packed by anyone."
+                        logger.info(f"Packing session deleted for {invoice_no} by {packer_email}. Reason: {cancel_reason}")
+                        
+                    except PackingSession.DoesNotExist:
+                        return Response({
+                            "success": False,
+                            "message": "No packing session found for this invoice"
+                        }, status=status.HTTP_404_NOT_FOUND)
+                
+                elif session_type == 'DELIVERY':
+                    # Delete delivery session so it can be delivered by anyone
+                    try:
+                        delivery_session = DeliverySession.objects.get(invoice=invoice)
+                        
+                        # Only allow cancellation if not yet delivered
+                        if delivery_session.delivery_status == 'DELIVERED':
+                            return Response({
+                                "success": False,
+                                "message": "Cannot cancel a completed delivery"
+                            }, status=status.HTTP_400_BAD_REQUEST)
+                        
+                        # Store info for logging before deletion
+                        assigned_email = delivery_session.assigned_to.email if delivery_session.assigned_to else "Unknown"
+                        
+                        # Delete the session completely
+                        delivery_session.delete()
+                        
+                        # Return invoice to PACKED status (back to delivery list)
+                        invoice.status = 'PACKED'
+                        invoice.save(update_fields=['status'])
+                        
+                        message = f"Delivery cancelled for {invoice_no}. Invoice returned to delivery list and can be delivered by anyone."
+                        logger.info(f"Delivery session deleted for {invoice_no} by {assigned_email}. Reason: {cancel_reason}")
+                        
+                    except DeliverySession.DoesNotExist:
+                        return Response({
+                            "success": False,
+                            "message": "No delivery session found for this invoice"
+                        }, status=status.HTTP_404_NOT_FOUND)
+                
+                else:
+                    return Response({
+                        "success": False,
+                        "message": "Invalid session_type. Must be PICKING, PACKING, or DELIVERY"
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                # Send SSE event
+                try:
+                    invoice_refreshed = Invoice.objects.select_related(
+                        'customer', 'salesman'
+                    ).prefetch_related('items').get(id=invoice.id)
+                    invoice_data = InvoiceListSerializer(invoice_refreshed).data
+                    django_eventstream.send_event(
+                        INVOICE_CHANNEL,
+                        'message',
+                        invoice_data
+                    )
+                except Exception:
+                    logger.exception("Failed to emit cancel event")
+                
+                return Response({
+                    "success": True,
+                    "message": message,
+                    "data": {
+                        "invoice_no": invoice.invoice_no,
+                        "status": invoice.status,
+                        "session_type": session_type
+                    }
+                }, status=status.HTTP_200_OK)
+                
+        except Exception as e:
+            logger.exception("Failed to cancel session")
+            return Response({
+                "success": False,
+                "message": f"Failed to cancel session: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 # ===== History Views =====
 
@@ -1290,8 +1478,15 @@ class PickingHistoryView(generics.ListAPIView):
     
     def get_queryset(self):
         user = self.request.user
+        # ✅ PERFORMANCE FIX: Prefetch all invoice related data
         queryset = PickingSession.objects.select_related(
-            'invoice', 'invoice__customer', 'picker'
+            'invoice', 
+            'invoice__customer', 
+            'invoice__salesman',
+            'invoice__created_user',
+            'picker'
+        ).prefetch_related(
+            'invoice__items'
         ).order_by('-created_at')
         
         # Permission check: regular users only see their own sessions.
@@ -1374,12 +1569,19 @@ class PackingHistoryView(generics.ListAPIView):
     
     def get_queryset(self):
         user = self.request.user
+        # ✅ PERFORMANCE FIX: Prefetch all invoice related data
         queryset = PackingSession.objects.select_related(
-            'invoice', 'invoice__customer', 'packer'
+            'invoice', 
+            'invoice__customer',
+            'invoice__salesman',
+            'invoice__created_user',
+            'packer'
+        ).prefetch_related(
+            'invoice__items'
         ).order_by('-created_at')
         
         # Permission check: regular users only see their own sessions
-        if not user.is_admin_or_superadmin():
+        if not (user.is_admin_or_superadmin() or getattr(user, 'role', '').upper() == 'PACKER'):
             queryset = queryset.filter(packer=user)
         
         # Invoice filters: by primary key or by invoice number
@@ -1458,12 +1660,23 @@ class DeliveryHistoryView(generics.ListAPIView):
     
     def get_queryset(self):
         user = self.request.user
+        # ✅ PERFORMANCE FIX: Prefetch all invoice and related data
         queryset = DeliverySession.objects.select_related(
-            'invoice', 'invoice__customer', 'assigned_to'
+            'invoice', 
+            'invoice__customer',
+            'invoice__salesman',
+            'invoice__created_user',
+            'assigned_to',
+            'delivered_by'
+        ).prefetch_related(
+            'invoice__items'
         ).order_by('-created_at')
         
         # Permission check: regular users only see their own sessions
-        if not user.is_admin_or_superadmin():
+        if not (
+            user.is_admin_or_superadmin() or
+            getattr(user, 'role', '').upper() == 'DELIVERY'
+        ):
             queryset = queryset.filter(assigned_to=user)
         
         # Invoice filters: by primary key or by invoice number
@@ -1546,9 +1759,25 @@ class BillingInvoicesView(generics.ListAPIView):
     
     def get_queryset(self):
         user = self.request.user
+        # ✅ PERFORMANCE FIX: Prefetch all session and related data
+        # Note: Using select_related on OneToOne fields that may not exist (pickingsession, etc.)
         queryset = Invoice.objects.select_related(
-            'customer', 'salesman', 'created_user'
-        ).prefetch_related('items', 'invoice_returns', 'invoice_returns__returned_by').order_by('-created_at')
+            'customer', 
+            'salesman', 
+            'created_user'
+        ).prefetch_related(
+            'items', 
+            'invoice_returns', 
+            'invoice_returns__returned_by',
+            'invoice_returns__resolved_by',
+            'pickingsession',
+            'pickingsession__picker',
+            'packingsession',
+            'packingsession__packer',
+            'deliverysession',
+            'deliverysession__assigned_to',
+            'deliverysession__delivered_by'
+        ).order_by('-created_at')
         
         # If user is not admin, filter to only show invoices where they are the salesman
         if not user.is_admin_or_superadmin():

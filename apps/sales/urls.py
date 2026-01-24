@@ -23,7 +23,8 @@ from .views import (
     CourierViewSet,
     DeliveryConsiderListView,
     AssignDeliveryStaffView,
-    UploadCourierSlipView
+    UploadCourierSlipView,
+    CancelSessionView,
 )
 
 router = DefaultRouter()
@@ -57,6 +58,9 @@ urlpatterns = [
     path("delivery/start/", StartDeliveryView.as_view(), name="delivery-start"),
     path("delivery/complete/", CompleteDeliveryView.as_view(), name="delivery-complete"),
     path("delivery/history/", DeliveryHistoryView.as_view(), name="delivery-history"),
+
+    path('cancel-session/', CancelSessionView.as_view(), name='cancel-session'),
+    
     path("delivery/consider-list/", DeliveryConsiderListView.as_view(), name="delivery-consider-list"),
     path("delivery/assign/", AssignDeliveryStaffView.as_view(), name="delivery-assign-staff"),
     path("delivery/upload-slip/", UploadCourierSlipView.as_view()),

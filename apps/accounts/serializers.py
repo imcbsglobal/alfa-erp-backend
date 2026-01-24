@@ -142,6 +142,23 @@ class UserSerializer(serializers.ModelSerializer):
             return obj.department.name
         return None
     
+    def validate_email(self, value):
+        """Validate email uniqueness"""
+        # Normalize email to lowercase for comparison
+        email = value.lower()
+        
+        # Check if email already exists (excluding current instance in update)
+        if self.instance:
+            # Update case - exclude current user
+            if User.objects.filter(email__iexact=email).exclude(id=self.instance.id).exists():
+                raise serializers.ValidationError("A user with this email address already exists.")
+        else:
+            # Create case - check if email exists
+            if User.objects.filter(email__iexact=email).exists():
+                raise serializers.ValidationError("A user with this email address already exists.")
+        
+        return email
+    
     def create(self, validated_data):
         """Create a new user (admin only)"""
         password = validated_data.pop('password', None)

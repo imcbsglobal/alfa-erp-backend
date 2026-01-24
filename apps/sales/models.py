@@ -31,7 +31,11 @@ class Invoice(models.Model):
     created_user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_invoices")
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE)
     remarks = models.TextField(blank=True, null=True)
-    total = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Manually entered total amount")
+    total = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0
+    )
     status = models.CharField(
         max_length=20,
         choices=[
@@ -72,6 +76,16 @@ class Invoice(models.Model):
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # ✅ PERFORMANCE FIX: Add database indexes for common query filters
+        indexes = [
+            models.Index(fields=['-created_at']),  # For ordering by date
+            models.Index(fields=['status']),        # For status filtering
+            models.Index(fields=['billing_status']), # For billing status filtering
+            models.Index(fields=['invoice_date']),   # For date filtering
+            models.Index(fields=['status', '-created_at']),  # For combined queries
+        ]
 
     def __str__(self):
         return self.invoice_no
@@ -219,6 +233,7 @@ class DeliverySession(models.Model):
             ("TO_CONSIDER", "To Consider"),  # ✅ NEW: Waiting for staff assignment
             ("IN_TRANSIT", "In Transit"),
             ("DELIVERED", "Delivered"),
+            ("CANCELLED", "Cancelled"),
         ],
         default="PENDING"
     )

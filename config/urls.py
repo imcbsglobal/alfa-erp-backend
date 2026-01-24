@@ -15,7 +15,10 @@ urlpatterns = [
     # Access control endpoints (menus, assignments)
     path('api/access/', include('apps.accesscontrol.urls')),
     
-    path('api/sales/',include('apps.sales.urls'))
+    path('api/sales/',include('apps.sales.urls')),
+    
+    # Common/Developer endpoints
+    path('api/', include('apps.common.urls'))
 ]
 
 # Serve media files in development

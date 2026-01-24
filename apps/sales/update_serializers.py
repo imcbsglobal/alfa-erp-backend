@@ -51,7 +51,11 @@ class InvoiceUpdateSerializer(serializers.Serializer):
         required=False
     )
     remarks = serializers.CharField(required=False, allow_blank=True)
-    total = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True)
+    total = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        required=False
+    )
     
     # Customer updates (optional)
     customer = serializers.DictField(required=False, help_text="Customer data to update")
