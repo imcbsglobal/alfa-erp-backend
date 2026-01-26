@@ -63,3 +63,16 @@ git pull
 
 # Restart Gunicorn service to apply changes
 sudo systemctl restart gunicorn-alfa-prod
+
+
+### 2. Frontend Deployment
+
+```bash
+# Navigate to frontend directory
+cd /var/www/alfa-erp-frontend-prod/
+
+# Pull latest changes
+git pull
+
+# Build production bundle
+npm run build

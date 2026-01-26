@@ -579,8 +579,13 @@ class DeliverySessionCreateSerializer(serializers.Serializer):
     delivery_type = serializers.ChoiceField(choices=['DIRECT', 'COURIER', 'INTERNAL'])
     
     # For courier delivery
+    courier_id = serializers.UUIDField(required=False, allow_null=True)
     courier_name = serializers.CharField(required=False, allow_blank=True)
     tracking_no = serializers.CharField(required=False, allow_blank=True)
+    
+    # For internal delivery
+    user_email = serializers.EmailField(required=False, allow_null=True)
+    user_name = serializers.CharField(required=False, allow_blank=True)
     
     # For counter pickup (DIRECT)
     counter_sub_mode = serializers.ChoiceField(

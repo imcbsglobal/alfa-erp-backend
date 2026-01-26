@@ -799,6 +799,7 @@ class StartDeliveryView(APIView):
     {
         "invoice_no": "INV-001",
         "delivery_type": "COURIER",
+        "courier_id": "uuid-of-courier",
         "notes": "Optional notes"
     }
     
@@ -806,6 +807,8 @@ class StartDeliveryView(APIView):
     {
         "invoice_no": "INV-001",
         "delivery_type": "INTERNAL",
+        "user_email": "staff@example.com",
+        "user_name": "Staff Name (optional)",
         "notes": "Optional notes"
     }
     """
@@ -852,27 +855,62 @@ class StartDeliveryView(APIView):
             invoice.status = "DELIVERED"
             message = f"Counter pickup completed - {validated_data.get('counter_sub_mode')}"
             
-        # For Courier Delivery - Move to consider list (TO_CONSIDER)
+        # For Courier Delivery - Assign courier and move to consider list
         elif delivery_type == 'COURIER':
+            from apps.accounts.models import Courier
+            
+            courier_id = validated_data.get('courier_id')
+            if not courier_id:
+                return Response({
+                    "success": False,
+                    "message": "Courier ID is required for courier delivery"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            try:
+                courier = Courier.objects.get(courier_id=courier_id)
+            except Courier.DoesNotExist:
+                return Response({
+                    "success": False,
+                    "message": "Invalid courier ID"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
             delivery_data.update({
+                'courier': courier,
+                'courier_name': courier.courier_name,
                 'start_time': timezone.now(),
-                'delivery_status': 'TO_CONSIDER',  # ✅ Waiting for staff assignment
+                'delivery_status': 'TO_CONSIDER',
             })
             
-            # Keep invoice status as PACKED (not yet dispatched)
             invoice.status = "PACKED"
-            message = "Invoice moved to Courier Delivery consider list. Assign staff to proceed."
+            message = f"Invoice assigned to {courier.courier_name}. Moved to Courier Delivery list."
             
-        # For Internal Delivery - Move to consider list (TO_CONSIDER)
+        # For Internal Delivery - Assign user and move to consider list
         elif delivery_type == 'INTERNAL':
+            from apps.accounts.models import User
+            
+            user_email = validated_data.get('user_email')
+            if not user_email:
+                return Response({
+                    "success": False,
+                    "message": "User email is required for internal delivery"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            try:
+                assigned_user = User.objects.get(email=user_email)
+            except User.DoesNotExist:
+                return Response({
+                    "success": False,
+                    "message": "User not found with provided email"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            delivery_data['assigned_to'] = assigned_user
             delivery_data.update({
                 'start_time': timezone.now(),
-                'delivery_status': 'TO_CONSIDER',  # ✅ Waiting for staff assignment
+                'delivery_status': 'TO_CONSIDER',
             })
             
-            # Keep invoice status as PACKED (not yet dispatched)
             invoice.status = "PACKED"
-            message = "Invoice moved to Company Delivery consider list. Assign staff to proceed."
+            message = f"Invoice assigned to {assigned_user.get_full_name() or assigned_user.email}. Moved to Company Delivery list."
         
         # Create delivery session
         delivery_session = DeliverySession.objects.create(**delivery_data)
@@ -952,7 +990,9 @@ class DeliveryConsiderListView(generics.ListAPIView):
             queryset = queryset.filter(
                 Q(invoice_no__icontains=search) |
                 Q(customer__name__icontains=search) |
-                Q(customer__phone1__icontains=search)
+                Q(customer__phone1__icontains=search) |
+                Q(deliverysession__assigned_to__email__icontains=search) |
+                Q(deliverysession__assigned_to__name__icontains=search)
             )
         
         return queryset

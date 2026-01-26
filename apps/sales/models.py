@@ -222,6 +222,14 @@ class DeliverySession(models.Model):
         related_name="delivered_invoices",
         help_text="Person who completed the delivery"
     )
+    courier = models.ForeignKey(
+        'accounts.Courier',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="deliveries",
+        help_text="Courier service assigned for delivery"
+    )
     courier_name = models.CharField(max_length=150, blank=True, null=True)
     tracking_no = models.CharField(max_length=150, blank=True, null=True)
     start_time = models.DateTimeField(null=True)
