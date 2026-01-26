@@ -47,3 +47,19 @@ npm run build
 - Bundle sizes:
   - CSS: 43.00 kB (gzipped: 7.43 kB)
   - JS: 706.78 kB (gzipped: 178.51 kB)
+
+
+### 1. Backend Deployment - for production
+
+```bash
+# SSH into the server
+ssh root@88.222.212.14
+
+# Navigate to backend directory
+cd /var/www/alfa-erp-backend-prod/
+
+# Pull latest changes from repository
+git pull
+
+# Restart Gunicorn service to apply changes
+sudo systemctl restart gunicorn-alfa-prod
