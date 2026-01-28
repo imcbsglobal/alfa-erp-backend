@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     'apps.accounts',
     'apps.accesscontrol',
     'apps.sales',
+    'apps.common',
 ]
 
 MIDDLEWARE = [
