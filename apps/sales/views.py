@@ -341,7 +341,7 @@ class ImportInvoiceView(APIView):
             invoice.created_user = request.user
             invoice.save()
 
-        # total_amount = sum(item.quantity * item.mrp for item in invoice.items.all())
+        total_amount = sum(item.quantity * item.mrp for item in invoice.items.all())
 
         # Push full invoice payload to SSE using django-eventstream
         try:
@@ -363,7 +363,7 @@ class ImportInvoiceView(APIView):
                 "data": {
                     "id": invoice.id,
                     "invoice_no": invoice.invoice_no,
-                    # "total_amount": total_amount,
+                    "total_amount": total_amount,
                     "priority": invoice.priority,
                     "status": invoice.status,
                     "billing_status": invoice.billing_status,
@@ -437,7 +437,7 @@ class UpdateInvoiceView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
         # Calculate new total
-        # total_amount = sum(item.quantity * item.mrp for item in invoice.items.all())
+        total_amount = sum(item.quantity * item.mrp for item in invoice.items.all())
         
         # Send SSE event with updated invoice
         try:
@@ -479,7 +479,7 @@ class UpdateInvoiceView(APIView):
                     "invoice_no": invoice.invoice_no,
                     "status": invoice.status,
                     "billing_status": invoice.billing_status,
-                    # "total_amount": total_amount,
+                    "total_amount": total_amount,
                     "items_count": invoice.items.count(),
                     "returned_from_section": invoice.invoice_returns.order_by('-returned_at').first().returned_from_section if invoice.invoice_returns.exists() else None,
                     "resolution_notes": invoice.invoice_returns.order_by('-returned_at').first().resolution_notes if invoice.invoice_returns.exists() else None
