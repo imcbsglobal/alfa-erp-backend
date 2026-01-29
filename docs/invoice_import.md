@@ -26,7 +26,8 @@ If an invoice with the provided `invoice_no` already exists:
   - `customer` (ForeignKey)
   - `created_by` (string identifier)
   - `priority` (LOW, MEDIUM, HIGH)
-  - `total` (optional manual total amount)
+  - `Total` (optional manual total amount)
+  - `temp_name` (optional temporary name)
   - `remarks` (optional)
   - `created_user` (ForeignKey to User, if authenticated)
 - **Items**: All existing `InvoiceItem` rows are **deleted** and replaced with incoming items (full replace strategy)
@@ -42,7 +43,8 @@ If an invoice with the provided `invoice_no` already exists:
   "salesman": "Ahmed Khan",
   "created_by": "admin_user",
   "priority": "HIGH",
-  "total": 8725.00,
+  "Total": 8725.00,
+  "temp_name": "Downtown Location",
   "remarks": "Test invoice - Rush order for pharmacy chain",
   "customer": {
     "code": "CUST-PH-2026-001",
@@ -115,7 +117,8 @@ If an invoice with the provided `invoice_no` already exists:
 - `salesman` (required): Salesman name (string)
 - `created_by` (optional): String identifier of person who created invoice
 - `priority` (optional): LOW, MEDIUM (default), or HIGH
-- `total` (optional): Manual total amount (decimal)
+- `Total` (optional): Manual total amount (decimal) - Note: Field name is capitalized
+- `temp_name` (optional): Temporary name to display when customer address/area is not available
 - `remarks` (optional): Additional notes
 - `created_at` (auto-generated): Timestamp when invoice was created in the system (ISO 8601 format)
 
@@ -248,3 +251,57 @@ Consider implementing:
 - Logging of all import operations for audit trail
 - Validation of invoice totals against item quantities × MRP
 - Duplicate detection within time windows
+
+## Request Format
+
+```json
+
+{
+  "invoice_no": "INV-TEST-2026-0014",
+  "invoice_date": "2026-01-29",
+  "salesman": "Ahmed Khan",
+  "created_by": "admin_user",
+  "priority": "HIGH",
+  "Total": 8725.00,
+  "temp_name": "RAMANKUTTY",
+  "remarks": "Test invoice with temp_name field",
+  "customer": {
+    "code": "CUST-PH-2026-003",
+    "name": "HealthCare Pharmacy",
+    "area": "",
+    "address1": "",
+    "address2": "",
+    "phone1": "+92-300-9876543",
+    "phone2": "",
+    "email": "contact@healthcare.pk"
+  },
+  "items": [
+    {
+      "name": "Panadol Extra Tablets",
+      "item_code": "MED-PAN-001",
+      "barcode": "8964000123456",
+      "quantity": 100,
+      "mrp": 45.50,
+      "company_name": "GSK Pakistan",
+      "packing": "Strip of 10 tablets",
+      "shelf_location": "A-12-03",
+      "batch_no": "BATCH-20260129",
+      "expiry_date": "2027-12-31",
+      "remarks": "Keep in cool dry place"
+    },
+    {
+      "name": "Augmentin 625mg",
+      "item_code": "MED-AUG-625",
+      "barcode": "8964000789012",
+      "quantity": 50,
+      "mrp": 125.00,
+      "company_name": "GSK Pakistan",
+      "packing": "Strip of 6 tablets",
+      "shelf_location": "B-08-15",
+      "batch_no": "BATCH-20260125",
+      "expiry_date": "2027-06-30",
+      "remarks": "Prescription required"
+    }
+  ]
+}
+```

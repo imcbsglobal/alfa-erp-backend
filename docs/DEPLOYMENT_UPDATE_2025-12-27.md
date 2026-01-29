@@ -65,7 +65,7 @@ git pull
 sudo systemctl restart gunicorn-alfa-prod
 
 
-### 2. Frontend Deployment
+### 2. Frontend Deployment - Production
 
 ```bash
 # Navigate to frontend directory

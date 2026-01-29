@@ -88,7 +88,7 @@ class InvoiceListView(generics.ListAPIView):
             'invoice_returns',
             'invoice_returns__returned_by',
             'invoice_returns__resolved_by'
-        ).order_by('-created_at')
+        ).order_by('created_at')
         
         # Filter by status (supports multiple values: ?status=PENDING&status=PICKING)
         status_list = self.request.query_params.getlist('status')
@@ -976,7 +976,7 @@ class DeliveryConsiderListView(generics.ListAPIView):
             'deliverysession__assigned_to',
             'deliverysession__delivered_by',
             'invoice_returns'
-        ).order_by('-deliverysession__created_at')
+        ).order_by('deliverysession__created_at')
         
         # Filter by delivery type
         delivery_type = self.request.query_params.get('delivery_type', '').upper()
@@ -1527,7 +1527,7 @@ class PickingHistoryView(generics.ListAPIView):
             'picker'
         ).prefetch_related(
             'invoice__items'
-        ).order_by('-created_at')
+        ).order_by('created_at')
         
         # Permission check: regular users only see their own sessions.
         # Users with role 'PICKER' are treated like admins and can view all picking sessions.
@@ -1618,7 +1618,7 @@ class PackingHistoryView(generics.ListAPIView):
             'packer'
         ).prefetch_related(
             'invoice__items'
-        ).order_by('-created_at')
+        ).order_by('created_at')
         
         # Permission check: regular users only see their own sessions
         if not (user.is_admin_or_superadmin() or getattr(user, 'role', '').upper() == 'PACKER'):
@@ -1710,7 +1710,7 @@ class DeliveryHistoryView(generics.ListAPIView):
             'delivered_by'
         ).prefetch_related(
             'invoice__items'
-        ).order_by('-created_at')
+        ).order_by('created_at')
         
         # Permission check: regular users only see their own sessions
         if not (
@@ -1817,7 +1817,7 @@ class BillingInvoicesView(generics.ListAPIView):
             'deliverysession',
             'deliverysession__assigned_to',
             'deliverysession__delivered_by'
-        ).order_by('-created_at')
+        ).order_by('created_at')
         
         # If user is not admin, filter to only show invoices where they are the salesman
         if not user.is_admin_or_superadmin():
@@ -2022,7 +2022,7 @@ class CourierViewSet(BaseModelViewSet):
                 Q(contact_person__icontains=search)
             )
         
-        return queryset.order_by('-created_at')
+        return queryset.order_by('created_at')
     
     def list(self, request, *args, **kwargs):
         """

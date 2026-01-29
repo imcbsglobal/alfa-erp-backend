@@ -30,6 +30,7 @@ class Invoice(models.Model):
     created_by = models.CharField(max_length=150, blank=True, null=True, help_text="Username/identifier of person who created invoice")
     created_user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_invoices")
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE)
+    temp_name = models.CharField(max_length=255, blank=True, null=True, help_text="Temporary name to show when customer address is not available")
     remarks = models.TextField(blank=True, null=True)
     Total = models.DecimalField(
         max_digits=10,

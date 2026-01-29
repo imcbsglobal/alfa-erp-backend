@@ -89,7 +89,7 @@ class InvoiceListSerializer(serializers.ModelSerializer):
         model = Invoice
         fields = [
             'id', 'invoice_no', 'invoice_date', 'customer','status', 'priority', 'salesman', 
-            'created_by', 'items', 'Total', 'remarks', 'created_at',
+            'created_by', 'items', 'Total', 'temp_name', 'remarks', 'created_at',
             'billing_status', 'return_info',
             'picker_info', 'packer_info', 'delivery_info', 'current_handler' ]
     
@@ -280,6 +280,7 @@ class InvoiceImportSerializer(serializers.Serializer):
         decimal_places=2,
         required=True   # 👈 MUST BE REQUIRED
     )
+    temp_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     remarks = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     customer = CustomerSerializer()
     items = ItemSerializer(many=True)
