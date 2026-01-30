@@ -124,7 +124,8 @@ class InvoiceListView(generics.ListAPIView):
                 queryset = queryset.filter(
                     Q(pickingsession__picker=worker) |
                     Q(packingsession__packer=worker) |
-                    Q(deliverysession__delivery_user=worker)
+                    Q(deliverysession__assigned_to=worker) |
+                    Q(deliverysession__delivered_by=worker)
                 ).distinct()
         
         return queryset

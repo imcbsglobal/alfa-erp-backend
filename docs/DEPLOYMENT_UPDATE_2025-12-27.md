@@ -58,6 +58,13 @@ ssh root@88.222.212.14
 # Navigate to backend directory
 cd /var/www/alfa-erp-backend-prod/
 
+source venv/bin/activate
+
+# Migration
+python3 manage.py makemigration
+
+python3 manage.py migrate
+
 # Pull latest changes from repository
 git pull
 
