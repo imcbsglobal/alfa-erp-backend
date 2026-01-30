@@ -1527,7 +1527,7 @@ class PickingHistoryView(generics.ListAPIView):
             'picker'
         ).prefetch_related(
             'invoice__items'
-        ).order_by('created_at')
+        ).order_by('-created_at')  # Most recent first
         
         # Permission check: regular users only see their own sessions.
         # Users with role 'PICKER' are treated like admins and can view all picking sessions.
@@ -1560,6 +1560,9 @@ class PickingHistoryView(generics.ListAPIView):
         status_filter = self.request.query_params.get('status', '').strip().upper()
         if status_filter and status_filter in ['PREPARING', 'PICKED', 'VERIFIED', 'CANCELLED', 'REVIEW']:
             queryset = queryset.filter(picking_status=status_filter)
+            # Debug logging
+            count = queryset.count()
+            print(f"PickingHistoryView: Filtering by status={status_filter}, found {count} records")
         
         # Date filters
         start_date = self.request.query_params.get('start_date')

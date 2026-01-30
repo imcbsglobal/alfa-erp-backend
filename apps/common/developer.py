@@ -30,7 +30,8 @@ class ClearDataView(APIView):
     """
     POST /api/developer/clear-data/
     
-    Clear specific tables or all data
+    Clear data from frontend view only (does NOT delete from database)
+    Returns current counts without modifying the database
     SUPERADMIN ONLY
     """
     permission_classes = [SuperAdminOnlyPermission]
@@ -39,90 +40,87 @@ class ClearDataView(APIView):
         table_name = request.data.get('table_name', 'all')
         
         try:
-            with transaction.atomic():
-                deleted_counts = {}
+            # Get current counts without deleting anything
+            cleared_counts = {}
+            
+            if table_name == 'all':
+                cleared_counts['delivery_sessions'] = DeliverySession.objects.count()
+                cleared_counts['packing_sessions'] = PackingSession.objects.count()
+                cleared_counts['picking_sessions'] = PickingSession.objects.count()
+                cleared_counts['invoice_returns'] = InvoiceReturn.objects.count()
+                cleared_counts['invoice_items'] = InvoiceItem.objects.count()
+                cleared_counts['invoices'] = Invoice.objects.count()
+                cleared_counts['customers'] = Customer.objects.count()
+                cleared_counts['salesmen'] = Salesman.objects.count()
+                cleared_counts['couriers'] = Courier.objects.count()
                 
-                if table_name == 'all':
-                    # Clear all sales data
-                    deleted_counts['delivery_sessions'] = DeliverySession.objects.all().delete()[0]
-                    deleted_counts['packing_sessions'] = PackingSession.objects.all().delete()[0]
-                    deleted_counts['picking_sessions'] = PickingSession.objects.all().delete()[0]
-                    deleted_counts['invoice_returns'] = InvoiceReturn.objects.all().delete()[0]
-                    deleted_counts['invoice_items'] = InvoiceItem.objects.all().delete()[0]
-                    deleted_counts['invoices'] = Invoice.objects.all().delete()[0]
-                    deleted_counts['customers'] = Customer.objects.all().delete()[0]
-                    deleted_counts['salesmen'] = Salesman.objects.all().delete()[0]
-                    deleted_counts['couriers'] = Courier.objects.all().delete()[0]
-                    
-                    message = "All data cleared successfully"
-                    
-                elif table_name == 'invoices':
-                    # Clear all invoice-related data (cascade will handle related records)
-                    deleted_counts['invoices'] = Invoice.objects.all().delete()[0]
-                    message = "All invoices and related data cleared"
-                    
-                elif table_name == 'customers':
-                    # Check if there are invoices referencing customers
-                    if Invoice.objects.exists():
-                        return Response({
-                            "success": False,
-                            "message": "Cannot delete customers while invoices exist. Clear invoices first."
-                        }, status=status.HTTP_400_BAD_REQUEST)
-                    deleted_counts['customers'] = Customer.objects.all().delete()[0]
-                    message = "All customers cleared"
-                    
-                elif table_name == 'salesmen':
-                    deleted_counts['salesmen'] = Salesman.objects.all().delete()[0]
-                    message = "All salesmen cleared"
-                    
-                elif table_name == 'couriers':
-                    deleted_counts['couriers'] = Courier.objects.all().delete()[0]
-                    message = "All couriers cleared"
-                    
-                elif table_name == 'sessions':
-                    # Clear all session data but keep invoices
-                    deleted_counts['delivery_sessions'] = DeliverySession.objects.all().delete()[0]
-                    deleted_counts['packing_sessions'] = PackingSession.objects.all().delete()[0]
-                    deleted_counts['picking_sessions'] = PickingSession.objects.all().delete()[0]
-                    message = "All session data cleared"
-                    
-                elif table_name == 'users':
-                    # Don't allow deleting all users, keep superadmin
-                    superadmin_count = User.objects.filter(role='SUPERADMIN').count()
-                    if superadmin_count <= 1:
-                        return Response({
-                            "success": False,
-                            "message": "Cannot delete all users. At least one SUPERADMIN must remain."
-                        }, status=status.HTTP_400_BAD_REQUEST)
-                    
-                    # Delete non-superadmin users
-                    deleted_counts['users'] = User.objects.exclude(role='SUPERADMIN').delete()[0]
-                    message = "All non-SUPERADMIN users cleared"
-                    
-                elif table_name == 'departments':
-                    deleted_counts['departments'] = Department.objects.all().delete()[0]
-                    message = "All departments cleared"
-                    
-                elif table_name == 'job_titles':
-                    deleted_counts['job_titles'] = JobTitle.objects.all().delete()[0]
-                    message = "All job titles cleared"
-                    
-                else:
-                    return Response({
-                        "success": False,
-                        "message": f"Invalid table name: {table_name}"
-                    }, status=status.HTTP_400_BAD_REQUEST)
+                message = "All data cleared from view (database unchanged)"
                 
+            elif table_name == 'invoices':
+                cleared_counts['invoices'] = Invoice.objects.count()
+                cleared_counts['invoice_items'] = InvoiceItem.objects.count()
+                message = "Invoices cleared from view (database unchanged)"
+                
+            elif table_name == 'customers':
+                cleared_counts['customers'] = Customer.objects.count()
+                message = "Customers cleared from view (database unchanged)"
+                
+            elif table_name == 'salesmen':
+                cleared_counts['salesmen'] = Salesman.objects.count()
+                message = "Salesmen cleared from view (database unchanged)"
+                
+            elif table_name == 'couriers':
+                cleared_counts['couriers'] = Courier.objects.count()
+                message = "Couriers cleared from view (database unchanged)"
+                
+            elif table_name == 'sessions':
+                # Keep this for backward compatibility
+                cleared_counts['delivery_sessions'] = DeliverySession.objects.count()
+                cleared_counts['packing_sessions'] = PackingSession.objects.count()
+                cleared_counts['picking_sessions'] = PickingSession.objects.count()
+                message = "Sessions cleared from view (database unchanged)"
+                
+            elif table_name == 'picking_sessions':
+                cleared_counts['picking_sessions'] = PickingSession.objects.count()
+                message = "Picking sessions cleared from view (database unchanged)"
+                
+            elif table_name == 'packing_sessions':
+                cleared_counts['packing_sessions'] = PackingSession.objects.count()
+                message = "Packing sessions cleared from view (database unchanged)"
+                
+            elif table_name == 'delivery_sessions':
+                cleared_counts['delivery_sessions'] = DeliverySession.objects.count()
+                message = "Delivery sessions cleared from view (database unchanged)"
+                
+            elif table_name == 'users':
+                cleared_counts['users'] = User.objects.exclude(role='SUPERADMIN').count()
+                message = "Users cleared from view (database unchanged)"
+                
+            elif table_name == 'departments':
+                cleared_counts['departments'] = Department.objects.count()
+                message = "Departments cleared from view (database unchanged)"
+                
+            elif table_name == 'job_titles':
+                cleared_counts['job_titles'] = JobTitle.objects.count()
+                message = "Job titles cleared from view (database unchanged)"
+                
+            else:
                 return Response({
-                    "success": True,
-                    "message": message,
-                    "deleted_counts": deleted_counts
-                }, status=status.HTTP_200_OK)
+                    "success": False,
+                    "message": f"Invalid table name: {table_name}"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            return Response({
+                "success": True,
+                "message": message,
+                "deleted_counts": cleared_counts,
+                "note": "Data cleared from frontend view only. Database remains unchanged."
+            }, status=status.HTTP_200_OK)
                 
         except Exception as e:
             return Response({
                 "success": False,
-                "message": f"Error clearing data: {str(e)}"
+                "message": f"Error clearing view: {str(e)}"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 

@@ -26,6 +26,7 @@ from .views import (
     UploadCourierSlipView,
     CancelSessionView,
 )
+from .admin_views import AdminCompleteWorkflowView
 
 router = DefaultRouter()
 router.register(r'couriers', CourierViewSet, basename='courier')
@@ -68,5 +69,8 @@ urlpatterns = [
     # Billing endpoints
     path("billing/invoices/", BillingInvoicesView.as_view(), name="billing-invoices"),
     path("billing/return/", ReturnToBillingView.as_view(), name="billing-return"),
+    
+    # Admin endpoints
+    path("admin/complete-workflow/", AdminCompleteWorkflowView.as_view(), name="admin-complete-workflow"),
 ]
 
