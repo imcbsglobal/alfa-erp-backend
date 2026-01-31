@@ -55,7 +55,7 @@ class ClearDataView(APIView):
                 invoice_ids = list(Invoice.objects.values_list('id', flat=True))
                 customer_ids = list(Customer.objects.values_list('id', flat=True))
                 salesman_ids = list(Salesman.objects.values_list('id', flat=True))
-                courier_ids = list(Courier.objects.values_list('id', flat=True))
+                courier_ids = list(Courier.objects.values_list('courier_id', flat=True))
                 
                 cache.set('cleared_delivery_sessions', delivery_ids, self.CACHE_TIMEOUT)
                 cache.set('cleared_packing_sessions', packing_ids, self.CACHE_TIMEOUT)
@@ -100,7 +100,7 @@ class ClearDataView(APIView):
                 message = "Salesmen cleared from view (database unchanged)"
                 
             elif table_name == 'couriers':
-                courier_ids = list(Courier.objects.values_list('id', flat=True))
+                courier_ids = list(Courier.objects.values_list('courier_id', flat=True))
                 cache.set('cleared_couriers', courier_ids, self.CACHE_TIMEOUT)
                 
                 cleared_counts['couriers'] = len(courier_ids)
