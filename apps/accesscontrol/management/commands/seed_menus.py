@@ -362,6 +362,22 @@ class Command(BaseCommand):
         self.stdout.write("  ✓ Master menus created")
 
         # ========================================
+        # 9. ADVANCED CONTROL (Single - SUPERADMIN, ADMIN)
+        # ========================================
+        advanced_control, _ = MenuItem.objects.update_or_create(
+            code="admin-privilege",
+            defaults={
+                'name': "Advanced Control",
+                'icon': "Settings",
+                'url': "/admin/privilege",
+                'order': 9,
+                'is_active': True,
+                'parent': None,
+            }
+        )
+        self.stdout.write("  ✓ Advanced Control menu created")
+
+        # ========================================
         # Auto-assign menus based on roles
         # ========================================
         if options.get('assign'):
@@ -410,6 +426,7 @@ class Command(BaseCommand):
         self.stdout.write("   ├─ Job Title → /master/job-title")
         self.stdout.write("   ├─ Department → /master/department")
         self.stdout.write("   └─ Courier → /master/courier")
+        self.stdout.write("9. Advanced Control (single) → /admin/privilege [SUPERADMIN, ADMIN]")
         self.stdout.write(f"{'='*70}")
         
         self.stdout.write(f"\n{'='*70}")
@@ -452,6 +469,7 @@ class Command(BaseCommand):
             'job_title': MenuItem.objects.get(code='job_title'),
             'department': MenuItem.objects.get(code='department'),
             'courier': MenuItem.objects.get(code='courier'),
+            'advanced_control': MenuItem.objects.get(code='admin-privilege'),
         }
 
         role_menu_map = {
@@ -464,6 +482,7 @@ class Command(BaseCommand):
                 menus['history'], menus['history_main'], menus['history_consolidate'],
                 menus['user_mgmt'], menus['user_list'], menus['user_control'],
                 menus['master'], menus['job_title'], menus['department'], menus['courier'],
+                menus['advanced_control'],
             ],
             'USER': [
                 menus['dashboard'],

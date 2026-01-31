@@ -198,6 +198,8 @@ CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if os.getenv('CORS_ALLOWED_ORIGINS') else [
     'http://localhost:3000',
     'http://localhost:3001',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
     'https://alfa.imcbs.com',
 ]
 
