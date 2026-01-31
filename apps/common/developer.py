@@ -8,6 +8,8 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from django.db import connection, transaction
 from django.apps import apps
+from django.core.cache import cache
+from django.utils import timezone
 
 from apps.sales.models import (
     Invoice, InvoiceItem, InvoiceReturn, 
@@ -31,77 +33,134 @@ class ClearDataView(APIView):
     POST /api/developer/clear-data/
     
     Clear data from frontend view only (does NOT delete from database)
-    Returns current counts without modifying the database
+    Stores IDs in cache to hide them from list views
     SUPERADMIN ONLY
     """
     permission_classes = [SuperAdminOnlyPermission]
+    
+    CACHE_TIMEOUT = 24 * 60 * 60  # 24 hours
     
     def post(self, request):
         table_name = request.data.get('table_name', 'all')
         
         try:
-            # Get current counts without deleting anything
+            # Get current counts and store IDs in cache to hide them
             cleared_counts = {}
             
             if table_name == 'all':
-                cleared_counts['delivery_sessions'] = DeliverySession.objects.count()
-                cleared_counts['packing_sessions'] = PackingSession.objects.count()
-                cleared_counts['picking_sessions'] = PickingSession.objects.count()
+                # Store all IDs in cache
+                delivery_ids = list(DeliverySession.objects.values_list('id', flat=True))
+                packing_ids = list(PackingSession.objects.values_list('id', flat=True))
+                picking_ids = list(PickingSession.objects.values_list('id', flat=True))
+                invoice_ids = list(Invoice.objects.values_list('id', flat=True))
+                customer_ids = list(Customer.objects.values_list('id', flat=True))
+                salesman_ids = list(Salesman.objects.values_list('id', flat=True))
+                courier_ids = list(Courier.objects.values_list('id', flat=True))
+                
+                cache.set('cleared_delivery_sessions', delivery_ids, self.CACHE_TIMEOUT)
+                cache.set('cleared_packing_sessions', packing_ids, self.CACHE_TIMEOUT)
+                cache.set('cleared_picking_sessions', picking_ids, self.CACHE_TIMEOUT)
+                cache.set('cleared_invoices', invoice_ids, self.CACHE_TIMEOUT)
+                cache.set('cleared_customers', customer_ids, self.CACHE_TIMEOUT)
+                cache.set('cleared_salesmen', salesman_ids, self.CACHE_TIMEOUT)
+                cache.set('cleared_couriers', courier_ids, self.CACHE_TIMEOUT)
+                
+                cleared_counts['delivery_sessions'] = len(delivery_ids)
+                cleared_counts['packing_sessions'] = len(packing_ids)
+                cleared_counts['picking_sessions'] = len(picking_ids)
                 cleared_counts['invoice_returns'] = InvoiceReturn.objects.count()
                 cleared_counts['invoice_items'] = InvoiceItem.objects.count()
-                cleared_counts['invoices'] = Invoice.objects.count()
-                cleared_counts['customers'] = Customer.objects.count()
-                cleared_counts['salesmen'] = Salesman.objects.count()
-                cleared_counts['couriers'] = Courier.objects.count()
+                cleared_counts['invoices'] = len(invoice_ids)
+                cleared_counts['customers'] = len(customer_ids)
+                cleared_counts['salesmen'] = len(salesman_ids)
+                cleared_counts['couriers'] = len(courier_ids)
                 
                 message = "All data cleared from view (database unchanged)"
                 
             elif table_name == 'invoices':
-                cleared_counts['invoices'] = Invoice.objects.count()
+                invoice_ids = list(Invoice.objects.values_list('id', flat=True))
+                cache.set('cleared_invoices', invoice_ids, self.CACHE_TIMEOUT)
+                
+                cleared_counts['invoices'] = len(invoice_ids)
                 cleared_counts['invoice_items'] = InvoiceItem.objects.count()
                 message = "Invoices cleared from view (database unchanged)"
                 
             elif table_name == 'customers':
-                cleared_counts['customers'] = Customer.objects.count()
+                customer_ids = list(Customer.objects.values_list('id', flat=True))
+                cache.set('cleared_customers', customer_ids, self.CACHE_TIMEOUT)
+                
+                cleared_counts['customers'] = len(customer_ids)
                 message = "Customers cleared from view (database unchanged)"
                 
             elif table_name == 'salesmen':
-                cleared_counts['salesmen'] = Salesman.objects.count()
+                salesman_ids = list(Salesman.objects.values_list('id', flat=True))
+                cache.set('cleared_salesmen', salesman_ids, self.CACHE_TIMEOUT)
+                
+                cleared_counts['salesmen'] = len(salesman_ids)
                 message = "Salesmen cleared from view (database unchanged)"
                 
             elif table_name == 'couriers':
-                cleared_counts['couriers'] = Courier.objects.count()
+                courier_ids = list(Courier.objects.values_list('id', flat=True))
+                cache.set('cleared_couriers', courier_ids, self.CACHE_TIMEOUT)
+                
+                cleared_counts['couriers'] = len(courier_ids)
                 message = "Couriers cleared from view (database unchanged)"
                 
             elif table_name == 'sessions':
                 # Keep this for backward compatibility
-                cleared_counts['delivery_sessions'] = DeliverySession.objects.count()
-                cleared_counts['packing_sessions'] = PackingSession.objects.count()
-                cleared_counts['picking_sessions'] = PickingSession.objects.count()
+                delivery_ids = list(DeliverySession.objects.values_list('id', flat=True))
+                packing_ids = list(PackingSession.objects.values_list('id', flat=True))
+                picking_ids = list(PickingSession.objects.values_list('id', flat=True))
+                
+                cache.set('cleared_delivery_sessions', delivery_ids, self.CACHE_TIMEOUT)
+                cache.set('cleared_packing_sessions', packing_ids, self.CACHE_TIMEOUT)
+                cache.set('cleared_picking_sessions', picking_ids, self.CACHE_TIMEOUT)
+                
+                cleared_counts['delivery_sessions'] = len(delivery_ids)
+                cleared_counts['packing_sessions'] = len(packing_ids)
+                cleared_counts['picking_sessions'] = len(picking_ids)
                 message = "Sessions cleared from view (database unchanged)"
                 
             elif table_name == 'picking_sessions':
-                cleared_counts['picking_sessions'] = PickingSession.objects.count()
+                picking_ids = list(PickingSession.objects.values_list('id', flat=True))
+                cache.set('cleared_picking_sessions', picking_ids, self.CACHE_TIMEOUT)
+                
+                cleared_counts['picking_sessions'] = len(picking_ids)
                 message = "Picking sessions cleared from view (database unchanged)"
                 
             elif table_name == 'packing_sessions':
-                cleared_counts['packing_sessions'] = PackingSession.objects.count()
+                packing_ids = list(PackingSession.objects.values_list('id', flat=True))
+                cache.set('cleared_packing_sessions', packing_ids, self.CACHE_TIMEOUT)
+                
+                cleared_counts['packing_sessions'] = len(packing_ids)
                 message = "Packing sessions cleared from view (database unchanged)"
                 
             elif table_name == 'delivery_sessions':
-                cleared_counts['delivery_sessions'] = DeliverySession.objects.count()
+                delivery_ids = list(DeliverySession.objects.values_list('id', flat=True))
+                cache.set('cleared_delivery_sessions', delivery_ids, self.CACHE_TIMEOUT)
+                
+                cleared_counts['delivery_sessions'] = len(delivery_ids)
                 message = "Delivery sessions cleared from view (database unchanged)"
                 
             elif table_name == 'users':
-                cleared_counts['users'] = User.objects.exclude(role='SUPERADMIN').count()
+                user_ids = list(User.objects.exclude(role='SUPERADMIN').values_list('id', flat=True))
+                cache.set('cleared_users', user_ids, self.CACHE_TIMEOUT)
+                
+                cleared_counts['users'] = len(user_ids)
                 message = "Users cleared from view (database unchanged)"
                 
             elif table_name == 'departments':
-                cleared_counts['departments'] = Department.objects.count()
+                dept_ids = list(Department.objects.values_list('id', flat=True))
+                cache.set('cleared_departments', dept_ids, self.CACHE_TIMEOUT)
+                
+                cleared_counts['departments'] = len(dept_ids)
                 message = "Departments cleared from view (database unchanged)"
                 
             elif table_name == 'job_titles':
-                cleared_counts['job_titles'] = JobTitle.objects.count()
+                job_ids = list(JobTitle.objects.values_list('id', flat=True))
+                cache.set('cleared_job_titles', job_ids, self.CACHE_TIMEOUT)
+                
+                cleared_counts['job_titles'] = len(job_ids)
                 message = "Job titles cleared from view (database unchanged)"
                 
             else:
@@ -110,11 +169,14 @@ class ClearDataView(APIView):
                     "message": f"Invalid table name: {table_name}"
                 }, status=status.HTTP_400_BAD_REQUEST)
             
+            # Also update timestamp for when data was cleared
+            cache.set(f'cleared_{table_name}_timestamp', timezone.now().isoformat(), self.CACHE_TIMEOUT)
+            
             return Response({
                 "success": True,
                 "message": message,
                 "deleted_counts": cleared_counts,
-                "note": "Data cleared from frontend view only. Database remains unchanged."
+                "note": "Data cleared from frontend view only. Database remains unchanged. Data will be hidden for 24 hours."
             }, status=status.HTTP_200_OK)
                 
         except Exception as e:
@@ -128,16 +190,29 @@ class TableStatsView(APIView):
     """
     GET /api/developer/table-stats/
     
-    Get record counts for all tables
+    Get record counts for all tables (showing visible counts after clearing)
     SUPERADMIN ONLY
     """
     permission_classes = [SuperAdminOnlyPermission]
     
     def get(self, request):
         try:
+            # Get cleared IDs from cache
+            cleared_invoices = cache.get('cleared_invoices', [])
+            cleared_picking = cache.get('cleared_picking_sessions', [])
+            cleared_packing = cache.get('cleared_packing_sessions', [])
+            cleared_delivery = cache.get('cleared_delivery_sessions', [])
+            cleared_customers = cache.get('cleared_customers', [])
+            cleared_salesmen = cache.get('cleared_salesmen', [])
+            cleared_couriers = cache.get('cleared_couriers', [])
+            cleared_users = cache.get('cleared_users', [])
+            cleared_departments = cache.get('cleared_departments', [])
+            cleared_job_titles = cache.get('cleared_job_titles', [])
+            
+            # Calculate visible counts (total - cleared)
             stats = {
                 'invoices': {
-                    'count': Invoice.objects.count(),
+                    'count': max(0, Invoice.objects.count() - len(cleared_invoices)),
                     'description': 'Sales invoices/orders'
                 },
                 'invoice_items': {
@@ -149,39 +224,39 @@ class TableStatsView(APIView):
                     'description': 'Invoice return/review records'
                 },
                 'picking_sessions': {
-                    'count': PickingSession.objects.count(),
+                    'count': max(0, PickingSession.objects.count() - len(cleared_picking)),
                     'description': 'Picking workflow sessions'
                 },
                 'packing_sessions': {
-                    'count': PackingSession.objects.count(),
+                    'count': max(0, PackingSession.objects.count() - len(cleared_packing)),
                     'description': 'Packing workflow sessions'
                 },
                 'delivery_sessions': {
-                    'count': DeliverySession.objects.count(),
+                    'count': max(0, DeliverySession.objects.count() - len(cleared_delivery)),
                     'description': 'Delivery workflow sessions'
                 },
                 'customers': {
-                    'count': Customer.objects.count(),
+                    'count': max(0, Customer.objects.count() - len(cleared_customers)),
                     'description': 'Customer records'
                 },
                 'salesmen': {
-                    'count': Salesman.objects.count(),
+                    'count': max(0, Salesman.objects.count() - len(cleared_salesmen)),
                     'description': 'Salesman records'
                 },
                 'couriers': {
-                    'count': Courier.objects.count(),
+                    'count': max(0, Courier.objects.count() - len(cleared_couriers)),
                     'description': 'Courier service providers'
                 },
                 'users': {
-                    'count': User.objects.count(),
+                    'count': max(0, User.objects.count() - len(cleared_users)),
                     'description': 'System users (staff)'
                 },
                 'departments': {
-                    'count': Department.objects.count(),
+                    'count': max(0, Department.objects.count() - len(cleared_departments)),
                     'description': 'Organization departments'
                 },
                 'job_titles': {
-                    'count': JobTitle.objects.count(),
+                    'count': max(0, JobTitle.objects.count() - len(cleared_job_titles)),
                     'description': 'Job title definitions'
                 }
             }

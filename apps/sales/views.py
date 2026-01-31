@@ -5,6 +5,7 @@ import json
 import logging
 from django.db import IntegrityError, transaction
 from django.utils import timezone
+from django.core.cache import cache
 
 from django.http import StreamingHttpResponse
 from rest_framework.views import APIView
@@ -89,6 +90,13 @@ class InvoiceListView(generics.ListAPIView):
             'invoice_returns__returned_by',
             'invoice_returns__resolved_by'
         ).order_by('created_at')
+        
+        # 🔴 EXCLUDE CLEARED INVOICES (Developer Settings feature)
+        cleared_invoice_ids = cache.get('cleared_invoices', [])
+        cleared_all_ids = cache.get('cleared_all_invoices', [])  # When "all" is cleared
+        excluded_ids = set(cleared_invoice_ids + cleared_all_ids)
+        if excluded_ids:
+            queryset = queryset.exclude(id__in=excluded_ids)
         
         # Filter by status (supports multiple values: ?status=PENDING&status=PICKING)
         status_list = self.request.query_params.getlist('status')
@@ -1822,6 +1830,11 @@ class BillingInvoicesView(generics.ListAPIView):
             'deliverysession__assigned_to',
             'deliverysession__delivered_by'
         ).order_by('created_at')
+        
+        # 🔴 EXCLUDE CLEARED INVOICES (Developer Settings feature)
+        cleared_invoice_ids = cache.get('cleared_invoices', [])
+        if cleared_invoice_ids:
+            queryset = queryset.exclude(id__in=cleared_invoice_ids)
         
         # If user is not admin, filter to only show invoices where they are the salesman
         if not user.is_admin_or_superadmin():
