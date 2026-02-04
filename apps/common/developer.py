@@ -320,3 +320,174 @@ class ResetSequencesView(APIView):
                 "success": False,
                 "message": f"Error resetting sequences: {str(e)}"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class TruncateTableView(APIView):
+    """
+    POST /api/developer/truncate-table/
+    
+    PERMANENTLY DELETE data from database tables (TRUNCATE)
+    This is irreversible and will delete all data from specified tables
+    SUPERADMIN ONLY - EXTREMELY DANGEROUS
+    """
+    permission_classes = [SuperAdminOnlyPermission]
+    
+    def post(self, request):
+        table_name = request.data.get('table_name')
+        confirm_password = request.data.get('confirm_password')
+        
+        if not table_name:
+            return Response({
+                "success": False,
+                "message": "Table name is required"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Verify user password for extra security
+        if not request.user.check_password(confirm_password):
+            return Response({
+                "success": False,
+                "message": "Invalid password. Password confirmation required for truncate operations."
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            deleted_counts = {}
+            
+            with transaction.atomic():
+                if table_name == 'all':
+                    # Delete all data (CASCADE deletes related records automatically)
+                    deleted_counts['delivery_sessions'] = DeliverySession.objects.count()
+                    DeliverySession.objects.all().delete()
+                    
+                    deleted_counts['packing_sessions'] = PackingSession.objects.count()
+                    PackingSession.objects.all().delete()
+                    
+                    deleted_counts['picking_sessions'] = PickingSession.objects.count()
+                    PickingSession.objects.all().delete()
+                    
+                    deleted_counts['invoice_returns'] = InvoiceReturn.objects.count()
+                    InvoiceReturn.objects.all().delete()
+                    
+                    deleted_counts['invoice_items'] = InvoiceItem.objects.count()
+                    InvoiceItem.objects.all().delete()
+                    
+                    deleted_counts['invoices'] = Invoice.objects.count()
+                    Invoice.objects.all().delete()
+                    
+                    deleted_counts['customers'] = Customer.objects.count()
+                    Customer.objects.all().delete()
+                    
+                    deleted_counts['salesmen'] = Salesman.objects.count()
+                    Salesman.objects.all().delete()
+                    
+                    deleted_counts['couriers'] = Courier.objects.count()
+                    Courier.objects.all().delete()
+                    
+                    deleted_counts['users'] = User.objects.exclude(role='SUPERADMIN').count()
+                    User.objects.exclude(role='SUPERADMIN').delete()
+                    
+                    deleted_counts['departments'] = Department.objects.count()
+                    Department.objects.all().delete()
+                    
+                    deleted_counts['job_titles'] = JobTitle.objects.count()
+                    JobTitle.objects.all().delete()
+                    
+                    # Clear cache
+                    cache.clear()
+                    
+                    message = f"✅ ALL DATA PERMANENTLY DELETED FROM DATABASE"
+                    
+                elif table_name == 'invoices':
+                    deleted_counts['invoice_returns'] = InvoiceReturn.objects.count()
+                    InvoiceReturn.objects.all().delete()
+                    
+                    deleted_counts['invoice_items'] = InvoiceItem.objects.count()
+                    InvoiceItem.objects.all().delete()
+                    
+                    deleted_counts['invoices'] = Invoice.objects.count()
+                    Invoice.objects.all().delete()
+                    
+                    # Clear related sessions
+                    deleted_counts['delivery_sessions'] = DeliverySession.objects.count()
+                    DeliverySession.objects.all().delete()
+                    
+                    deleted_counts['packing_sessions'] = PackingSession.objects.count()
+                    PackingSession.objects.all().delete()
+                    
+                    deleted_counts['picking_sessions'] = PickingSession.objects.count()
+                    PickingSession.objects.all().delete()
+                    
+                    cache.delete('cleared_invoices')
+                    message = f"✅ Invoices and related data PERMANENTLY DELETED"
+                    
+                elif table_name == 'customers':
+                    deleted_counts['customers'] = Customer.objects.count()
+                    Customer.objects.all().delete()
+                    cache.delete('cleared_customers')
+                    message = f"✅ Customers PERMANENTLY DELETED"
+                    
+                elif table_name == 'salesmen':
+                    deleted_counts['salesmen'] = Salesman.objects.count()
+                    Salesman.objects.all().delete()
+                    cache.delete('cleared_salesmen')
+                    message = f"✅ Salesmen PERMANENTLY DELETED"
+                    
+                elif table_name == 'couriers':
+                    deleted_counts['couriers'] = Courier.objects.count()
+                    Courier.objects.all().delete()
+                    cache.delete('cleared_couriers')
+                    message = f"✅ Couriers PERMANENTLY DELETED"
+                    
+                elif table_name == 'picking_sessions':
+                    deleted_counts['picking_sessions'] = PickingSession.objects.count()
+                    PickingSession.objects.all().delete()
+                    cache.delete('cleared_picking_sessions')
+                    message = f"✅ Picking Sessions PERMANENTLY DELETED"
+                    
+                elif table_name == 'packing_sessions':
+                    deleted_counts['packing_sessions'] = PackingSession.objects.count()
+                    PackingSession.objects.all().delete()
+                    cache.delete('cleared_packing_sessions')
+                    message = f"✅ Packing Sessions PERMANENTLY DELETED"
+                    
+                elif table_name == 'delivery_sessions':
+                    deleted_counts['delivery_sessions'] = DeliverySession.objects.count()
+                    DeliverySession.objects.all().delete()
+                    cache.delete('cleared_delivery_sessions')
+                    message = f"✅ Delivery Sessions PERMANENTLY DELETED"
+                    
+                elif table_name == 'users':
+                    deleted_counts['users'] = User.objects.exclude(role='SUPERADMIN').count()
+                    User.objects.exclude(role='SUPERADMIN').delete()
+                    cache.delete('cleared_users')
+                    message = f"✅ Users (except SUPERADMIN) PERMANENTLY DELETED"
+                    
+                elif table_name == 'departments':
+                    deleted_counts['departments'] = Department.objects.count()
+                    Department.objects.all().delete()
+                    cache.delete('cleared_departments')
+                    message = f"✅ Departments PERMANENTLY DELETED"
+                    
+                elif table_name == 'job_titles':
+                    deleted_counts['job_titles'] = JobTitle.objects.count()
+                    JobTitle.objects.all().delete()
+                    cache.delete('cleared_job_titles')
+                    message = f"✅ Job Titles PERMANENTLY DELETED"
+                    
+                else:
+                    return Response({
+                        "success": False,
+                        "message": f"Invalid table name: {table_name}"
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            
+            return Response({
+                "success": True,
+                "message": message,
+                "deleted_counts": deleted_counts,
+                "warning": "⚠️ THIS WAS A PERMANENT DELETE OPERATION - DATA CANNOT BE RECOVERED"
+            }, status=status.HTTP_200_OK)
+                
+        except Exception as e:
+            return Response({
+                "success": False,
+                "message": f"Error truncating table: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -13,6 +13,11 @@ class DeveloperSettings(models.Model):
         help_text="When enabled, picked invoices remain visible in Picking Management with a Complete button"
     )
     
+    enable_bulk_picking = models.BooleanField(
+        default=False,
+        help_text="When enabled, allows bulk picking of multiple invoices at once"
+    )
+    
     # Metadata
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.CharField(max_length=255, blank=True, null=True)

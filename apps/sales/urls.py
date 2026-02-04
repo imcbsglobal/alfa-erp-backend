@@ -25,6 +25,9 @@ from .views import (
     AssignDeliveryStaffView,
     UploadCourierSlipView,
     CancelSessionView,
+    MissingInvoiceFinderView,
+    BulkPickingStartView,
+    BulkPickingCompleteView,
 )
 from .admin_views import AdminCompleteWorkflowView
 
@@ -48,6 +51,8 @@ urlpatterns = [
     path("picking/active/", MyActivePickingView.as_view(), name="picking-active"),
     path("picking/complete/", CompletePickingView.as_view(), name="picking-complete"),
     path("picking/history/", PickingHistoryView.as_view(), name="picking-history"),
+    path("picking/bulk-start/", BulkPickingStartView.as_view(), name="bulk-picking-start"),
+    path("picking/bulk-complete/", BulkPickingCompleteView.as_view(), name="bulk-picking-complete"),
     
     # Packing workflow
     path("packing/active/", MyActivePackingView.as_view(), name="packing-active"),
@@ -72,5 +77,8 @@ urlpatterns = [
     
     # Admin endpoints
     path("admin/complete-workflow/", AdminCompleteWorkflowView.as_view(), name="admin-complete-workflow"),
+    
+    # Missing Invoice Finder
+    path("missing-invoices/", MissingInvoiceFinderView.as_view(), name="missing-invoices"),
 ]
 

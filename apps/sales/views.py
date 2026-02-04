@@ -2125,3 +2125,365 @@ class CourierViewSet(BaseModelViewSet):
         )
 
 
+class MissingInvoiceFinderView(APIView):
+    """
+    API View to find missing invoices in a series
+    GET /api/sales/missing-invoices/
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """
+        Find missing invoices in a given series within a date range
+        Query params:
+        - from_date: Start date (YYYY-MM-DD)
+        - to_date: End date (YYYY-MM-DD)
+        - series: Invoice series prefix (e.g., 'C-', 'A-', 'B-')
+        """
+        from_date = request.query_params.get('from_date')
+        to_date = request.query_params.get('to_date')
+        series = request.query_params.get('series', '')
+        
+        if not from_date or not to_date:
+            return Response({
+                'success': False,
+                'message': 'Both from_date and to_date are required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Get all invoices in the date range with the series prefix
+            invoices = Invoice.objects.filter(
+                invoice_date__gte=from_date,
+                invoice_date__lte=to_date
+            ).select_related('customer', 'salesman')
+            
+            if series:
+                invoices = invoices.filter(invoice_no__startswith=series)
+            
+            invoices = invoices.order_by('invoice_no')
+            
+            # Extract invoice numbers and their numeric parts
+            invoice_data = []
+            for inv in invoices:
+                # Get customer name from customer object or use temp_name
+                customer_name = inv.temp_name if inv.temp_name else (
+                    inv.customer.name if inv.customer else 'N/A'
+                )
+                
+                invoice_data.append({
+                    'invoice_no': inv.invoice_no,
+                    'invoice_date': inv.invoice_date.isoformat() if inv.invoice_date else None,
+                    'customer_name': customer_name,
+                    'total_amount': float(inv.Total) if inv.Total else 0,
+                    'status': inv.status or 'INVOICED',
+                    'priority': inv.priority or 'MEDIUM'
+                })
+            
+            # Find missing invoices by analyzing the numeric sequence
+            missing_invoices = []
+            if series and len(invoice_data) > 0:
+                # Extract numeric parts from invoice numbers
+                numbers = []
+                for inv in invoice_data:
+                    try:
+                        # Remove the series prefix and extract the number
+                        num_part = inv['invoice_no'].replace(series, '').strip()
+                        # Handle cases like "C-100" or "C- 100"
+                        num_part = num_part.lstrip('-').strip()
+                        if num_part.isdigit():
+                            numbers.append(int(num_part))
+                    except Exception as parse_err:
+                        logger.warning(f"Failed to parse invoice number {inv['invoice_no']}: {parse_err}")
+                        continue
+                
+                if numbers:
+                    numbers.sort()
+                    min_num = min(numbers)
+                    max_num = max(numbers)
+                    
+                    # Find missing numbers in the sequence
+                    existing_set = set(numbers)
+                    for num in range(min_num, max_num + 1):
+                        if num not in existing_set:
+                            missing_invoice_no = f"{series}{num}"
+                            missing_invoices.append({
+                                'invoice_no': missing_invoice_no,
+                                'number': num,
+                                'status': 'MISSING'
+                            })
+            
+            return Response({
+                'success': True,
+                'data': {
+                    'invoices': invoice_data,
+                    'missing_invoices': missing_invoices,
+                    'total_invoices': len(invoice_data),
+                    'missing_count': len(missing_invoices),
+                    'series': series,
+                    'from_date': from_date,
+                    'to_date': to_date
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error finding missing invoices: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return Response({
+                'success': False,
+                'message': f'Error: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class BulkPickingStartView(APIView):
+    """
+    API View to start picking for multiple invoices at once
+    POST /api/sales/picking/bulk-start/
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        """
+        Start picking for multiple invoices
+        Body:
+        - user_email: Email of the user picking
+        - invoice_numbers: List of invoice numbers to pick
+        """
+        user_email = request.data.get('user_email')
+        invoice_numbers = request.data.get('invoice_numbers', [])
+        
+        if not user_email:
+            return Response({
+                'success': False,
+                'message': 'User email is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not invoice_numbers or not isinstance(invoice_numbers, list):
+            return Response({
+                'success': False,
+                'message': 'Invoice numbers list is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Verify user exists and has access
+            from apps.accounts.models import User
+            try:
+                user = User.objects.get(email__iexact=user_email)
+            except User.DoesNotExist:
+                return Response({
+                    'success': False,
+                    'message': 'User not found with this email address'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Check if user already has an active picking session
+            active_session = PickingSession.objects.filter(
+                picker=user,
+                picking_status='PREPARING'
+            ).first()
+            
+            if active_session:
+                return Response({
+                    'success': False,
+                    'message': f'User already has an active picking session for invoice {active_session.invoice.invoice_no}'
+                }, status=status.HTTP_409_CONFLICT)
+            
+            started_invoices = []
+            failed_invoices = []
+            
+            with transaction.atomic():
+                for invoice_no in invoice_numbers:
+                    try:
+                        # Get the invoice
+                        invoice = Invoice.objects.select_for_update().get(invoice_no=invoice_no)
+                        
+                        # Check if invoice is available for picking
+                        if invoice.status != 'INVOICED':
+                            failed_invoices.append({
+                                'invoice_no': invoice_no,
+                                'error': f'Invoice status is {invoice.status}, not available for picking'
+                            })
+                            continue
+                        
+                        # Check if there's already an active picking session for this invoice
+                        existing_session = PickingSession.objects.filter(
+                            invoice=invoice,
+                            picking_status='PREPARING'
+                        ).first()
+                        
+                        if existing_session:
+                            failed_invoices.append({
+                                'invoice_no': invoice_no,
+                                'error': 'Invoice already has an active picking session'
+                            })
+                            continue
+                        
+                        # Create picking session
+                        session = PickingSession.objects.create(
+                            invoice=invoice,
+                            picker=user,
+                            picking_status='PREPARING',
+                            start_time=timezone.now(),
+                            notes='Bulk picking started'
+                        )
+                        
+                        # Update invoice status
+                        invoice.status = 'PICKING'
+                        invoice.save()
+                        
+                        started_invoices.append({
+                            'invoice_no': invoice_no,
+                            'session_id': session.id
+                        })
+                        
+                    except Invoice.DoesNotExist:
+                        failed_invoices.append({
+                            'invoice_no': invoice_no,
+                            'error': 'Invoice not found'
+                        })
+                    except Exception as e:
+                        logger.error(f"Error starting picking for {invoice_no}: {str(e)}")
+                        failed_invoices.append({
+                            'invoice_no': invoice_no,
+                            'error': str(e)
+                        })
+            
+            if len(started_invoices) == 0:
+                return Response({
+                    'success': False,
+                    'message': 'No invoices were started for picking',
+                    'failed': failed_invoices
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            return Response({
+                'success': True,
+                'message': f'Successfully started picking for {len(started_invoices)} invoice(s)',
+                'started': started_invoices,
+                'failed': failed_invoices,
+                'total_started': len(started_invoices),
+                'total_failed': len(failed_invoices)
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error in bulk picking start: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return Response({
+                'success': False,
+                'message': f'Error: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class BulkPickingCompleteView(APIView):
+    """
+    API View to complete picking for multiple invoices at once
+    POST /api/sales/picking/bulk-complete/
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        """
+        Complete picking for multiple invoices
+        Body:
+        - user_email: Email of the user
+        - invoice_numbers: List of invoice numbers to complete
+        """
+        user_email = request.data.get('user_email')
+        invoice_numbers = request.data.get('invoice_numbers', [])
+        
+        if not user_email:
+            return Response({
+                'success': False,
+                'message': 'User email is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not invoice_numbers or not isinstance(invoice_numbers, list):
+            return Response({
+                'success': False,
+                'message': 'Invoice numbers list is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Verify user
+            from apps.accounts.models import User
+            try:
+                user = User.objects.get(email__iexact=user_email)
+            except User.DoesNotExist:
+                return Response({
+                    'success': False,
+                    'message': 'User not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            completed_invoices = []
+            failed_invoices = []
+            
+            with transaction.atomic():
+                for invoice_no in invoice_numbers:
+                    try:
+                        invoice = Invoice.objects.select_for_update().get(invoice_no=invoice_no)
+                        
+                        # Get active picking session
+                        session = PickingSession.objects.filter(
+                            invoice=invoice,
+                            picker=user,
+                            picking_status='PREPARING'
+                        ).first()
+                        
+                        if not session:
+                            failed_invoices.append({
+                                'invoice_no': invoice_no,
+                                'error': 'No active picking session found for this user'
+                            })
+                            continue
+                        
+                        # Complete the session
+                        session.picking_status = 'PICKED'
+                        session.end_time = timezone.now()
+                        session.notes = (session.notes or '') + ' | Bulk picking completed'
+                        session.save()
+                        
+                        # Update invoice status
+                        invoice.status = 'PICKED'
+                        invoice.save()
+                        
+                        completed_invoices.append({
+                            'invoice_no': invoice_no,
+                            'session_id': session.id
+                        })
+                        
+                    except Invoice.DoesNotExist:
+                        failed_invoices.append({
+                            'invoice_no': invoice_no,
+                            'error': 'Invoice not found'
+                        })
+                    except Exception as e:
+                        logger.error(f"Error completing picking for {invoice_no}: {str(e)}")
+                        failed_invoices.append({
+                            'invoice_no': invoice_no,
+                            'error': str(e)
+                        })
+            
+            if len(completed_invoices) == 0:
+                return Response({
+                    'success': False,
+                    'message': 'No invoices were completed',
+                    'failed': failed_invoices
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            return Response({
+                'success': True,
+                'message': f'Successfully completed picking for {len(completed_invoices)} invoice(s)',
+                'completed': completed_invoices,
+                'failed': failed_invoices,
+                'total_completed': len(completed_invoices),
+                'total_failed': len(failed_invoices)
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error in bulk picking complete: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return Response({
+                'success': False,
+                'message': f'Error: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
