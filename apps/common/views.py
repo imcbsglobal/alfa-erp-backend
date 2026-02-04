@@ -35,17 +35,29 @@ class DeveloperSettingsView(APIView):
                 'message': 'Only SUPERADMIN can update developer settings'
             }, status=status.HTTP_403_FORBIDDEN)
         
+        # Debug logging
+        print(f"🔍 Received data: {request.data}")
+        
         settings = DeveloperSettings.get_settings()
+        print(f"🔍 Current settings before update: enable_bulk_picking={settings.enable_bulk_picking}")
+        
         serializer = DeveloperSettingsSerializer(settings, data=request.data, partial=True)
         
         if serializer.is_valid():
             serializer.save(updated_by=request.user.email)
+            print(f"✅ Settings saved: {serializer.data}")
+            
+            # Verify the save
+            settings.refresh_from_db()
+            print(f"🔍 Settings after refresh: enable_bulk_picking={settings.enable_bulk_picking}")
+            
             return Response({
                 'success': True,
                 'message': 'Developer settings updated successfully',
                 'data': serializer.data
             })
         
+        print(f"❌ Validation errors: {serializer.errors}")
         return Response({
             'success': False,
             'message': 'Invalid data',
