@@ -398,8 +398,8 @@ class TruncateTableView(APIView):
                     deleted_counts['picking_sessions'] = get_queryset(PickingSession, 'start_time').count()
                     get_queryset(PickingSession, 'start_time').delete()
                     
-                    deleted_counts['invoice_returns'] = get_queryset(InvoiceReturn, 'return_date').count()
-                    get_queryset(InvoiceReturn, 'return_date').delete()
+                    deleted_counts['invoice_returns'] = get_queryset(InvoiceReturn, 'returned_at').count()
+                    get_queryset(InvoiceReturn, 'returned_at').delete()
                     
                     deleted_counts['invoice_items'] = InvoiceItem.objects.count()
                     InvoiceItem.objects.all().delete()
@@ -432,8 +432,8 @@ class TruncateTableView(APIView):
                     message = f"✅ ALL DATA{date_info} PERMANENTLY DELETED FROM DATABASE"
                     
                 elif table_name == 'invoices':
-                    deleted_counts['invoice_returns'] = get_queryset(InvoiceReturn, 'return_date').count()
-                    get_queryset(InvoiceReturn, 'return_date').delete()
+                    deleted_counts['invoice_returns'] = get_queryset(InvoiceReturn, 'returned_at').count()
+                    get_queryset(InvoiceReturn, 'returned_at').delete()
                     
                     deleted_counts['invoice_items'] = InvoiceItem.objects.count()
                     InvoiceItem.objects.all().delete()
