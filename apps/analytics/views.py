@@ -9,7 +9,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.db.models import Q, Count
 from datetime import datetime, date
 import json
-import time
+import asyncio
 from apps.sales.models import Invoice, PickingSession, PackingSession, DeliverySession
 from apps.accounts.models import User
 
@@ -71,7 +71,7 @@ class DashboardStatsSSEView(View):
     Uses Django View instead of DRF APIView to avoid content negotiation issues
     """
     
-    def get(self, request):
+    async def get(self, request):
         # Manual token authentication for SSE
         token = request.GET.get('token')
         if not token:
@@ -91,33 +91,38 @@ class DashboardStatsSSEView(View):
                 'error': f'Invalid token: {str(e)}'
             }, status=401)
         
-        def event_stream():
-            """Generator that yields SSE formatted data"""
+        async def event_stream():
+            """Async generator that yields SSE formatted data"""
             while True:
                 try:
                     today = date.today()
                     
-                    # Get today's invoices
-                    today_invoices = Invoice.objects.filter(
-                        created_at__date=today
+                    # Get today's invoices (async database calls)
+                    total_invoices = await asyncio.to_thread(
+                        lambda: Invoice.objects.filter(created_at__date=today).count()
                     )
-                    total_invoices = today_invoices.count()
                     
                     # Get today's completed sessions
-                    completed_picking = PickingSession.objects.filter(
-                        start_time__date=today,
-                        picking_status='PICKED'
-                    ).count()
+                    completed_picking = await asyncio.to_thread(
+                        lambda: PickingSession.objects.filter(
+                            start_time__date=today,
+                            picking_status='PICKED'
+                        ).count()
+                    )
                     
-                    completed_packing = PackingSession.objects.filter(
-                        start_time__date=today,
-                        packing_status='PACKED'
-                    ).count()
+                    completed_packing = await asyncio.to_thread(
+                        lambda: PackingSession.objects.filter(
+                            start_time__date=today,
+                            packing_status='PACKED'
+                        ).count()
+                    )
                     
-                    completed_delivery = DeliverySession.objects.filter(
-                        start_time__date=today,
-                        delivery_status='DELIVERED'
-                    ).count()
+                    completed_delivery = await asyncio.to_thread(
+                        lambda: DeliverySession.objects.filter(
+                            start_time__date=today,
+                            delivery_status='DELIVERED'
+                        ).count()
+                    )
                     
                     data = {
                         'date': today.isoformat(),
@@ -133,8 +138,8 @@ class DashboardStatsSSEView(View):
                     # Format as SSE
                     yield f"data: {json.dumps(data)}\n\n"
                     
-                    # Wait 5 seconds before next update
-                    time.sleep(5)
+                    # Wait 5 seconds before next update (async)
+                    await asyncio.sleep(5)
                     
                 except Exception as e:
                     error_data = {
@@ -142,7 +147,7 @@ class DashboardStatsSSEView(View):
                         'timestamp': datetime.now().isoformat()
                     }
                     yield f"data: {json.dumps(error_data)}\n\n"
-                    time.sleep(5)
+                    await asyncio.sleep(5)
         
         response = StreamingHttpResponse(
             event_stream(),

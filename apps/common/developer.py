@@ -190,29 +190,17 @@ class TableStatsView(APIView):
     """
     GET /api/developer/table-stats/
     
-    Get record counts for all tables (showing visible counts after clearing)
+    Get actual record counts for all tables from database
     SUPERADMIN ONLY
     """
     permission_classes = [SuperAdminOnlyPermission]
     
     def get(self, request):
         try:
-            # Get cleared IDs from cache
-            cleared_invoices = cache.get('cleared_invoices', [])
-            cleared_picking = cache.get('cleared_picking_sessions', [])
-            cleared_packing = cache.get('cleared_packing_sessions', [])
-            cleared_delivery = cache.get('cleared_delivery_sessions', [])
-            cleared_customers = cache.get('cleared_customers', [])
-            cleared_salesmen = cache.get('cleared_salesmen', [])
-            cleared_couriers = cache.get('cleared_couriers', [])
-            cleared_users = cache.get('cleared_users', [])
-            cleared_departments = cache.get('cleared_departments', [])
-            cleared_job_titles = cache.get('cleared_job_titles', [])
-            
-            # Calculate visible counts (total - cleared)
+            # Return ACTUAL database counts (not cached/virtual counts)
             stats = {
                 'invoices': {
-                    'count': max(0, Invoice.objects.count() - len(cleared_invoices)),
+                    'count': Invoice.objects.count(),
                     'description': 'Sales invoices/orders'
                 },
                 'invoice_items': {
@@ -224,39 +212,39 @@ class TableStatsView(APIView):
                     'description': 'Invoice return/review records'
                 },
                 'picking_sessions': {
-                    'count': max(0, PickingSession.objects.count() - len(cleared_picking)),
+                    'count': PickingSession.objects.count(),
                     'description': 'Picking workflow sessions'
                 },
                 'packing_sessions': {
-                    'count': max(0, PackingSession.objects.count() - len(cleared_packing)),
+                    'count': PackingSession.objects.count(),
                     'description': 'Packing workflow sessions'
                 },
                 'delivery_sessions': {
-                    'count': max(0, DeliverySession.objects.count() - len(cleared_delivery)),
+                    'count': DeliverySession.objects.count(),
                     'description': 'Delivery workflow sessions'
                 },
                 'customers': {
-                    'count': max(0, Customer.objects.count() - len(cleared_customers)),
+                    'count': Customer.objects.count(),
                     'description': 'Customer records'
                 },
                 'salesmen': {
-                    'count': max(0, Salesman.objects.count() - len(cleared_salesmen)),
+                    'count': Salesman.objects.count(),
                     'description': 'Salesman records'
                 },
                 'couriers': {
-                    'count': max(0, Courier.objects.count() - len(cleared_couriers)),
+                    'count': Courier.objects.count(),
                     'description': 'Courier service providers'
                 },
                 'users': {
-                    'count': max(0, User.objects.count() - len(cleared_users)),
+                    'count': User.objects.count(),
                     'description': 'System users (staff)'
                 },
                 'departments': {
-                    'count': max(0, Department.objects.count() - len(cleared_departments)),
+                    'count': Department.objects.count(),
                     'description': 'Organization departments'
                 },
                 'job_titles': {
-                    'count': max(0, JobTitle.objects.count() - len(cleared_job_titles)),
+                    'count': JobTitle.objects.count(),
                     'description': 'Job title definitions'
                 }
             }
@@ -362,6 +350,11 @@ class TruncateTableView(APIView):
                         "success": False,
                         "message": "From date cannot be after to date"
                     }, status=status.HTTP_400_BAD_REQUEST)
+                
+                # Log the date range for debugging
+                print(f"🗓️ Deleting data from {from_dt} to {to_dt} (inclusive)")
+                print(f"📅 This includes all data created on: {from_dt}, ..., {to_dt}")
+                
             except ValueError:
                 return Response({
                     "success": False,
@@ -375,16 +368,40 @@ class TruncateTableView(APIView):
             def get_queryset(model, date_field='created_at'):
                 qs = model.objects.all()
                 if from_date and to_date:
-                    # Use __date for datetime fields to match entire days
-                    filter_kwargs = {
-                        f'{date_field}__date__gte': from_date,
-                        f'{date_field}__date__lte': to_date
-                    }
+                    # For DateField, use direct comparison
+                    # For DateTimeField, add timezone awareness
+                    from django.utils import timezone
+                    from datetime import datetime
+                    
+                    # Check if field is DateTimeField or DateField
+                    field = model._meta.get_field(date_field)
+                    from django.db.models import DateTimeField, DateField
+                    
+                    if isinstance(field, DateTimeField):
+                        # Convert to timezone-aware datetime
+                        from_dt = timezone.make_aware(datetime.strptime(from_date, '%Y-%m-%d'))
+                        to_dt = timezone.make_aware(datetime.strptime(to_date + ' 23:59:59', '%Y-%m-%d %H:%M:%S'))
+                        filter_kwargs = {
+                            f'{date_field}__gte': from_dt,
+                            f'{date_field}__lte': to_dt
+                        }
+                    else:
+                        # DateField - use direct date comparison
+                        filter_kwargs = {
+                            f'{date_field}__gte': from_date,
+                            f'{date_field}__lte': to_date
+                        }
+                    
                     qs = qs.filter(**filter_kwargs)
+                    print(f"  Filtering {model.__name__} by {date_field} between {from_date} and {to_date} (inclusive)")
                 elif from_date:
-                    qs = qs.filter(**{f'{date_field}__date__gte': from_date})
+                    qs = qs.filter(**{f'{date_field}__gte': from_date})
+                    print(f"  Filtering {model.__name__} by {date_field} >= {from_date}")
                 elif to_date:
-                    qs = qs.filter(**{f'{date_field}__date__lte': to_date})
+                    qs = qs.filter(**{f'{date_field}__lte': to_date})
+                    print(f"  Filtering {model.__name__} by {date_field} <= {to_date}")
+                else:
+                    print(f"  Deleting ALL {model.__name__} records (no date filter)")
                 return qs
             
             with transaction.atomic():
@@ -433,14 +450,30 @@ class TruncateTableView(APIView):
                     message = f"✅ ALL DATA{date_info} PERMANENTLY DELETED FROM DATABASE"
                     
                 elif table_name == 'invoices':
-                    deleted_counts['invoice_returns'] = get_queryset(InvoiceReturn, 'returned_at').count()
-                    get_queryset(InvoiceReturn, 'returned_at').delete()
+                    # First get the invoices that match the date filter
+                    # Use invoice_date (business date) not created_at (system date)
+                    invoices_to_delete = get_queryset(Invoice, 'invoice_date')
+                    invoice_ids = list(invoices_to_delete.values_list('id', flat=True))
                     
-                    deleted_counts['invoice_items'] = InvoiceItem.objects.count()
-                    InvoiceItem.objects.all().delete()
+                    # Log what we found for debugging
+                    total_invoices = Invoice.objects.count()
+                    print(f"📊 Total invoices in DB: {total_invoices}")
+                    print(f"🔍 Invoices matching date filter (by invoice_date): {len(invoice_ids)}")
                     
-                    deleted_counts['invoices'] = get_queryset(Invoice).count()
-                    get_queryset(Invoice).delete()
+                    if from_date and to_date and len(invoice_ids) == 0:
+                        # Show sample invoice dates to help user understand
+                        sample_dates = Invoice.objects.values_list('invoice_date', flat=True)[:5]
+                        print(f"📅 Sample invoice_date values: {[str(d) for d in sample_dates]}")
+                    
+                    # Delete related data for these specific invoices
+                    deleted_counts['invoice_returns'] = InvoiceReturn.objects.filter(invoice_id__in=invoice_ids).count()
+                    InvoiceReturn.objects.filter(invoice_id__in=invoice_ids).delete()
+                    
+                    deleted_counts['invoice_items'] = InvoiceItem.objects.filter(invoice_id__in=invoice_ids).count()
+                    InvoiceItem.objects.filter(invoice_id__in=invoice_ids).delete()
+                    
+                    deleted_counts['invoices'] = invoices_to_delete.count()
+                    invoices_to_delete.delete()
                     
                     # Clear related sessions
                     deleted_counts['delivery_sessions'] = get_queryset(DeliverySession, 'start_time').count()
@@ -452,9 +485,18 @@ class TruncateTableView(APIView):
                     deleted_counts['picking_sessions'] = get_queryset(PickingSession, 'start_time').count()
                     get_queryset(PickingSession, 'start_time').delete()
                     
+                    # Clear all cache keys
                     cache.delete('cleared_invoices')
+                    cache.delete('cleared_picking_sessions')
+                    cache.delete('cleared_packing_sessions')
+                    cache.delete('cleared_delivery_sessions')
                     date_info = f" from {from_date} to {to_date}" if from_date and to_date else ""
-                    message = f"✅ Invoices{date_info} and related data PERMANENTLY DELETED"
+                    
+                    # Add helpful message if nothing was deleted due to date filter
+                    if len(invoice_ids) == 0 and (from_date or to_date):
+                        message = f"⚠️ No invoices found with invoice_date{date_info}. Check your date range - no records matched the filter."
+                    else:
+                        message = f"✅ Invoices{date_info} and related data PERMANENTLY DELETED"
                     
                 elif table_name == 'customers':
                     deleted_counts['customers'] = get_queryset(Customer).count()
