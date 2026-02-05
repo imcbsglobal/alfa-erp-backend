@@ -1,8 +1,11 @@
 from django.shortcuts import render
 from django.http import StreamingHttpResponse
+from django.views import View
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.db.models import Q, Count
 from datetime import datetime, date
 import json
@@ -60,12 +63,34 @@ class DashboardStatsView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class DashboardStatsSSEView(APIView):
+class DashboardStatsSSEView(View):
     """
     GET /api/analytics/dashboard-stats-stream/
     Server-Sent Events endpoint for real-time dashboard updates
+    Supports token authentication via query parameter
+    Uses Django View instead of DRF APIView to avoid content negotiation issues
     """
+    
     def get(self, request):
+        # Manual token authentication for SSE
+        token = request.GET.get('token')
+        if not token:
+            from django.http import JsonResponse
+            return JsonResponse({
+                'error': 'Authentication token required'
+            }, status=401)
+        
+        # Verify token
+        try:
+            from rest_framework_simplejwt.tokens import AccessToken
+            access_token = AccessToken(token)
+            user_id = access_token['user_id']
+        except Exception as e:
+            from django.http import JsonResponse
+            return JsonResponse({
+                'error': f'Invalid token: {str(e)}'
+            }, status=401)
+        
         def event_stream():
             """Generator that yields SSE formatted data"""
             while True:
@@ -125,4 +150,6 @@ class DashboardStatsSSEView(APIView):
         )
         response['Cache-Control'] = 'no-cache'
         response['X-Accel-Buffering'] = 'no'
+        response['Access-Control-Allow-Origin'] = '*'
+        response['Access-Control-Allow-Credentials'] = 'true'
         return response

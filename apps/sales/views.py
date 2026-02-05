@@ -148,20 +148,6 @@ class InvoiceDetailView(generics.RetrieveAPIView):
     queryset = Invoice.objects.select_related('customer', 'salesman', 'created_user').prefetch_related('items')
     serializer_class = InvoiceListSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
-    
-    def retrieve(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = self.get_serializer(instance)
-        data = serializer.data
-        
-        # Debug logging
-        print(f"📦 Invoice {instance.invoice_no} retrieved")
-        print(f"📦 Items count from DB: {instance.items.count()}")
-        print(f"📦 Items in serialized data: {len(data.get('items', []))}")
-        if data.get('items'):
-            print(f"📦 First item: {data['items'][0] if data['items'] else 'None'}")
-        
-        return Response(data)
 
 
 # ===== My Active Picking Task API =====
