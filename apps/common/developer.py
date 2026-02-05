@@ -335,6 +335,8 @@ class TruncateTableView(APIView):
     def post(self, request):
         table_name = request.data.get('table_name')
         confirm_password = request.data.get('confirm_password')
+        from_date = request.data.get('from_date')
+        to_date = request.data.get('to_date')
         
         if not table_name:
             return Response({
@@ -349,129 +351,172 @@ class TruncateTableView(APIView):
                 "message": "Invalid password. Password confirmation required for truncate operations."
             }, status=status.HTTP_403_FORBIDDEN)
         
+        # Validate date range if provided
+        if from_date and to_date:
+            try:
+                from datetime import datetime
+                from_dt = datetime.strptime(from_date, '%Y-%m-%d').date()
+                to_dt = datetime.strptime(to_date, '%Y-%m-%d').date()
+                if from_dt > to_dt:
+                    return Response({
+                        "success": False,
+                        "message": "From date cannot be after to date"
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            except ValueError:
+                return Response({
+                    "success": False,
+                    "message": "Invalid date format. Use YYYY-MM-DD"
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
         try:
             deleted_counts = {}
+            
+            # Helper function to apply date filter
+            def get_queryset(model, date_field='created_at'):
+                qs = model.objects.all()
+                if from_date and to_date:
+                    filter_kwargs = {
+                        f'{date_field}__gte': from_date,
+                        f'{date_field}__lte': to_date
+                    }
+                    qs = qs.filter(**filter_kwargs)
+                elif from_date:
+                    qs = qs.filter(**{f'{date_field}__gte': from_date})
+                elif to_date:
+                    qs = qs.filter(**{f'{date_field}__lte': to_date})
+                return qs
             
             with transaction.atomic():
                 if table_name == 'all':
                     # Delete all data (CASCADE deletes related records automatically)
-                    deleted_counts['delivery_sessions'] = DeliverySession.objects.count()
-                    DeliverySession.objects.all().delete()
+                    deleted_counts['delivery_sessions'] = get_queryset(DeliverySession, 'start_time').count()
+                    get_queryset(DeliverySession, 'start_time').delete()
                     
-                    deleted_counts['packing_sessions'] = PackingSession.objects.count()
-                    PackingSession.objects.all().delete()
+                    deleted_counts['packing_sessions'] = get_queryset(PackingSession, 'start_time').count()
+                    get_queryset(PackingSession, 'start_time').delete()
                     
-                    deleted_counts['picking_sessions'] = PickingSession.objects.count()
-                    PickingSession.objects.all().delete()
+                    deleted_counts['picking_sessions'] = get_queryset(PickingSession, 'start_time').count()
+                    get_queryset(PickingSession, 'start_time').delete()
                     
-                    deleted_counts['invoice_returns'] = InvoiceReturn.objects.count()
-                    InvoiceReturn.objects.all().delete()
+                    deleted_counts['invoice_returns'] = get_queryset(InvoiceReturn, 'return_date').count()
+                    get_queryset(InvoiceReturn, 'return_date').delete()
                     
                     deleted_counts['invoice_items'] = InvoiceItem.objects.count()
                     InvoiceItem.objects.all().delete()
                     
-                    deleted_counts['invoices'] = Invoice.objects.count()
-                    Invoice.objects.all().delete()
+                    deleted_counts['invoices'] = get_queryset(Invoice).count()
+                    get_queryset(Invoice).delete()
                     
-                    deleted_counts['customers'] = Customer.objects.count()
-                    Customer.objects.all().delete()
+                    deleted_counts['customers'] = get_queryset(Customer).count()
+                    get_queryset(Customer).delete()
                     
-                    deleted_counts['salesmen'] = Salesman.objects.count()
-                    Salesman.objects.all().delete()
+                    deleted_counts['salesmen'] = get_queryset(Salesman).count()
+                    get_queryset(Salesman).delete()
                     
-                    deleted_counts['couriers'] = Courier.objects.count()
-                    Courier.objects.all().delete()
+                    deleted_counts['couriers'] = get_queryset(Courier).count()
+                    get_queryset(Courier).delete()
                     
-                    deleted_counts['users'] = User.objects.exclude(role='SUPERADMIN').count()
-                    User.objects.exclude(role='SUPERADMIN').delete()
+                    deleted_counts['users'] = get_queryset(User).exclude(role='SUPERADMIN').count()
+                    get_queryset(User).exclude(role='SUPERADMIN').delete()
                     
-                    deleted_counts['departments'] = Department.objects.count()
-                    Department.objects.all().delete()
+                    deleted_counts['departments'] = get_queryset(Department).count()
+                    get_queryset(Department).delete()
                     
-                    deleted_counts['job_titles'] = JobTitle.objects.count()
-                    JobTitle.objects.all().delete()
+                    deleted_counts['job_titles'] = get_queryset(JobTitle).count()
+                    get_queryset(JobTitle).delete()
                     
                     # Clear cache
                     cache.clear()
                     
-                    message = f"✅ ALL DATA PERMANENTLY DELETED FROM DATABASE"
+                    date_info = f" from {from_date} to {to_date}" if from_date and to_date else ""
+                    message = f"✅ ALL DATA{date_info} PERMANENTLY DELETED FROM DATABASE"
                     
                 elif table_name == 'invoices':
-                    deleted_counts['invoice_returns'] = InvoiceReturn.objects.count()
-                    InvoiceReturn.objects.all().delete()
+                    deleted_counts['invoice_returns'] = get_queryset(InvoiceReturn, 'return_date').count()
+                    get_queryset(InvoiceReturn, 'return_date').delete()
                     
                     deleted_counts['invoice_items'] = InvoiceItem.objects.count()
                     InvoiceItem.objects.all().delete()
                     
-                    deleted_counts['invoices'] = Invoice.objects.count()
-                    Invoice.objects.all().delete()
+                    deleted_counts['invoices'] = get_queryset(Invoice).count()
+                    get_queryset(Invoice).delete()
                     
                     # Clear related sessions
-                    deleted_counts['delivery_sessions'] = DeliverySession.objects.count()
-                    DeliverySession.objects.all().delete()
+                    deleted_counts['delivery_sessions'] = get_queryset(DeliverySession, 'start_time').count()
+                    get_queryset(DeliverySession, 'start_time').delete()
                     
-                    deleted_counts['packing_sessions'] = PackingSession.objects.count()
-                    PackingSession.objects.all().delete()
+                    deleted_counts['packing_sessions'] = get_queryset(PackingSession, 'start_time').count()
+                    get_queryset(PackingSession, 'start_time').delete()
                     
-                    deleted_counts['picking_sessions'] = PickingSession.objects.count()
-                    PickingSession.objects.all().delete()
+                    deleted_counts['picking_sessions'] = get_queryset(PickingSession, 'start_time').count()
+                    get_queryset(PickingSession, 'start_time').delete()
                     
                     cache.delete('cleared_invoices')
-                    message = f"✅ Invoices and related data PERMANENTLY DELETED"
+                    date_info = f" from {from_date} to {to_date}" if from_date and to_date else ""
+                    message = f"✅ Invoices{date_info} and related data PERMANENTLY DELETED"
                     
                 elif table_name == 'customers':
-                    deleted_counts['customers'] = Customer.objects.count()
-                    Customer.objects.all().delete()
+                    deleted_counts['customers'] = get_queryset(Customer).count()
+                    get_queryset(Customer).delete()
                     cache.delete('cleared_customers')
-                    message = f"✅ Customers PERMANENTLY DELETED"
+                    date_info = f" from {from_date} to {to_date}" if from_date and to_date else ""
+                    message = f"✅ Customers{date_info} PERMANENTLY DELETED"
                     
                 elif table_name == 'salesmen':
-                    deleted_counts['salesmen'] = Salesman.objects.count()
-                    Salesman.objects.all().delete()
+                    deleted_counts['salesmen'] = get_queryset(Salesman).count()
+                    get_queryset(Salesman).delete()
                     cache.delete('cleared_salesmen')
-                    message = f"✅ Salesmen PERMANENTLY DELETED"
+                    date_info = f" from {from_date} to {to_date}" if from_date and to_date else ""
+                    message = f"✅ Salesmen{date_info} PERMANENTLY DELETED"
                     
                 elif table_name == 'couriers':
-                    deleted_counts['couriers'] = Courier.objects.count()
-                    Courier.objects.all().delete()
+                    deleted_counts['couriers'] = get_queryset(Courier).count()
+                    get_queryset(Courier).delete()
                     cache.delete('cleared_couriers')
-                    message = f"✅ Couriers PERMANENTLY DELETED"
+                    date_info = f" from {from_date} to {to_date}" if from_date and to_date else ""
+                    message = f"✅ Couriers{date_info} PERMANENTLY DELETED"
                     
                 elif table_name == 'picking_sessions':
-                    deleted_counts['picking_sessions'] = PickingSession.objects.count()
-                    PickingSession.objects.all().delete()
+                    deleted_counts['picking_sessions'] = get_queryset(PickingSession, 'start_time').count()
+                    get_queryset(PickingSession, 'start_time').delete()
                     cache.delete('cleared_picking_sessions')
-                    message = f"✅ Picking Sessions PERMANENTLY DELETED"
+                    date_info = f" from {from_date} to {to_date}" if from_date and to_date else ""
+                    message = f"✅ Picking Sessions{date_info} PERMANENTLY DELETED"
                     
                 elif table_name == 'packing_sessions':
-                    deleted_counts['packing_sessions'] = PackingSession.objects.count()
-                    PackingSession.objects.all().delete()
+                    deleted_counts['packing_sessions'] = get_queryset(PackingSession, 'start_time').count()
+                    get_queryset(PackingSession, 'start_time').delete()
                     cache.delete('cleared_packing_sessions')
-                    message = f"✅ Packing Sessions PERMANENTLY DELETED"
+                    date_info = f" from {from_date} to {to_date}" if from_date and to_date else ""
+                    message = f"✅ Packing Sessions{date_info} PERMANENTLY DELETED"
                     
                 elif table_name == 'delivery_sessions':
-                    deleted_counts['delivery_sessions'] = DeliverySession.objects.count()
-                    DeliverySession.objects.all().delete()
+                    deleted_counts['delivery_sessions'] = get_queryset(DeliverySession, 'start_time').count()
+                    get_queryset(DeliverySession, 'start_time').delete()
                     cache.delete('cleared_delivery_sessions')
-                    message = f"✅ Delivery Sessions PERMANENTLY DELETED"
+                    date_info = f" from {from_date} to {to_date}" if from_date and to_date else ""
+                    message = f"✅ Delivery Sessions{date_info} PERMANENTLY DELETED"
                     
                 elif table_name == 'users':
-                    deleted_counts['users'] = User.objects.exclude(role='SUPERADMIN').count()
-                    User.objects.exclude(role='SUPERADMIN').delete()
+                    deleted_counts['users'] = get_queryset(User).exclude(role='SUPERADMIN').count()
+                    get_queryset(User).exclude(role='SUPERADMIN').delete()
                     cache.delete('cleared_users')
-                    message = f"✅ Users (except SUPERADMIN) PERMANENTLY DELETED"
+                    date_info = f" from {from_date} to {to_date}" if from_date and to_date else ""
+                    message = f"✅ Users (except SUPERADMIN){date_info} PERMANENTLY DELETED"
                     
                 elif table_name == 'departments':
-                    deleted_counts['departments'] = Department.objects.count()
-                    Department.objects.all().delete()
+                    deleted_counts['departments'] = get_queryset(Department).count()
+                    get_queryset(Department).delete()
                     cache.delete('cleared_departments')
-                    message = f"✅ Departments PERMANENTLY DELETED"
+                    date_info = f" from {from_date} to {to_date}" if from_date and to_date else ""
+                    message = f"✅ Departments{date_info} PERMANENTLY DELETED"
                     
                 elif table_name == 'job_titles':
-                    deleted_counts['job_titles'] = JobTitle.objects.count()
-                    JobTitle.objects.all().delete()
+                    deleted_counts['job_titles'] = get_queryset(JobTitle).count()
+                    get_queryset(JobTitle).delete()
                     cache.delete('cleared_job_titles')
-                    message = f"✅ Job Titles PERMANENTLY DELETED"
+                    date_info = f" from {from_date} to {to_date}" if from_date and to_date else ""
+                    message = f"✅ Job Titles{date_info} PERMANENTLY DELETED"
                     
                 else:
                     return Response({

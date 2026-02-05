@@ -19,12 +19,21 @@ class DeveloperSettingsView(APIView):
     
     def get(self, request):
         """Get current developer settings - available to all users"""
-        settings = DeveloperSettings.get_settings()
-        serializer = DeveloperSettingsSerializer(settings)
-        return Response({
-            'success': True,
-            'data': serializer.data
-        })
+        try:
+            settings = DeveloperSettings.get_settings()
+            serializer = DeveloperSettingsSerializer(settings)
+            return Response({
+                'success': True,
+                'data': serializer.data
+            })
+        except Exception as e:
+            print(f"❌ Error fetching developer settings: {e}")
+            import traceback
+            traceback.print_exc()
+            return Response({
+                'success': False,
+                'message': f'Error fetching settings: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     def put(self, request):
         """Update developer settings - SUPERADMIN only"""
