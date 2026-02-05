@@ -17,6 +17,9 @@ urlpatterns = [
     
     path('api/sales/',include('apps.sales.urls')),
     
+    # Analytics endpoints
+    path('api/analytics/', include('apps.analytics.urls')),
+    
     # Common/Developer endpoints
     path('api/', include('apps.common.urls'))
 ]

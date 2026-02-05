@@ -375,15 +375,16 @@ class TruncateTableView(APIView):
             def get_queryset(model, date_field='created_at'):
                 qs = model.objects.all()
                 if from_date and to_date:
+                    # Use __date for datetime fields to match entire days
                     filter_kwargs = {
-                        f'{date_field}__gte': from_date,
-                        f'{date_field}__lte': to_date
+                        f'{date_field}__date__gte': from_date,
+                        f'{date_field}__date__lte': to_date
                     }
                     qs = qs.filter(**filter_kwargs)
                 elif from_date:
-                    qs = qs.filter(**{f'{date_field}__gte': from_date})
+                    qs = qs.filter(**{f'{date_field}__date__gte': from_date})
                 elif to_date:
-                    qs = qs.filter(**{f'{date_field}__lte': to_date})
+                    qs = qs.filter(**{f'{date_field}__date__lte': to_date})
                 return qs
             
             with transaction.atomic():
