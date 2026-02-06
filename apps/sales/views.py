@@ -1802,6 +1802,7 @@ class BillingInvoicesView(generics.ListAPIView):
     - status: Filter by invoice status (INVOICED, PICKING, etc.)
     - billing_status: Filter by billing status (BILLED, REVIEW, RE_INVOICED)
     - salesman: Filter by salesman name (for admin)
+    - date: Filter by invoice date (YYYY-MM-DD format)
     
     Authentication: Required
     """
@@ -1858,6 +1859,11 @@ class BillingInvoicesView(generics.ListAPIView):
         salesman_name = self.request.query_params.get('salesman')
         if salesman_name and user.is_admin_or_superadmin():
             queryset = queryset.filter(salesman__name__icontains=salesman_name)
+        
+        # Filter by date
+        date_filter = self.request.query_params.get('date')
+        if date_filter:
+            queryset = queryset.filter(invoice_date=date_filter)
         
         return queryset
 
