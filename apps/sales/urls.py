@@ -28,6 +28,7 @@ from .views import (
     MissingInvoiceFinderView,
     BulkPickingStartView,
     BulkPickingCompleteView,
+    InvoiceReportView,
 )
 from .admin_views import AdminCompleteWorkflowView
 
@@ -80,5 +81,8 @@ urlpatterns = [
     
     # Missing Invoice Finder
     path("missing-invoices/", MissingInvoiceFinderView.as_view(), name="missing-invoices"),
+    
+    # Invoice Report
+    path("invoice-report/", InvoiceReportView.as_view(), name="invoice-report"),
 ]
 

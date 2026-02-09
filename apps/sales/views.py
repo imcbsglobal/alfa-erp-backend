@@ -4,6 +4,7 @@ import time
 import json
 import logging
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.utils import timezone
 from django.core.cache import cache
 
@@ -2492,4 +2493,63 @@ class BulkPickingCompleteView(APIView):
                 'success': False,
                 'message': f'Error: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ===== Invoice Report View =====
+class InvoiceReportView(generics.ListAPIView):
+    """
+    GET /api/sales/invoice-report/
+    List invoices for reporting purposes with pagination, search, and date filtering
+    
+    Query Parameters:
+    - search: Search by invoice_no or customer name
+    - status: Filter by invoice status (INVOICED, PICKING, PICKED, etc.)
+    - start_date: Filter by invoice created date (YYYY-MM-DD)
+    - end_date: Filter by invoice created date (YYYY-MM-DD)
+    - page_size: Number of results per page (10, 20, 50, etc.)
+    
+    Examples:
+    - /api/sales/invoice-report/
+    - /api/sales/invoice-report/?start_date=2026-02-09
+    - /api/sales/invoice-report/?status=INVOICED
+    - /api/sales/invoice-report/?search=ABC123
+    - /api/sales/invoice-report/?page_size=50
+    """
+    serializer_class = InvoiceListSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = InvoiceListPagination
+    
+    def get_queryset(self):
+        queryset = Invoice.objects.select_related(
+            'customer', 
+            'salesman', 
+            'created_user'
+        ).prefetch_related(
+            'items'
+        ).order_by('created_at')
+        
+        # Search by invoice number or customer name
+        search = self.request.query_params.get('search', None)
+        if search:
+            queryset = queryset.filter(
+                Q(invoice_no__icontains=search) |
+                Q(customer__name__icontains=search)
+            )
+        
+        # Filter by status
+        status = self.request.query_params.get('status', None)
+        if status:
+            queryset = queryset.filter(status=status)
+        
+        # Filter by date range
+        start_date = self.request.query_params.get('start_date', None)
+        end_date = self.request.query_params.get('end_date', None)
+        
+        if start_date:
+            queryset = queryset.filter(created_at__date__gte=start_date)
+        
+        if end_date:
+            queryset = queryset.filter(created_at__date__lte=end_date)
+        
+        return queryset
 
