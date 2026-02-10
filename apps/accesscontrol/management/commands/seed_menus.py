@@ -230,12 +230,12 @@ class Command(BaseCommand):
         self.stdout.write("  ✓ Delivery menus created")
 
         # ========================================
-        # 6. HISTORY (Dropdown - SUPERADMIN, ADMIN, STORE, USER)
+        # 6. REPORTS (Dropdown - SUPERADMIN, ADMIN, STORE, USER)
         # ========================================
         history, _ = MenuItem.objects.update_or_create(
             code="history",
             defaults={
-                'name': "History",
+                'name': "Reports",
                 'icon': "Clock",
                 'url': "/history",
                 'order': 6,
@@ -247,7 +247,7 @@ class Command(BaseCommand):
         history_main, _ = MenuItem.objects.update_or_create(
             code="history_main",
             defaults={
-                'name': "History",
+                'name': "Reports",
                 'icon': "History",
                 'url': "/history",
                 'parent': history,
@@ -267,7 +267,19 @@ class Command(BaseCommand):
                 'is_active': True,
             }
         )
-        self.stdout.write("  ✓ History menus created")
+        
+        invoice_reports, _ = MenuItem.objects.update_or_create(
+            code="invoice_reports",
+            defaults={
+                'name': "Invoice Reports",
+                'icon': "FileText",
+                'url': "/history/invoice-report",
+                'parent': history,
+                'order': 3,
+                'is_active': True,
+            }
+        )
+        self.stdout.write("  ✓ Reports menus created")
 
         # ========================================
         # 7. USER MANAGEMENT (Dropdown - SUPERADMIN, ADMIN)
@@ -416,9 +428,10 @@ class Command(BaseCommand):
         self.stdout.write("   ├─ Courier List → /delivery/courier-list")
         self.stdout.write("   ├─ Company Delivery List → /delivery/company-list")
         self.stdout.write("   └─ My Assigned Delivery → /delivery/my")
-        self.stdout.write("6. History (dropdown) [SUPERADMIN, ADMIN, STORE, USER]")
-        self.stdout.write("   ├─ History → /history")
-        self.stdout.write("   └─ Consolidate → /history/consolidate")
+        self.stdout.write("6. Reports (dropdown) [SUPERADMIN, ADMIN, STORE, USER]")
+        self.stdout.write("   ├─ Reports → /history")
+        self.stdout.write("   ├─ Consolidate → /history/consolidate")
+        self.stdout.write("   └─ Invoice Reports → /history/invoice-report")
         self.stdout.write("7. User Management (dropdown) [SUPERADMIN, ADMIN]")
         self.stdout.write("   ├─ User List → /user-management")
         self.stdout.write("   └─ User Control → /user-control")
@@ -462,6 +475,7 @@ class Command(BaseCommand):
             'history': MenuItem.objects.get(code='history'),
             'history_main': MenuItem.objects.get(code='history_main'),
             'history_consolidate': MenuItem.objects.get(code='history_consolidate'),
+            'invoice_reports': MenuItem.objects.get(code='invoice_reports'),
             'user_mgmt': MenuItem.objects.get(code='user-management'),
             'user_list': MenuItem.objects.get(code='user_list'),
             'user_control': MenuItem.objects.get(code='user_control'),
@@ -479,7 +493,7 @@ class Command(BaseCommand):
                 menus['invoices'], menus['picking_list'], menus['my_assigned_picking'],
                 menus['delivery'], menus['delivery_dispatch'], menus['delivery_courier_list'], 
                 menus['delivery_company_list'], menus['my_assigned_delivery'],
-                menus['history'], menus['history_main'], menus['history_consolidate'],
+                menus['history'], menus['history_main'], menus['history_consolidate'], menus['invoice_reports'],
                 menus['user_mgmt'], menus['user_list'], menus['user_control'],
                 menus['master'], menus['job_title'], menus['department'], menus['courier'],
                 menus['advanced_control'],
@@ -487,12 +501,12 @@ class Command(BaseCommand):
             'USER': [
                 menus['dashboard'],
                 menus['invoices'], menus['picking_list'], menus['my_assigned_picking'],
-                menus['history'], menus['history_main'], menus['history_consolidate'],
+                menus['history'], menus['history_main'], menus['history_consolidate'], menus['invoice_reports'],
             ],
             'STORE': [
                 menus['dashboard'],
                 menus['invoices'], menus['picking_list'], menus['my_assigned_picking'],
-                menus['history'], menus['history_main'], menus['history_consolidate'],
+                menus['history'], menus['history_main'], menus['history_consolidate'], menus['invoice_reports'],
             ],
             'PICKER': [
                 menus['dashboard'],
