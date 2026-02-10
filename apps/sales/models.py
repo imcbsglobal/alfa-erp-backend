@@ -169,26 +169,77 @@ class PickingSession(models.Model):
 
 class PackingSession(models.Model):
     invoice = models.OneToOneField(Invoice, on_delete=models.CASCADE)
-    packer = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    packer = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='packing_sessions')
+    checking_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='checking_sessions', help_text='User currently checking/verifying this bill')
     start_time = models.DateTimeField(null=True)
     end_time = models.DateTimeField(null=True)
+    checking_start_time = models.DateTimeField(null=True, blank=True, help_text='When checking started')
+    checking_end_time = models.DateTimeField(null=True, blank=True, help_text='When checking completed')
     packing_status = models.CharField(
         max_length=20,
         choices=[
-            ("PENDING", "Pending"),          # waiting to pack
-            ("IN_PROGRESS", "In Progress"),  # packing started
-            ("PACKED", "Packed"),            # packing completed
-            ("CANCELLED", "Cancelled"),      # packing cancelled (e.g., sent for review)
-            ("REVIEW", "Under Review"),      # packing sent for review/corrections
+            ("PENDING", "Pending"),            # waiting to pack
+            ("CHECKING", "Checking"),          # checking/verification in progress
+            ("CHECKING_DONE", "Checking Done"), # checking completed, ready for box assignment
+            ("PACKING", "Packing"),            # box assignment in progress
+            ("PACKED", "Packed"),              # packing completed with boxes
+            ("CANCELLED", "Cancelled"),        # packing cancelled (e.g., sent for review)
+            ("REVIEW", "Under Review"),        # packing sent for review/corrections
         ],
         default="PENDING"
     )
     notes = models.TextField(blank=True, null=True)
     selected_items = models.JSONField(blank=True, default=list, help_text='List of item IDs that have been selected/packed so far')
+    has_same_address_bills = models.BooleanField(default=False, help_text='Whether user indicated there are other bills with same address')
     created_at = models.DateTimeField(auto_now_add=True)
     
     def __str__(self):
         return f"Packing - {self.invoice.invoice_no}"
+
+
+class Box(models.Model):
+    """
+    Represents a physical box/package for delivery.
+    Multiple boxes can belong to the same invoice or delivery address.
+    """
+    box_id = models.CharField(max_length=100, unique=True, help_text='Unique box identifier (e.g., BOX-1234-001)')
+    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='boxes')
+    packing_session = models.ForeignKey(PackingSession, on_delete=models.CASCADE, related_name='boxes')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_boxes')
+    created_at = models.DateTimeField(auto_now_add=True)
+    sealed_at = models.DateTimeField(null=True, blank=True, help_text='When box was sealed/completed')
+    is_sealed = models.BooleanField(default=False, help_text='Whether box is sealed and non-editable')
+    notes = models.TextField(blank=True, null=True)
+    
+    class Meta:
+        ordering = ['created_at']
+        indexes = [
+            models.Index(fields=['box_id']),
+            models.Index(fields=['invoice']),
+        ]
+    
+    def __str__(self):
+        return f"{self.box_id} - Invoice {self.invoice.invoice_no}"
+
+
+class BoxItem(models.Model):
+    """
+    Represents an item assigned to a specific box.
+    Links invoice items to boxes with quantities.
+    """
+    box = models.ForeignKey(Box, on_delete=models.CASCADE, related_name='items')
+    invoice_item = models.ForeignKey('InvoiceItem', on_delete=models.CASCADE, related_name='box_assignments')
+    quantity = models.DecimalField(max_digits=10, decimal_places=2, help_text='Quantity of this item in this box')
+    
+    class Meta:
+        ordering = ['id']
+        indexes = [
+            models.Index(fields=['box']),
+            models.Index(fields=['invoice_item']),
+        ]
+    
+    def __str__(self):
+        return f"{self.invoice_item.name} x{self.quantity} in {self.box.box_id}"
 
 # Add these fields to your DeliverySession model in models.py
 

@@ -1,7 +1,7 @@
 # apps/sales/serializers.py
 
 from rest_framework import serializers
-from .models import Invoice, InvoiceItem, InvoiceReturn, Customer, Salesman, PickingSession, PackingSession, DeliverySession
+from .models import Invoice, InvoiceItem, InvoiceReturn, Customer, Salesman, PickingSession, PackingSession, DeliverySession, Box, BoxItem
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 
@@ -1004,3 +1004,205 @@ class CourierSerializer(serializers.ModelSerializer):
         if value is not None and value < 0:
             raise serializers.ValidationError("Max weight cannot be negative.")
         return value
+
+
+# ===== BOX-BASED PACKING WORKFLOW SERIALIZERS =====
+
+class StartCheckingSerializer(serializers.Serializer):
+    """Start checking/verification of a picked bill"""
+    invoice_no = serializers.CharField()
+    user_email = serializers.EmailField(help_text="User email who is checking the bill")
+    
+    def validate(self, data):
+        # Validate invoice
+        try:
+            invoice = Invoice.objects.get(invoice_no=data['invoice_no'])
+        except Invoice.DoesNotExist:
+            raise serializers.ValidationError({"invoice_no": "Invoice not found."})
+        
+        # Check invoice status - must be PICKED
+        if invoice.status != 'PICKED':
+            raise serializers.ValidationError({
+                "invoice_no": f"Invoice must be in PICKED status. Current status: {invoice.status}"
+            })
+        
+        # Get or create packing session
+        packing_session, _ = PackingSession.objects.get_or_create(
+            invoice=invoice,
+            defaults={'packing_status': 'PENDING'}
+        )
+        
+        # Verify user
+        try:
+            user = User.objects.get(email=data['user_email'])
+        except User.DoesNotExist:
+            raise serializers.ValidationError({"user_email": "User not found."})
+        
+        # Validate menu access
+        if not validate_user_has_menu_access(user, 'my_assigned_packing'):
+            raise serializers.ValidationError({
+                "user_email": f"User {user.email} does not have access to packing functionality."
+            })
+        
+        data['invoice'] = invoice
+        data['packing_session'] = packing_session
+        data['user'] = user
+        return data
+
+
+class CompleteCheckingSerializer(serializers.Serializer):
+    """Complete checking/verification phase"""
+    invoice_no = serializers.CharField()
+    
+    def validate(self, data):
+        # Validate invoice
+        try:
+            invoice = Invoice.objects.get(invoice_no=data['invoice_no'])
+        except Invoice.DoesNotExist:
+            raise serializers.ValidationError({"invoice_no": "Invoice not found."})
+        
+        # Check packing session
+        try:
+            packing_session = PackingSession.objects.get(invoice=invoice)
+        except PackingSession.DoesNotExist:
+            raise serializers.ValidationError({"invoice_no": "No packing session found for this invoice."})
+        
+        # Check status
+        if packing_session.packing_status not in ['CHECKING']:
+            raise serializers.ValidationError({
+                "invoice_no": f"Cannot complete checking. Current status: {packing_session.packing_status}"
+            })
+        
+        data['invoice'] = invoice
+        data['packing_session'] = packing_session
+        return data
+
+
+class BoxItemInputSerializer(serializers.Serializer):
+    """Serializer for box item input"""
+    item_id = serializers.IntegerField()
+    item_name = serializers.CharField(read_only=True)
+    item_code = serializers.CharField(required=False, allow_blank=True)
+    quantity = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=0.01)
+
+
+class BoxInputSerializer(serializers.Serializer):
+    """Serializer for box input during packing completion"""
+    box_id = serializers.CharField(max_length=100)
+    items = BoxItemInputSerializer(many=True)
+    
+    def validate_items(self, items):
+        if not items:
+            raise serializers.ValidationError("Box must contain at least one item.")
+        return items
+
+
+class CompletePackingWithBoxesSerializer(serializers.Serializer):
+    """Complete packing with box assignments"""
+    invoice_no = serializers.CharField()
+    boxes = BoxInputSerializer(many=True)
+    has_same_address_bills = serializers.BooleanField(default=False)
+    
+    def validate(self, data):
+        # Validate invoice
+        try:
+            invoice = Invoice.objects.get(invoice_no=data['invoice_no'])
+        except Invoice.DoesNotExist:
+            raise serializers.ValidationError({"invoice_no": "Invoice not found."})
+        
+        # Check packing session
+        try:
+            packing_session = PackingSession.objects.get(invoice=invoice)
+        except PackingSession.DoesNotExist:
+            raise serializers.ValidationError({"invoice_no": "No packing session found for this invoice."})
+        
+        # Check status
+        if packing_session.packing_status not in ['CHECKING_DONE', 'PACKING']:
+            raise serializers.ValidationError({
+                "invoice_no": f"Cannot complete packing. Current status: {packing_session.packing_status}"
+            })
+        
+        # Validate boxes
+        boxes = data.get('boxes', [])
+        if not boxes:
+            raise serializers.ValidationError({"boxes": "At least one box is required."})
+        
+        # Get all invoice items
+        invoice_items = {item.id: item for item in invoice.items.all()}
+        
+        # Track quantities per item
+        item_quantities = {item_id: 0 for item_id in invoice_items.keys()}
+        required_quantities = {item.id: item.quantity for item in invoice_items.values()}
+        
+        # Validate each box and aggregate quantities
+        for box_idx, box_data in enumerate(boxes):
+            box_id = box_data.get('box_id')
+            box_items = box_data.get('items', [])
+            
+            if not box_items:
+                raise serializers.ValidationError({
+                    "boxes": f"Box {box_id} is empty. All boxes must contain items."
+                })
+            
+            for item_data in box_items:
+                item_id = item_data.get('item_id')
+                quantity = item_data.get('quantity')
+                
+                # Validate item exists in invoice
+                if item_id not in invoice_items:
+                    raise serializers.ValidationError({
+                        "boxes": f"Item ID {item_id} in box {box_id} not found in invoice."
+                    })
+                
+                # Aggregate quantity
+                item_quantities[item_id] += quantity
+        
+        # Validate all items are fully assigned and quantities match
+        errors = []
+        for item_id, required_qty in required_quantities.items():
+            assigned_qty = item_quantities[item_id]
+            item_name = invoice_items[item_id].name
+            
+            if assigned_qty == 0:
+                errors.append(f"Item '{item_name}' is not assigned to any box.")
+            elif assigned_qty < required_qty:
+                errors.append(f"Item '{item_name}': {assigned_qty} assigned, {required_qty} required. Missing {required_qty - assigned_qty}.")
+            elif assigned_qty > required_qty:
+                errors.append(f"Item '{item_name}': {assigned_qty} assigned, {required_qty} required. Over-assigned by {assigned_qty - required_qty}.")
+        
+        if errors:
+            raise serializers.ValidationError({"boxes": errors})
+        
+        data['invoice'] = invoice
+        data['packing_session'] = packing_session
+        data['invoice_items'] = invoice_items
+        return data
+
+
+class BoxItemReadSerializer(serializers.ModelSerializer):
+    """Serializer for reading box items"""
+    item_name = serializers.CharField(source='invoice_item.name', read_only=True)
+    item_code = serializers.CharField(source='invoice_item.item_code', read_only=True)
+    
+    class Meta:
+        model = BoxItem
+        fields = ['id', 'item_name', 'item_code', 'quantity']
+
+
+class BoxReadSerializer(serializers.ModelSerializer):
+    """Serializer for reading box details"""
+    items = BoxItemReadSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = Box
+        fields = ['id', 'box_id', 'is_sealed', 'items', 'created_at', 'sealed_at', 'notes']
+
+
+class CompletedPackingDataSerializer(serializers.Serializer):
+    """Serializer for completed packing data (for label printing)"""
+    invoice_no = serializers.CharField()
+    customer_name = serializers.CharField()
+    customer_phone = serializers.CharField(allow_blank=True, allow_null=True)
+    delivery_address = serializers.CharField(allow_blank=True)
+    related_bills = serializers.ListField(child=serializers.CharField())
+    boxes = BoxReadSerializer(many=True)

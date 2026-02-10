@@ -28,10 +28,15 @@ from .serializers import (
     DeliverySessionCreateSerializer,
     DeliverySessionReadSerializer,
     CompleteDeliverySerializer,
+    StartCheckingSerializer,
+    CompleteCheckingSerializer,
+    CompletePackingWithBoxesSerializer,
+    BoxReadSerializer,
+    CompletedPackingDataSerializer,
 )
 from .update_serializers import InvoiceUpdateSerializer
 from .events import INVOICE_CHANNEL
-from .models import Invoice, PickingSession, PackingSession, DeliverySession
+from .models import Invoice, PickingSession, PackingSession, DeliverySession, Box, BoxItem
 from rest_framework import generics
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
@@ -2495,6 +2500,342 @@ class BulkPickingCompleteView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+# ===== BOX-BASED PACKING WORKFLOW VIEWS =====
+
+class GetMyCheckingBillsView(APIView):
+    """
+    GET /api/sales/packing/my-checking/
+    Returns bills currently being checked by the authenticated user
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        user = request.user
+        
+        # Get packing sessions where this user is checking
+        checking_sessions = PackingSession.objects.filter(
+            checking_by=user,
+            packing_status__in=['CHECKING', 'CHECKING_DONE']
+        ).select_related('invoice__customer', 'invoice__salesman').prefetch_related('invoice__items')
+        
+        bills_checking = []
+        for session in checking_sessions:
+            invoice_data = InvoiceListSerializer(session.invoice).data
+            invoice_data['checking_by'] = user.email
+            invoice_data['checking_by_name'] = user.name
+            invoice_data['checking_status'] = session.packing_status
+            bills_checking.append(invoice_data)
+        
+        return Response({
+            "success": True,
+            "message": f"Found {len(bills_checking)} bill(s) being checked by {user.name}",
+            "data": bills_checking
+        }, status=status.HTTP_200_OK)
+
+
+class GetBillDetailsView(APIView):
+    """
+    GET /api/sales/packing/bill/<invoice_no>/
+    Returns detailed bill information for checking
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, invoice_no):
+        try:
+            invoice = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(invoice_no=invoice_no)
+        except Invoice.DoesNotExist:
+            return Response({
+                "success": False,
+                "message": "Invoice not found"
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Get packing session if exists
+        packing_session = PackingSession.objects.filter(invoice=invoice).first()
+        
+        invoice_data = InvoiceListSerializer(invoice).data
+        if packing_session and packing_session.checking_by:
+            invoice_data['checking_by'] = packing_session.checking_by.email
+            invoice_data['checking_by_name'] = packing_session.checking_by.name
+        
+        return Response({
+            "success": True,
+            "message": "Bill details retrieved",
+            "data": invoice_data
+        }, status=status.HTTP_200_OK)
+
+
+class StartCheckingView(APIView):
+    """
+    POST /api/sales/packing/start-checking/
+    Start checking a picked bill
+    Body: {
+        "invoice_no": "INV-001",
+        "user_email": "user@example.com"
+    }
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        serializer = StartCheckingSerializer(data=request.data)
+        
+        if not serializer.is_valid():
+            return Response({
+                "success": False,
+                "message": "Validation failed",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        validated_data = serializer.validated_data
+        invoice = validated_data['invoice']
+        packing_session = validated_data['packing_session']
+        user = validated_data['user']
+        
+        # Update packing session
+        packing_session.checking_by = user
+        packing_session.packing_status = 'CHECKING'
+        packing_session.checking_start_time = timezone.now()
+        packing_session.save()
+        
+        # Update invoice status
+        invoice.status = 'PACKING'
+        invoice.save(update_fields=['status'])
+        
+        # Emit SSE event
+        try:
+            invoice_refreshed = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(id=invoice.id)
+            invoice_data = InvoiceListSerializer(invoice_refreshed).data
+            invoice_data['type'] = 'invoice_updated'  # ← ADD THIS LINE
+            django_eventstream.send_event(
+                INVOICE_CHANNEL,
+                'message',
+                invoice_data
+            )
+        except Exception:
+            logger.exception("Failed to emit checking start event")
+        
+        return Response({
+            "success": True,
+            "message": f"Checking started by {user.name}",
+            "data": {
+                "invoice_no": invoice.invoice_no,
+                "checking_by": user.email,
+                "checking_by_name": user.name
+            }
+        }, status=status.HTTP_200_OK)
+
+
+class CompleteCheckingView(APIView):
+    """
+    POST /api/sales/packing/complete-checking/
+    Complete checking phase
+    Body: {
+        "invoice_no": "INV-001"
+    }
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        serializer = CompleteCheckingSerializer(data=request.data)
+        
+        if not serializer.is_valid():
+            return Response({
+                "success": False,
+                "message": "Validation failed",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        validated_data = serializer.validated_data
+        invoice = validated_data['invoice']
+        packing_session = validated_data['packing_session']
+        
+        # Update packing session
+        packing_session.packing_status = 'CHECKING_DONE'
+        packing_session.checking_end_time = timezone.now()
+        packing_session.save()
+        
+        # Emit SSE event
+        try:
+            invoice_refreshed = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(id=invoice.id)
+            invoice_data = InvoiceListSerializer(invoice_refreshed).data
+            invoice_data['type'] = 'invoice_updated'  # ← ADD THIS LINE
+            django_eventstream.send_event(
+                INVOICE_CHANNEL,
+                'message',
+                invoice_data
+            )
+        except Exception:
+            logger.exception("Failed to emit checking complete event")
+        
+        return Response({
+            "success": True,
+            "message": f"Checking completed for {invoice.invoice_no}",
+            "data": {
+                "invoice_no": invoice.invoice_no,
+                "status": "CHECKING_DONE"
+            }
+        }, status=status.HTTP_200_OK)
+
+
+class CompletePackingWithBoxesView(APIView):
+    """
+    POST /api/sales/packing/complete-packing/
+    Complete packing with box assignments
+    Body: {
+        "invoice_no": "INV-001",
+        "has_same_address_bills": false,
+        "boxes": [
+            {
+                "box_id": "BOX-1234-001",
+                "items": [
+                    {
+                        "item_id": 123,
+                        "item_name": "Product",
+                        "item_code": "CODE",
+                        "quantity": 10
+                    }
+                ]
+            }
+        ]
+    }
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        serializer = CompletePackingWithBoxesSerializer(data=request.data)
+        
+        if not serializer.is_valid():
+            return Response({
+                "success": False,
+                "message": "Validation failed",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        validated_data = serializer.validated_data
+        invoice = validated_data['invoice']
+        packing_session = validated_data['packing_session']
+        boxes_data = validated_data['boxes']
+        invoice_items = validated_data['invoice_items']
+        has_same_address_bills = validated_data.get('has_same_address_bills', False)
+        
+        try:
+            with transaction.atomic():
+                # Update packing session
+                packing_session.packing_status = 'PACKED'
+                packing_session.end_time = timezone.now()
+                packing_session.has_same_address_bills = has_same_address_bills
+                if not packing_session.packer:
+                    packing_session.packer = packing_session.checking_by
+                if not packing_session.start_time:
+                    packing_session.start_time = packing_session.checking_start_time
+                packing_session.save()
+                
+                # Create boxes and assign items
+                for box_data in boxes_data:
+                    box_id = box_data['box_id']
+                    box_items = box_data['items']
+                    
+                    # Create box
+                    box = Box.objects.create(
+                        box_id=box_id,
+                        invoice=invoice,
+                        packing_session=packing_session,
+                        created_by=request.user,
+                        is_sealed=True,
+                        sealed_at=timezone.now()
+                    )
+                    
+                    # Create box items
+                    for item_data in box_items:
+                        invoice_item = invoice_items[item_data['item_id']]
+                        BoxItem.objects.create(
+                            box=box,
+                            invoice_item=invoice_item,
+                            quantity=item_data['quantity']
+                        )
+                
+                # Update invoice status
+                invoice.status = 'PACKED'
+                invoice.save(update_fields=['status'])
+                
+                # Emit SSE event
+                try:
+                    invoice_refreshed = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(id=invoice.id)
+                    invoice_data = InvoiceListSerializer(invoice_refreshed).data
+                    invoice_data['type'] = 'invoice_updated'  # ← ADD THIS LINE
+                    django_eventstream.send_event(
+                        INVOICE_CHANNEL,
+                        'message',
+                        invoice_data
+                    )
+                except Exception:
+                    logger.exception("Failed to emit packing complete event")
+                
+                return Response({
+                    "success": True,
+                    "message": f"Packing completed for {invoice.invoice_no} with {len(boxes_data)} box(es)",
+                    "data": {
+                        "invoice_no": invoice.invoice_no,
+                        "boxes_count": len(boxes_data),
+                        "status": "PACKED"
+                    }
+                }, status=status.HTTP_200_OK)
+                
+        except Exception as e:
+            logger.exception("Error completing packing with boxes")
+            return Response({
+                "success": False,
+                "message": f"Failed to complete packing: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class GetCompletedPackingDataView(APIView):
+    """
+    GET /api/sales/packing/completed/<invoice_no>/
+    Returns completed packing data with boxes for label printing
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, invoice_no):
+        try:
+            invoice = Invoice.objects.select_related('customer').prefetch_related('boxes__items__invoice_item').get(invoice_no=invoice_no)
+        except Invoice.DoesNotExist:
+            return Response({
+                "success": False,
+                "message": "Invoice not found"
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if invoice is packed
+        if invoice.status != 'PACKED':
+            return Response({
+                "success": False,
+                "message": f"Invoice is not packed. Current status: {invoice.status}"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get boxes
+        boxes = invoice.boxes.all()
+        if not boxes.exists():
+            return Response({
+                "success": False,
+                "message": "No boxes found for this invoice"
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Prepare response data
+        data = {
+            "invoice_no": invoice.invoice_no,
+            "customer_name": invoice.customer.name if invoice.customer else invoice.temp_name,
+            "customer_phone": invoice.customer.phone1 if invoice.customer else "",
+            "delivery_address": invoice.customer.address1 if invoice.customer else "",
+            "related_bills": [invoice.invoice_no],  # Can be extended to include same-address bills
+            "boxes": BoxReadSerializer(boxes, many=True).data
+        }
+        
+        return Response({
+            "success": True,
+            "message": "Completed packing data retrieved",
+            "data": data
+        }, status=status.HTTP_200_OK)
+
+
 # ===== Invoice Report View =====
 class InvoiceReportView(generics.ListAPIView):
     """
@@ -2506,6 +2847,8 @@ class InvoiceReportView(generics.ListAPIView):
     - status: Filter by invoice status (INVOICED, PICKING, PICKED, etc.)
     - start_date: Filter by invoice created date (YYYY-MM-DD)
     - end_date: Filter by invoice created date (YYYY-MM-DD)
+    - customer_name: Filter by customer name (case-insensitive partial match)
+    - created_by: Filter by salesman name (case-insensitive partial match)
     - page_size: Number of results per page (10, 20, 50, etc.)
     
     Examples:
@@ -2513,6 +2856,8 @@ class InvoiceReportView(generics.ListAPIView):
     - /api/sales/invoice-report/?start_date=2026-02-09
     - /api/sales/invoice-report/?status=INVOICED
     - /api/sales/invoice-report/?search=ABC123
+    - /api/sales/invoice-report/?customer_name=John
+    - /api/sales/invoice-report/?created_by=Salesman1
     - /api/sales/invoice-report/?page_size=50
     """
     serializer_class = InvoiceListSerializer
@@ -2526,7 +2871,7 @@ class InvoiceReportView(generics.ListAPIView):
             'created_user'
         ).prefetch_related(
             'items'
-        ).order_by('created_at')
+        ).order_by('-created_at')
         
         # Search by invoice number or customer name
         search = self.request.query_params.get('search', None)
@@ -2540,6 +2885,19 @@ class InvoiceReportView(generics.ListAPIView):
         status = self.request.query_params.get('status', None)
         if status:
             queryset = queryset.filter(status=status)
+        
+        # Filter by customer name
+        customer_name = self.request.query_params.get('customer_name', None)
+        if customer_name:
+            queryset = queryset.filter(
+                Q(customer__name__icontains=customer_name) |
+                Q(temp_name__icontains=customer_name)
+            )
+        
+        # Filter by created by (salesman)
+        created_by = self.request.query_params.get('created_by', None)
+        if created_by:
+            queryset = queryset.filter(salesman__name__icontains=created_by)
         
         # Filter by date range
         start_date = self.request.query_params.get('start_date', None)

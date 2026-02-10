@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Invoice, InvoiceItem, InvoiceReturn, Customer, Salesman, PickingSession, PackingSession, DeliverySession
+from .models import Invoice, InvoiceItem, InvoiceReturn, Customer, Salesman, PickingSession, PackingSession, DeliverySession, Box, BoxItem
 
 
 class InvoiceItemInline(admin.TabularInline):
@@ -56,10 +56,34 @@ class PickingSessionAdmin(admin.ModelAdmin):
 
 @admin.register(PackingSession)
 class PackingSessionAdmin(admin.ModelAdmin):
-    list_display = ['invoice', 'packer', 'packing_status', 'start_time', 'end_time']
+    list_display = ['invoice', 'packer', 'checking_by', 'packing_status', 'start_time', 'end_time']
     list_filter = ['packing_status', 'start_time']
-    search_fields = ['invoice__invoice_no', 'packer__email']
-    raw_id_fields = ['invoice', 'packer']
+    search_fields = ['invoice__invoice_no', 'packer__email', 'checking_by__email']
+    raw_id_fields = ['invoice', 'packer', 'checking_by']
+
+
+class BoxItemInline(admin.TabularInline):
+    model = BoxItem
+    extra = 0
+    fields = ['invoice_item', 'quantity']
+    raw_id_fields = ['invoice_item']
+
+
+@admin.register(Box)
+class BoxAdmin(admin.ModelAdmin):
+    list_display = ['box_id', 'invoice', 'is_sealed', 'created_by', 'created_at', 'sealed_at']
+    list_filter = ['is_sealed', 'created_at']
+    search_fields = ['box_id', 'invoice__invoice_no']
+    raw_id_fields = ['invoice', 'packing_session', 'created_by']
+    inlines = [BoxItemInline]
+    readonly_fields = ['created_at']
+
+
+@admin.register(BoxItem)
+class BoxItemAdmin(admin.ModelAdmin):
+    list_display = ['box', 'invoice_item', 'quantity']
+    search_fields = ['box__box_id', 'invoice_item__name']
+    raw_id_fields = ['box', 'invoice_item']
 
 
 @admin.register(DeliverySession)

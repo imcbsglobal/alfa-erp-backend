@@ -29,6 +29,12 @@ from .views import (
     BulkPickingStartView,
     BulkPickingCompleteView,
     InvoiceReportView,
+    GetMyCheckingBillsView,
+    GetBillDetailsView,
+    StartCheckingView,
+    CompleteCheckingView,
+    CompletePackingWithBoxesView,
+    GetCompletedPackingDataView,
 )
 from .admin_views import AdminCompleteWorkflowView
 
@@ -60,6 +66,14 @@ urlpatterns = [
     path("packing/start/", StartPackingView.as_view(), name="packing-start"),
     path("packing/complete/", CompletePackingView.as_view(), name="packing-complete"),
     path("packing/history/", PackingHistoryView.as_view(), name="packing-history"),
+    
+    # Box-based packing workflow
+    path("packing/my-checking/", GetMyCheckingBillsView.as_view(), name="packing-my-checking"),
+    path("packing/bill/<str:invoice_no>/", GetBillDetailsView.as_view(), name="packing-bill-details"),
+    path("packing/start-checking/", StartCheckingView.as_view(), name="packing-start-checking"),
+    path("packing/complete-checking/", CompleteCheckingView.as_view(), name="packing-complete-checking"),
+    path("packing/complete-packing/", CompletePackingWithBoxesView.as_view(), name="packing-complete-with-boxes"),
+    path("packing/completed/<str:invoice_no>/", GetCompletedPackingDataView.as_view(), name="packing-completed-data"),
     
     # Delivery workflow
     path("delivery/start/", StartDeliveryView.as_view(), name="delivery-start"),
