@@ -1865,7 +1865,7 @@ class BillingInvoicesView(generics.ListAPIView):
         # Filter by date
         date_filter = self.request.query_params.get('date')
         if date_filter:
-            queryset = queryset.filter(invoice_date=date_filter)
+            queryset = queryset.filter(created_at__date=date_filter)
         
         return queryset
 
