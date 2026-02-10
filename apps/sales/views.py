@@ -2871,7 +2871,7 @@ class InvoiceReportView(generics.ListAPIView):
             'created_user'
         ).prefetch_related(
             'items'
-        ).order_by('-created_at')
+        ).order_by('created_at')
         
         # Search by invoice number or customer name
         search = self.request.query_params.get('search', None)
