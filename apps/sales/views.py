@@ -1819,7 +1819,6 @@ class BillingInvoicesView(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
         # ✅ PERFORMANCE FIX: Prefetch all session and related data
-        # Note: Using select_related on OneToOne fields that may not exist (pickingsession, etc.)
         queryset = Invoice.objects.select_related(
             'customer', 
             'salesman', 
@@ -1828,20 +1827,17 @@ class BillingInvoicesView(generics.ListAPIView):
             'items', 
             'invoice_returns', 
             'invoice_returns__returned_by',
-            'invoice_returns__resolved_by',
-            'pickingsession',
-            'pickingsession__picker',
-            'packingsession',
-            'packingsession__packer',
-            'deliverysession',
-            'deliverysession__assigned_to',
-            'deliverysession__delivered_by'
+            'invoice_returns__resolved_by'
         ).order_by('created_at')
         
         # 🔴 EXCLUDE CLEARED INVOICES (Developer Settings feature)
-        cleared_invoice_ids = cache.get('cleared_invoices', [])
-        if cleared_invoice_ids:
-            queryset = queryset.exclude(id__in=cleared_invoice_ids)
+        try:
+            cleared_invoice_ids = cache.get('cleared_invoices', [])
+            if cleared_invoice_ids:
+                queryset = queryset.exclude(id__in=cleared_invoice_ids)
+        except Exception as e:
+            # Log error but don't fail the request
+            print(f"Cache error for cleared_invoices: {e}")
         
         # If user is not admin, filter to only show invoices where they are the salesman
         if not user.is_admin_or_superadmin():
@@ -1869,7 +1865,7 @@ class BillingInvoicesView(generics.ListAPIView):
         # Filter by date
         date_filter = self.request.query_params.get('date')
         if date_filter:
-            queryset = queryset.filter(invoice_date=date_filter)
+            queryset = queryset.filter(created_at__date=date_filter)
         
         return queryset
 
