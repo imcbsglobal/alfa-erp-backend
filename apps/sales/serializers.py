@@ -1020,10 +1020,10 @@ class StartCheckingSerializer(serializers.Serializer):
         except Invoice.DoesNotExist:
             raise serializers.ValidationError({"invoice_no": "Invoice not found."})
         
-        # Check invoice status - must be PICKED
-        if invoice.status != 'PICKED':
+        # Check invoice status - must be PICKED or PACKING
+        if invoice.status not in ['PICKED', 'PACKING']:
             raise serializers.ValidationError({
-                "invoice_no": f"Invoice must be in PICKED status. Current status: {invoice.status}"
+                "invoice_no": f"Invoice must be in PICKED or PACKING status. Current status: {invoice.status}"
             })
         
         # Get or create packing session
@@ -1067,8 +1067,8 @@ class CompleteCheckingSerializer(serializers.Serializer):
         except PackingSession.DoesNotExist:
             raise serializers.ValidationError({"invoice_no": "No packing session found for this invoice."})
         
-        # Check status
-        if packing_session.packing_status not in ['CHECKING']:
+        # Check status - allow CHECKING or any status that indicates checking is in progress
+        if packing_session.packing_status not in ['CHECKING', 'PACKING', 'IN_PROGRESS', 'PENDING']:
             raise serializers.ValidationError({
                 "invoice_no": f"Cannot complete checking. Current status: {packing_session.packing_status}"
             })
@@ -1116,8 +1116,8 @@ class CompletePackingWithBoxesSerializer(serializers.Serializer):
         except PackingSession.DoesNotExist:
             raise serializers.ValidationError({"invoice_no": "No packing session found for this invoice."})
         
-        # Check status
-        if packing_session.packing_status not in ['CHECKING_DONE', 'PACKING']:
+        # Check status - allow CHECKING_DONE, PACKING, IN_PROGRESS, or CHECKING
+        if packing_session.packing_status not in ['CHECKING_DONE', 'PACKING', 'IN_PROGRESS', 'CHECKING']:
             raise serializers.ValidationError({
                 "invoice_no": f"Cannot complete packing. Current status: {packing_session.packing_status}"
             })
