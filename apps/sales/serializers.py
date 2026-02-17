@@ -124,7 +124,11 @@ class InvoiceListSerializer(serializers.ModelSerializer):
                 "name": packing_session.packer.name if packing_session.packer else None,
                 "status": packing_session.packing_status,
                 "start_time": packing_session.start_time,
-                "end_time": packing_session.end_time
+                "end_time": packing_session.end_time,
+                "held_for_consolidation": packing_session.held_for_consolidation,
+                "consolidation_customer_name": packing_session.consolidation_customer_name,
+                "held_by_email": packing_session.held_by.email if packing_session.held_by else None,
+                "held_by_name": packing_session.held_by.get_full_name() or packing_session.held_by.username if packing_session.held_by else None,
             }
         except:
             return None
@@ -1053,6 +1057,9 @@ class StartCheckingSerializer(serializers.Serializer):
 class CompleteCheckingSerializer(serializers.Serializer):
     """Complete checking/verification phase"""
     invoice_no = serializers.CharField()
+    hold_for_consolidation = serializers.BooleanField(default=False, required=False, help_text="Whether to hold this bill for consolidation with future bills")
+    customer_name = serializers.CharField(required=False, allow_blank=True, help_text="Customer name for grouping held bills")
+    assign_to_user_email = serializers.EmailField(required=False, allow_blank=True, help_text="Email of user to assign this held bill to")
     
     def validate(self, data):
         # Validate invoice
@@ -1067,14 +1074,15 @@ class CompleteCheckingSerializer(serializers.Serializer):
         except PackingSession.DoesNotExist:
             raise serializers.ValidationError({"invoice_no": "No packing session found for this invoice."})
         
-        # Check status - allow CHECKING or any status that indicates checking is in progress
-        if packing_session.packing_status not in ['CHECKING', 'PACKING', 'IN_PROGRESS', 'PENDING']:
+        # Check status - allow CHECKING, PENDING, or already CHECKING_DONE (idempotent)
+        if packing_session.packing_status not in ['CHECKING', 'PENDING', 'CHECKING_DONE']:
             raise serializers.ValidationError({
-                "invoice_no": f"Cannot complete checking. Current status: {packing_session.packing_status}"
+                "invoice_no": f"Cannot complete checking. Current status: {packing_session.packing_status}. Expected CHECKING, PENDING, or CHECKING_DONE."
             })
         
         data['invoice'] = invoice
         data['packing_session'] = packing_session
+        data['already_done'] = (packing_session.packing_status == 'CHECKING_DONE')
         return data
 
 

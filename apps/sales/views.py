@@ -2502,6 +2502,7 @@ class GetMyCheckingBillsView(APIView):
     """
     GET /api/sales/packing/my-checking/
     Returns bills currently being checked by the authenticated user
+    Also includes bills held for consolidation that are assigned to this user
     """
     permission_classes = [IsAuthenticated]
     
@@ -2522,9 +2523,25 @@ class GetMyCheckingBillsView(APIView):
             invoice_data['checking_status'] = session.packing_status
             bills_checking.append(invoice_data)
         
+        # Also get held bills assigned to this user (where they are the holder)
+        held_sessions = PackingSession.objects.filter(
+            held_by=user,
+            packing_status='CHECKING_DONE',
+            held_for_consolidation=True
+        ).exclude(
+            checking_by=user  # Don't duplicate if already in checking_sessions
+        ).select_related('invoice__customer', 'invoice__salesman').prefetch_related('invoice__items')
+        
+        for session in held_sessions:
+            invoice_data = InvoiceListSerializer(session.invoice).data
+            invoice_data['held_by'] = user.email
+            invoice_data['held_by_name'] = user.name
+            invoice_data['checking_status'] = session.packing_status
+            bills_checking.append(invoice_data)
+        
         return Response({
             "success": True,
-            "message": f"Found {len(bills_checking)} bill(s) being checked by {user.name}",
+            "message": f"Found {len(bills_checking)} bill(s) for {user.name}",
             "data": bills_checking
         }, status=status.HTTP_200_OK)
 
@@ -2643,31 +2660,94 @@ class CompleteCheckingView(APIView):
         validated_data = serializer.validated_data
         invoice = validated_data['invoice']
         packing_session = validated_data['packing_session']
+        already_done = validated_data.get('already_done', False)
+        hold_for_consolidation = validated_data.get('hold_for_consolidation', False)
+        customer_name = validated_data.get('customer_name', '')
+        assign_to_user_email = validated_data.get('assign_to_user_email', '')
         
-        # Update packing session
-        packing_session.packing_status = 'CHECKING_DONE'
-        packing_session.checking_end_time = timezone.now()
-        packing_session.save()
+        # If already done, just return success (idempotent operation)
+        if not already_done:
+            # Update packing session
+            packing_session.packing_status = 'CHECKING_DONE'
+            packing_session.checking_end_time = timezone.now()
+            
+        # Always update hold fields if requested (even for already completed checking)
+        if hold_for_consolidation:
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            
+            packing_session.held_for_consolidation = hold_for_consolidation
+            if customer_name:
+                packing_session.consolidation_customer_name = customer_name
+                
+                # Set held_by based on assignment
+                if assign_to_user_email:
+                    # Assign to specified user
+                    try:
+                        assign_to_user = User.objects.get(email=assign_to_user_email)
+                        packing_session.held_by = assign_to_user
+                    except User.DoesNotExist:
+                        pass  # Fall back to current user
+                
+                # If no assignment specified, set to current user (first holder or checking user)
+                if not packing_session.held_by:
+                    packing_session.held_by = packing_session.checking_by or request.user
         
-        # Emit SSE event
-        try:
-            invoice_refreshed = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(id=invoice.id)
-            invoice_data = InvoiceListSerializer(invoice_refreshed).data
-            invoice_data['type'] = 'invoice_updated'  # ← ADD THIS LINE
-            django_eventstream.send_event(
-                INVOICE_CHANNEL,
-                'message',
-                invoice_data
-            )
-        except Exception:
-            logger.exception("Failed to emit checking complete event")
+        # Save the session (either for new completion or hold update)
+        if not already_done or hold_for_consolidation:
+            packing_session.save()
+            
+            # Emit SSE event
+            try:
+                invoice_refreshed = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(id=invoice.id)
+                invoice_data = InvoiceListSerializer(invoice_refreshed).data
+                invoice_data['type'] = 'invoice_updated'  # ← ADD THIS LINE
+                django_eventstream.send_event(
+                    INVOICE_CHANNEL,
+                    'message',
+                    invoice_data
+                )
+            except Exception:
+                logger.exception("Failed to emit checking complete event")
+        
+        # Check for other held bills with same customer
+        held_bills = []
+        primary_holder = None
+        primary_holder_email = None
+        if customer_name:
+            held_sessions = PackingSession.objects.filter(
+                packing_status='CHECKING_DONE',
+                held_for_consolidation=True,
+                consolidation_customer_name__iexact=customer_name.strip()
+            ).exclude(invoice=invoice).select_related('invoice', 'invoice__customer', 'held_by').order_by('created_at')
+            
+            # Get the first holder (primary holder for this customer)
+            if held_sessions.exists():
+                primary_holder_session = held_sessions.first()
+                if primary_holder_session.held_by:
+                    primary_holder = primary_holder_session.held_by.get_full_name() or primary_holder_session.held_by.username
+                    primary_holder_email = primary_holder_session.held_by.email
+            
+            held_bills = [{
+                "invoice_no": ps.invoice.invoice_no,
+                "invoice_date": ps.invoice.invoice_date,
+                "customer_name": ps.invoice.customer.name if ps.invoice.customer else ps.consolidation_customer_name,
+                "total": str(ps.invoice.Total or "0"),
+                "held_by_name": ps.held_by.get_full_name() or ps.held_by.username if ps.held_by else None,
+                "held_by_email": ps.held_by.email if ps.held_by else None,
+            } for ps in held_sessions]
         
         return Response({
             "success": True,
-            "message": f"Checking completed for {invoice.invoice_no}",
+            "message": f"Checking completed for {invoice.invoice_no}" if not already_done else f"Checking already completed for {invoice.invoice_no}",
             "data": {
                 "invoice_no": invoice.invoice_no,
-                "status": "CHECKING_DONE"
+                "status": "CHECKING_DONE",
+                "held_for_consolidation": packing_session.held_for_consolidation,
+                "held_bills_count": len(held_bills),
+                "held_bills": held_bills,
+                "primary_holder": primary_holder,
+                "primary_holder_email": primary_holder_email,
             }
         }, status=status.HTTP_200_OK)
 
@@ -2719,6 +2799,7 @@ class CompletePackingWithBoxesView(APIView):
                 packing_session.packing_status = 'PACKED'
                 packing_session.end_time = timezone.now()
                 packing_session.has_same_address_bills = has_same_address_bills
+                packing_session.held_for_consolidation = False  # Clear hold flag when packed
                 if not packing_session.packer:
                     packing_session.packer = packing_session.checking_by
                 if not packing_session.start_time:
@@ -2814,20 +2895,135 @@ class GetCompletedPackingDataView(APIView):
                 "success": False,
                 "message": "No boxes found for this invoice"
             }, status=status.HTTP_404_NOT_FOUND)
+
+        # Check if this is a consolidated packing (check if box notes mention consolidated)
+        # For consolidated bills, we need to find all related bills that share the same boxes
+        related_bills = [invoice.invoice_no]
         
+        # Check if any box has "consolidated" in notes to determine if this is consolidated packing
+        is_consolidated = any("Consolidated" in (box.notes or "") for box in boxes)
+        
+        if is_consolidated:
+            # For consolidated packing, find all invoices that have boxes with same box_id prefix
+            # Extract the customer prefix (e.g., "CUST001" from "CUST001-BOX01")
+            box_prefixes = set()
+            for box in boxes:
+                if "-BOX" in box.box_id:
+                    prefix = box.box_id.split("-BOX")[0]
+                    box_prefixes.add(prefix)
+            
+            if box_prefixes:
+                # Find all invoices that have boxes with these prefixes
+                from django.db.models import Q
+                related_boxes = Box.objects.filter(
+                    box_id__startswith=list(box_prefixes)[0]
+                ).select_related('invoice')
+                
+                related_invoice_numbers = list(set(
+                    box.invoice.invoice_no for box in related_boxes if box.invoice
+                ))
+                
+                related_bills = related_invoice_numbers
+
         # Prepare response data
         data = {
             "invoice_no": invoice.invoice_no,
             "customer_name": invoice.customer.name if invoice.customer else invoice.temp_name,
             "customer_phone": invoice.customer.phone1 if invoice.customer else "",
             "delivery_address": invoice.customer.address1 if invoice.customer else "",
-            "related_bills": [invoice.invoice_no],  # Can be extended to include same-address bills
+            "related_bills": related_bills,
             "boxes": BoxReadSerializer(boxes, many=True).data
         }
         
         return Response({
             "success": True,
             "message": "Completed packing data retrieved",
+            "data": data
+        }, status=status.HTTP_200_OK)
+
+
+class BoxDetailsView(APIView):
+    """
+    GET /api/sales/packing/box-details/<box_id>/
+    Public endpoint for viewing box details via QR code scan
+    No authentication required - allows anyone with QR code to view box contents
+    """
+    permission_classes = []  # Public access
+    
+    def get(self, request, box_id):
+        try:
+            # Fetch box with related data
+            box = Box.objects.select_related(
+                'invoice__customer',
+                'packing_session'
+            ).prefetch_related(
+                'items__invoice_item'
+            ).get(box_id=box_id)
+            
+        except Box.DoesNotExist:
+            return Response({
+                "success": False,
+                "error": f"Box with ID '{box_id}' not found"
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Prepare customer information
+        customer_name = box.invoice.customer.name if box.invoice.customer else (
+            box.invoice.temp_name or "No Customer Name"
+        )
+        customer_address = (
+            (box.invoice.customer.address1 if box.invoice.customer else None) or
+            (box.invoice.customer.address if box.invoice.customer and hasattr(box.invoice.customer, 'address') else None) or
+            "No address provided"
+        )
+        customer_phone = (
+            (box.invoice.customer.phone1 if box.invoice.customer else None) or
+            (box.invoice.customer.phone if box.invoice.customer and hasattr(box.invoice.customer, 'phone') else None) or
+            ""
+        )
+        
+        # Get all items in the box
+        box_items = []
+        for box_item in box.items.all():
+            item_data = {
+                "item_name": box_item.invoice_item.name,
+                "item_code": box_item.invoice_item.item_code or "",
+                "quantity": float(box_item.quantity),
+                "batch_number": box_item.invoice_item.batch_no or "",
+                "expiry_date": box_item.invoice_item.expiry_date.isoformat() if box_item.invoice_item.expiry_date else None,
+                "mrp": float(box_item.invoice_item.mrp) if box_item.invoice_item.mrp else None,
+            }
+            box_items.append(item_data)
+        
+        # Check if this box is part of consolidated packing
+        # by checking if other boxes share the same customer/packing session
+        related_invoices = []
+        if box.notes and "Consolidated" in box.notes:
+            # Find all boxes in the same packing session
+            related_boxes = Box.objects.filter(
+                packing_session=box.packing_session
+            ).select_related('invoice').distinct()
+            
+            related_invoices = list(set(
+                b.invoice.invoice_no for b in related_boxes if b.invoice
+            ))
+        else:
+            # Single invoice packing
+            related_invoices = [box.invoice.invoice_no]
+        
+        # Prepare response
+        data = {
+            "box_id": box.box_id,
+            "customer_name": customer_name,
+            "customer_address": customer_address,
+            "customer_phone": customer_phone,
+            "invoice_numbers": related_invoices,
+            "items": box_items,
+            "status": "Packed & Ready" if box.is_sealed else "In Progress",
+            "packed_date": box.sealed_at.isoformat() if box.sealed_at else box.created_at.isoformat(),
+        }
+        
+        return Response({
+            "success": True,
             "data": data
         }, status=status.HTTP_200_OK)
 
@@ -2907,3 +3103,418 @@ class InvoiceReportView(generics.ListAPIView):
         
         return queryset
 
+
+class GetBillsByAddressView(APIView):
+    """
+    GET /api/sales/packing/bills-by-address/
+    Fetch all bills with the same delivery address and status checking_done
+    Query params:
+        - address: The delivery address to match
+        - status: Bill status (default: checking_done)
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        address = request.query_params.get('address', None)
+        bill_status = request.query_params.get('status', 'checking_done')
+        
+        if not address:
+            return Response({
+                "success": False,
+                "message": "Address parameter is required"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Find all invoices with matching address and status
+            # Also check for packing sessions with checking_done status
+            invoices = Invoice.objects.filter(
+                customer__address1__iexact=address.strip()
+            ).select_related('customer', 'salesman').prefetch_related('items')
+            
+            # Filter by packing session status
+            filtered_invoices = []
+            for invoice in invoices:
+                try:
+                    packing_session = PackingSession.objects.get(invoice=invoice)
+                    # Check if checking is done and not yet packed
+                    if (packing_session.packing_status == 'CHECKING_DONE' and 
+                        invoice.status not in ['PACKED', 'DISPATCHED', 'DELIVERED']):
+                        filtered_invoices.append(invoice)
+                except PackingSession.DoesNotExist:
+                    continue
+            
+            # Serialize the filtered invoices
+            bills_data = []
+            for invoice in filtered_invoices:
+                bills_data.append({
+                    'invoice_no': invoice.invoice_no,
+                    'invoice_date': invoice.invoice_date,
+                    'customer_name': invoice.customer.name if invoice.customer else invoice.temp_name,
+                    'customer_address': invoice.customer.address1 if invoice.customer else None,
+                    'total': str(invoice.Total),
+                    'items_count': invoice.items.count(),
+                })
+            
+            return Response({
+                "success": True,
+                "bills": bills_data,
+                "count": len(bills_data)
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.exception("Error fetching bills by address")
+            return Response({
+                "success": False,
+                "message": f"Failed to fetch bills: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class GetAllCheckingDoneBillsView(APIView):
+    """
+    GET /api/sales/packing/all-checking-done-bills/
+    Fetch ALL bills with checking_done status, regardless of address
+    Used for manual bill selection in consolidated packing
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        try:
+            # Get all packing sessions with checking_done status
+            # Only include bills that are checking_done but not yet packed
+            packing_sessions = PackingSession.objects.filter(
+                packing_status='CHECKING_DONE'
+            ).exclude(
+                packing_status='PACKED'
+            ).select_related('invoice__customer', 'invoice__salesman', 'held_by').prefetch_related('invoice__items')
+            
+            # Serialize the invoices
+            bills_data = []
+            for session in packing_sessions:
+                invoice = session.invoice
+                bills_data.append({
+                    'invoice_no': invoice.invoice_no,
+                    'invoice_date': invoice.invoice_date,
+                    'customer_name': invoice.customer.name if invoice.customer else invoice.temp_name,
+                    'customer_address': invoice.customer.address1 if invoice.customer else None,
+                    'total': str(invoice.Total),
+                    'items_count': invoice.items.count(),
+                    'held_for_consolidation': session.held_for_consolidation,
+                    'consolidation_customer_name': session.consolidation_customer_name,
+                })
+            
+            return Response({
+                "success": True,
+                "bills": bills_data,
+                "count": len(bills_data)
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.exception("Error fetching all checking done bills")
+            return Response({
+                "success": False,
+                "message": f"Failed to fetch bills: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class GetHeldBillsByCustomerView(APIView):
+    """
+    GET /api/sales/packing/held-bills-by-customer/?customer_name=XXX
+    Fetch all held bills for a specific customer name
+    Used to show accumulated bills waiting for consolidation
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        customer_name = request.query_params.get('customer_name', '').strip()
+        
+        if not customer_name:
+            return Response({
+                "success": False,
+                "message": "customer_name query parameter is required"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Get all held packing sessions for this customer
+            held_sessions = PackingSession.objects.filter(
+                packing_status='CHECKING_DONE',
+                held_for_consolidation=True,
+                consolidation_customer_name__iexact=customer_name
+            ).select_related('invoice__customer', 'invoice__salesman', 'held_by').prefetch_related('invoice__items')
+            
+            # Serialize the invoices
+            bills_data = []
+            for session in held_sessions:
+                invoice = session.invoice
+                bills_data.append({
+                    'invoice_no': invoice.invoice_no,
+                    'invoice_date': invoice.invoice_date,
+                    'customer_name': session.consolidation_customer_name or (invoice.customer.name if invoice.customer else invoice.temp_name),
+                    'customer_address': invoice.customer.address1 if invoice.customer else None,
+                    'total': str(invoice.Total),
+                    'items_count': invoice.items.count(),
+                    'held_by_name': session.held_by.get_full_name() or session.held_by.username if session.held_by else None,
+                    'held_by_email': session.held_by.email if session.held_by else None,
+                })
+            
+            return Response({
+                "success": True,
+                "bills": bills_data,
+                "count": len(bills_data),
+                "customer_name": customer_name
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.exception(f"Error fetching held bills for customer: {customer_name}")
+            return Response({
+                "success": False,
+                "message": f"Failed to fetch held bills: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class CompleteConsolidatedPackingView(APIView):
+    """
+    POST /api/sales/packing/complete-consolidated-packing/
+    Complete consolidated packing for multiple bills with same delivery address
+    Body: {
+        "invoice_numbers": ["INV-001", "INV-002"],
+        "delivery_address": "123 Main St",
+        "boxes": [
+            {
+                "box_id": "ADDR001-BOX01",
+                "items": [
+                    {
+                        "item_id": "item_code_or_id",
+                        "item_name": "Product",
+                        "item_code": "CODE",
+                        "quantity": 10,
+                        "bill_breakdown": [
+                            {"billNo": "INV-001", "quantity": 5},
+                            {"billNo": "INV-002", "quantity": 5}
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        invoice_numbers = request.data.get('invoice_numbers', [])
+        customer_name = request.data.get('customer_name', '')
+        delivery_address = request.data.get('delivery_address', customer_name)  # Fallback to customer_name for compatibility
+        boxes_data = request.data.get('boxes', [])
+        
+        if not invoice_numbers:
+            return Response({
+                "success": False,
+                "message": "Invoice numbers are required"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not boxes_data:
+            return Response({
+                "success": False,
+                "message": "Boxes data is required"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            with transaction.atomic():
+                # Fetch all invoices
+                invoices = Invoice.objects.filter(invoice_no__in=invoice_numbers).prefetch_related('items')
+                
+                if invoices.count() != len(invoice_numbers):
+                    return Response({
+                        "success": False,
+                        "message": "Some invoices not found"
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                # Process each invoice and create boxes
+                for invoice in invoices:
+                    try:
+                        packing_session = PackingSession.objects.get(invoice=invoice)
+                    except PackingSession.DoesNotExist:
+                        return Response({
+                            "success": False,
+                            "message": f"Packing session not found for invoice {invoice.invoice_no}"
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                    
+                    # Update packing session
+                    packing_session.packing_status = 'PACKED'
+                    packing_session.end_time = timezone.now()
+                    packing_session.has_same_address_bills = True
+                    packing_session.held_for_consolidation = False  # Clear hold flag when packed
+                    if not packing_session.packer:
+                        packing_session.packer = packing_session.checking_by or request.user
+                    if not packing_session.start_time:
+                        packing_session.start_time = packing_session.checking_start_time or timezone.now()
+                    packing_session.save()
+                    
+                    # Update invoice status
+                    invoice.status = 'PACKED'
+                    invoice.save(update_fields=['status'])
+                
+                # Create boxes (boxes are shared across all invoices)
+                # We'll associate each box with the first invoice for reference
+                # but the boxes actually contain items from multiple invoices
+                primary_invoice = invoices.first()
+                primary_packing_session = PackingSession.objects.get(invoice=primary_invoice)
+                
+                for box_data in boxes_data:
+                    box_id = box_data['box_id']
+                    box_items = box_data['items']
+                    
+                    # Create box
+                    box = Box.objects.create(
+                        box_id=box_id,
+                        invoice=primary_invoice,  # Associate with primary invoice
+                        packing_session=primary_packing_session,
+                        created_by=request.user,
+                        is_sealed=True,
+                        sealed_at=timezone.now(),
+                        notes=f"Consolidated box for customer: {customer_name}"
+                    )
+                    
+                    # Create box items
+                    # For consolidated packing, we need to handle items from multiple bills
+                    for item_data in box_items:
+                        bill_breakdown = item_data.get('bill_breakdown', [])
+                        
+                        # Create a box item entry for each bill's contribution
+                        for bill_info in bill_breakdown:
+                            bill_no = bill_info.get('billNo')
+                            bill_quantity = bill_info.get('quantity')
+                            
+                            # Find the invoice and its item
+                            bill_invoice = invoices.get(invoice_no=bill_no)
+                            
+                            # Find the matching invoice item by code or name
+                            invoice_item = bill_invoice.items.filter(
+                                Q(item_code=item_data['item_code']) | 
+                                Q(name=item_data['item_name'])
+                            ).first()
+                            
+                            if invoice_item:
+                                BoxItem.objects.create(
+                                    box=box,
+                                    invoice_item=invoice_item,
+                                    quantity=bill_quantity
+                                )
+                
+                # Emit SSE events for all updated invoices
+                try:
+                    for invoice in invoices:
+                        invoice_refreshed = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(id=invoice.id)
+                        invoice_data = InvoiceListSerializer(invoice_refreshed).data
+                        invoice_data['type'] = 'invoice_updated'
+                        django_eventstream.send_event(
+                            INVOICE_CHANNEL,
+                            'message',
+                            invoice_data
+                        )
+                except Exception:
+                    logger.exception("Failed to emit consolidated packing complete event")
+                
+                return Response({
+                    "success": True,
+                    "message": f"Consolidated packing completed for {len(invoice_numbers)} bills with {len(boxes_data)} box(es)",
+                    "data": {
+                        "invoice_numbers": invoice_numbers,
+                        "boxes_count": len(boxes_data),
+                        "delivery_address": delivery_address,
+                        "status": "PACKED"
+                    }
+                }, status=status.HTTP_200_OK)
+                
+        except Exception as e:
+            logger.exception("Error completing consolidated packing")
+            return Response({
+                "success": False,
+                "message": f"Failed to complete consolidated packing: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ===== Billing User Summary View =====
+class BillingUserSummaryView(APIView):
+    """
+    GET /api/sales/billing/user-summary/
+    Get billing summary showing how many bills each user has created
+    
+    Returns aggregated data per salesman:
+    - Salesman name
+    - Total count of billed invoices
+    - Total amount of billed invoices
+    - Date range of invoices
+    
+    Query Parameters:
+    - start_date: Filter by invoice created date (YYYY-MM-DD)
+    - end_date: Filter by invoice created date (YYYY-MM-DD)
+    - billing_status: Filter by billing status (default: BILLED)
+    
+    Examples:
+    - /api/sales/billing/user-summary/
+    - /api/sales/billing/user-summary/?start_date=2026-02-01&end_date=2026-02-16
+    - /api/sales/billing/user-summary/?billing_status=BILLED
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        from django.db.models import Count, Sum, Min, Max
+        
+        try:
+            # Build base queryset
+            queryset = Invoice.objects.select_related('salesman')
+            
+            # Filter by billing status (default to BILLED)
+            billing_status = request.query_params.get('billing_status', 'BILLED')
+            queryset = queryset.filter(billing_status=billing_status)
+            
+            # Filter by date range
+            start_date = request.query_params.get('start_date')
+            end_date = request.query_params.get('end_date')
+            
+            if start_date:
+                queryset = queryset.filter(created_at__date__gte=start_date)
+            
+            if end_date:
+                queryset = queryset.filter(created_at__date__lte=end_date)
+            
+            # Aggregate by salesman
+            summary_data = queryset.values(
+                'salesman__id',
+                'salesman__name'
+            ).annotate(
+                bill_count=Count('id'),
+                total_amount=Sum('Total'),
+                first_invoice_date=Min('created_at'),
+                last_invoice_date=Max('created_at')
+            ).order_by('-bill_count')
+            
+            # Format the response
+            results = []
+            for item in summary_data:
+                results.append({
+                    'salesman_id': item['salesman__id'],
+                    'salesman_name': item['salesman__name'] or 'Unknown',
+                    'bill_count': item['bill_count'],
+                    'total_amount': float(item['total_amount']) if item['total_amount'] else 0.0,
+                    'first_invoice_date': item['first_invoice_date'],
+                    'last_invoice_date': item['last_invoice_date']
+                })
+            
+            return Response({
+                "success": True,
+                "count": len(results),
+                "data": results,
+                "filters": {
+                    "billing_status": billing_status,
+                    "start_date": start_date,
+                    "end_date": end_date
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.exception("Error fetching billing user summary")
+            return Response({
+                "success": False,
+                "message": f"Failed to fetch billing user summary: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

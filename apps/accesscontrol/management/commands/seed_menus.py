@@ -244,10 +244,10 @@ class Command(BaseCommand):
             }
         )
 
-        history_main, _ = MenuItem.objects.update_or_create(
-            code="history_main",
+        history_consolidate, _ = MenuItem.objects.update_or_create(
+            code="history_consolidate",
             defaults={
-                'name': "Reports",
+                'name': "Consolidate",
                 'icon': "History",
                 'url': "/history",
                 'parent': history,
@@ -256,10 +256,10 @@ class Command(BaseCommand):
             }
         )
         
-        history_consolidate, _ = MenuItem.objects.update_or_create(
-            code="history_consolidate",
+        history_invoice_workflow, _ = MenuItem.objects.update_or_create(
+            code="history_invoice_workflow",
             defaults={
-                'name': "Consolidate",
+                'name': "Invoice Workflow",
                 'icon': "Layers",
                 'url': "/history/consolidate",
                 'parent': history,
@@ -276,6 +276,18 @@ class Command(BaseCommand):
                 'url': "/history/invoice-report",
                 'parent': history,
                 'order': 3,
+                'is_active': True,
+            }
+        )
+        
+        billing_user_summary, _ = MenuItem.objects.update_or_create(
+            code="billing_user_summary",
+            defaults={
+                'name': "User Summary - Billing",
+                'icon': "Users",
+                'url': "/history/billing-user-summary",
+                'parent': history,
+                'order': 4,
                 'is_active': True,
             }
         )
@@ -390,6 +402,12 @@ class Command(BaseCommand):
         self.stdout.write("  ✓ Advanced Control menu created")
 
         # ========================================
+        # NOTE: Developer Options is NOT seeded in database
+        # It only exists in frontend menuConfig.js for SUPERADMIN
+        # This prevents it from appearing in User Access Control
+        # ========================================
+
+        # ========================================
         # Auto-assign menus based on roles
         # ========================================
         if options.get('assign'):
@@ -429,9 +447,10 @@ class Command(BaseCommand):
         self.stdout.write("   ├─ Company Delivery List → /delivery/company-list")
         self.stdout.write("   └─ My Assigned Delivery → /delivery/my")
         self.stdout.write("6. Reports (dropdown) [SUPERADMIN, ADMIN, STORE, USER]")
-        self.stdout.write("   ├─ Reports → /history")
-        self.stdout.write("   ├─ Consolidate → /history/consolidate")
-        self.stdout.write("   └─ Invoice Reports → /history/invoice-report")
+        self.stdout.write("   ├─ Consolidate → /history")
+        self.stdout.write("   ├─ Invoice Workflow → /history/consolidate")
+        self.stdout.write("   ├─ Invoice Reports → /history/invoice-report")
+        self.stdout.write("   └─ User Summary - Billing → /history/billing-user-summary")
         self.stdout.write("7. User Management (dropdown) [SUPERADMIN, ADMIN]")
         self.stdout.write("   ├─ User List → /user-management")
         self.stdout.write("   └─ User Control → /user-control")
@@ -440,6 +459,8 @@ class Command(BaseCommand):
         self.stdout.write("   ├─ Department → /master/department")
         self.stdout.write("   └─ Courier → /master/courier")
         self.stdout.write("9. Advanced Control (single) → /admin/privilege [SUPERADMIN, ADMIN]")
+        self.stdout.write(f"{'='*70}")
+        self.stdout.write("\nNOTE: Developer Options is NOT in database - only in frontend menuConfig.js for SUPERADMIN")
         self.stdout.write(f"{'='*70}")
         
         self.stdout.write(f"\n{'='*70}")
@@ -473,9 +494,10 @@ class Command(BaseCommand):
             'delivery_company_list': MenuItem.objects.get(code='delivery_company_list'),
             'my_assigned_delivery': MenuItem.objects.get(code='my_assigned_delivery'),
             'history': MenuItem.objects.get(code='history'),
-            'history_main': MenuItem.objects.get(code='history_main'),
             'history_consolidate': MenuItem.objects.get(code='history_consolidate'),
+            'history_invoice_workflow': MenuItem.objects.get(code='history_invoice_workflow'),
             'invoice_reports': MenuItem.objects.get(code='invoice_reports'),
+            'billing_user_summary': MenuItem.objects.get(code='billing_user_summary'),
             'user_mgmt': MenuItem.objects.get(code='user-management'),
             'user_list': MenuItem.objects.get(code='user_list'),
             'user_control': MenuItem.objects.get(code='user_control'),
@@ -493,7 +515,8 @@ class Command(BaseCommand):
                 menus['invoices'], menus['picking_list'], menus['my_assigned_picking'],
                 menus['delivery'], menus['delivery_dispatch'], menus['delivery_courier_list'], 
                 menus['delivery_company_list'], menus['my_assigned_delivery'],
-                menus['history'], menus['history_main'], menus['history_consolidate'], menus['invoice_reports'],
+                menus['history'], menus['history_consolidate'], menus['history_invoice_workflow'], 
+                menus['invoice_reports'], menus['billing_user_summary'],
                 menus['user_mgmt'], menus['user_list'], menus['user_control'],
                 menus['master'], menus['job_title'], menus['department'], menus['courier'],
                 menus['advanced_control'],
@@ -501,12 +524,14 @@ class Command(BaseCommand):
             'USER': [
                 menus['dashboard'],
                 menus['invoices'], menus['picking_list'], menus['my_assigned_picking'],
-                menus['history'], menus['history_main'], menus['history_consolidate'], menus['invoice_reports'],
+                menus['history'], menus['history_consolidate'], menus['history_invoice_workflow'], 
+                menus['invoice_reports'], menus['billing_user_summary'],
             ],
             'STORE': [
                 menus['dashboard'],
                 menus['invoices'], menus['picking_list'], menus['my_assigned_picking'],
-                menus['history'], menus['history_main'], menus['history_consolidate'], menus['invoice_reports'],
+                menus['history'], menus['history_consolidate'], menus['history_invoice_workflow'], 
+                menus['invoice_reports'], menus['billing_user_summary'],
             ],
             'PICKER': [
                 menus['dashboard'],

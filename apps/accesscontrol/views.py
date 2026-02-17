@@ -2,7 +2,7 @@
 Views for Access Control - Direct User-to-Menu Assignment
 """
 from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.permissions import IsAuthenticated, IsAdminUser, BasePermission
 from rest_framework import status
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -15,6 +15,16 @@ from .serializers import (
 )
 
 User = get_user_model()
+
+
+class IsAdminOrSuperAdmin(BasePermission):
+    """
+    Custom permission to only allow SUPERADMIN or ADMIN users
+    """
+    def has_permission(self, request, view):
+        return request.user and request.user.is_authenticated and \
+               hasattr(request.user, 'role') and \
+               request.user.role in ['SUPERADMIN', 'ADMIN']
 
 
 class UserMenuView(APIView):
@@ -47,7 +57,7 @@ class AllMenusView(APIView):
     """
     Get all available menus (for admin to see what can be assigned)
     """
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
     
     def get(self, request):
         """Return all menu items in hierarchical structure"""
@@ -66,7 +76,7 @@ class AssignMenusView(APIView):
     Assign user's menu assignments (Admin only)
     Frontend sends complete list of selected menus, backend syncs to match
     """
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
     
     def post(self, request):
         """Assign user's menu assignments to match the provided list"""
@@ -159,7 +169,7 @@ class UserMenuAssignmentsView(APIView):
     """
     Get all menu assignments for a specific user (Admin only)
     """
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
     
     def get(self, request, user_id):
         """Get all menus assigned to a specific user"""

@@ -35,6 +35,12 @@ from .views import (
     CompleteCheckingView,
     CompletePackingWithBoxesView,
     GetCompletedPackingDataView,
+    BoxDetailsView,
+    GetBillsByAddressView,
+    GetAllCheckingDoneBillsView,
+    GetHeldBillsByCustomerView,
+    CompleteConsolidatedPackingView,
+    BillingUserSummaryView,
 )
 from .admin_views import AdminCompleteWorkflowView
 
@@ -74,6 +80,11 @@ urlpatterns = [
     path("packing/complete-checking/", CompleteCheckingView.as_view(), name="packing-complete-checking"),
     path("packing/complete-packing/", CompletePackingWithBoxesView.as_view(), name="packing-complete-with-boxes"),
     path("packing/completed/<str:invoice_no>/", GetCompletedPackingDataView.as_view(), name="packing-completed-data"),
+    path("packing/box-details/<str:box_id>/", BoxDetailsView.as_view(), name="packing-box-details"),
+    path("packing/bills-by-address/", GetBillsByAddressView.as_view(), name="packing-bills-by-address"),
+    path("packing/all-checking-done-bills/", GetAllCheckingDoneBillsView.as_view(), name="packing-all-checking-done"),
+    path("packing/held-bills-by-customer/", GetHeldBillsByCustomerView.as_view(), name="packing-held-bills-by-customer"),
+    path("packing/complete-consolidated-packing/", CompleteConsolidatedPackingView.as_view(), name="packing-complete-consolidated"),
     
     # Delivery workflow
     path("delivery/start/", StartDeliveryView.as_view(), name="delivery-start"),
@@ -89,6 +100,7 @@ urlpatterns = [
     # Billing endpoints
     path("billing/invoices/", BillingInvoicesView.as_view(), name="billing-invoices"),
     path("billing/return/", ReturnToBillingView.as_view(), name="billing-return"),
+    path("billing/user-summary/", BillingUserSummaryView.as_view(), name="billing-user-summary"),
     
     # Admin endpoints
     path("admin/complete-workflow/", AdminCompleteWorkflowView.as_view(), name="admin-complete-workflow"),

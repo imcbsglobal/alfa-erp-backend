@@ -191,6 +191,9 @@ class PackingSession(models.Model):
     notes = models.TextField(blank=True, null=True)
     selected_items = models.JSONField(blank=True, default=list, help_text='List of item IDs that have been selected/packed so far')
     has_same_address_bills = models.BooleanField(default=False, help_text='Whether user indicated there are other bills with same address')
+    held_for_consolidation = models.BooleanField(default=False, help_text='Whether this bill is held waiting for more bills from same customer')
+    consolidation_customer_name = models.CharField(max_length=255, blank=True, null=True, help_text='Customer name used for grouping held bills')
+    held_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='held_bills', help_text='User who first held the bill for consolidation')
     created_at = models.DateTimeField(auto_now_add=True)
     
     def __str__(self):

@@ -4,7 +4,7 @@ Views for user authentication and management
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny
+from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny, BasePermission
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth import get_user_model
 from django.db.models import Q
@@ -27,6 +27,16 @@ from .serializers import (
 from .models import JobTitle, Department
 
 User = get_user_model()
+
+
+class IsAdminOrSuperAdmin(BasePermission):
+    """
+    Custom permission to only allow SUPERADMIN or ADMIN users
+    """
+    def has_permission(self, request, view):
+        return request.user and request.user.is_authenticated and \
+               hasattr(request.user, 'role') and \
+               request.user.role in ['SUPERADMIN', 'ADMIN']
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -71,15 +81,15 @@ class UserViewSet(BaseModelViewSet):
         - retrieve, me, change_password: Authenticated users
         """
         if self.action in ['create', 'update', 'partial_update', 'destroy', 'list']:
-            return [IsAdminUser()]
+            return [IsAdminOrSuperAdmin()]
         return [IsAuthenticated()]
     
     def get_queryset(self):
         """
-        Admin sees all users
+        SUPERADMIN and ADMIN see all users
         Regular users see only themselves
         """
-        if self.request.user.is_staff:
+        if self.request.user.role in ['SUPERADMIN', 'ADMIN']:
             return User.objects.all()
         return User.objects.filter(id=self.request.user.id)
     
@@ -147,7 +157,7 @@ class JobTitleViewSet(BaseModelViewSet):
         - create, update, destroy: Admin only
         """
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            return [IsAdminUser()]
+            return [IsAdminOrSuperAdmin()]
         return [IsAuthenticated()]
 
     def get_queryset(self):
@@ -166,18 +176,5 @@ class DepartmentViewSet(BaseModelViewSet):
 
     def get_permissions(self):
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            return [IsAdminUser()]
+            return [IsAdminOrSuperAdmin()]
         return [IsAuthenticated()]
-
-
-from rest_framework.permissions import BasePermission
-
-
-class IsAdminOrSuperAdmin(BasePermission):
-    """
-    Custom permission to only allow SUPERADMIN or ADMIN users
-    """
-    def has_permission(self, request, view):
-        return request.user and request.user.is_authenticated and \
-               hasattr(request.user, 'role') and \
-               request.user.role in ['SUPERADMIN', 'ADMIN']
