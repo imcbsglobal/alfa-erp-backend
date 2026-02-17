@@ -7,7 +7,7 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.db.models import Q, Count
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import json
 import asyncio
 from apps.sales.models import Invoice, PickingSession, PackingSession, DeliverySession
@@ -46,6 +46,13 @@ class DashboardStatsView(APIView):
                 delivery_status='DELIVERED'
             ).count()
             
+            # Get hold invoices (INVOICED status from previous days)
+            yesterday = today - timedelta(days=1)
+            hold_invoices = Invoice.objects.filter(
+                status='INVOICED',
+                created_at__date__lte=yesterday
+            ).count()
+            
             return Response({
                 'success': True,
                 'date': today.isoformat(),
@@ -53,7 +60,8 @@ class DashboardStatsView(APIView):
                     'totalInvoices': total_invoices,
                     'completedPicking': completed_picking,
                     'completedPacking': completed_packing,
-                    'completedDelivery': completed_delivery
+                    'completedDelivery': completed_delivery,
+                    'holdInvoices': hold_invoices
                 }
             })
         except Exception as e:
@@ -124,13 +132,23 @@ class DashboardStatsSSEView(View):
                         ).count()
                     )
                     
+                    # Get hold invoices (INVOICED status from previous days)
+                    yesterday = today - timedelta(days=1)
+                    hold_invoices = await asyncio.to_thread(
+                        lambda: Invoice.objects.filter(
+                            status='INVOICED',
+                            created_at__date__lte=yesterday
+                        ).count()
+                    )
+                    
                     data = {
                         'date': today.isoformat(),
                         'stats': {
                             'totalInvoices': total_invoices,
                             'completedPicking': completed_picking,
                             'completedPacking': completed_packing,
-                            'completedDelivery': completed_delivery
+                            'completedDelivery': completed_delivery,
+                            'holdInvoices': hold_invoices
                         },
                         'timestamp': datetime.now().isoformat()
                     }

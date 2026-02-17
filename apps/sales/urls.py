@@ -18,6 +18,7 @@ from .views import (
     PickingHistoryView,
     PackingHistoryView,
     DeliveryHistoryView,
+    BillingHistoryView,
     BillingInvoicesView,
     ReturnToBillingView,
     CourierViewSet,
@@ -98,6 +99,7 @@ urlpatterns = [
     path("delivery/upload-slip/", UploadCourierSlipView.as_view()),
 
     # Billing endpoints
+    path("billing/history/", BillingHistoryView.as_view(), name="billing-history"),
     path("billing/invoices/", BillingInvoicesView.as_view(), name="billing-invoices"),
     path("billing/return/", ReturnToBillingView.as_view(), name="billing-return"),
     path("billing/user-summary/", BillingUserSummaryView.as_view(), name="billing-user-summary"),

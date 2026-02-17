@@ -1796,6 +1796,89 @@ class DeliveryHistoryView(generics.ListAPIView):
 
 # ===== Billing Section APIs =====
 
+class BillingHistoryView(generics.ListAPIView):
+    """
+    GET /api/sales/billing/history/
+    
+    List billing history showing invoice creation details.
+    
+    Query Parameters:
+    - search: Search by invoice number or customer details
+    - status: Filter by billing_status (BILLED, REVIEW, RE_INVOICED)
+    - start_date: Filter by date (YYYY-MM-DD) - invoices created on or after
+    - end_date: Filter by date (YYYY-MM-DD) - invoices created on or before
+    - page: Page number for pagination
+    - page_size: Number of results per page (default: 10, max: 100)
+    
+    Permissions:
+    - Admins: See all invoices
+    - Regular users: See only invoices they created
+    """
+    from .serializers import BillingHistorySerializer
+    serializer_class = BillingHistorySerializer
+    pagination_class = HistoryPagination
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        user = self.request.user
+        # Prefetch all invoice related data
+        queryset = Invoice.objects.select_related(
+            'customer', 
+            'salesman',
+            'created_user'
+        ).prefetch_related(
+            'items'
+        ).order_by('-created_at')  # Most recent first
+        
+        # Permission check: regular users only see invoices they created
+        if not user.is_admin_or_superadmin():
+            queryset = queryset.filter(created_user=user)
+        
+        # Invoice filters
+        invoice_no_param = self.request.query_params.get('invoice_no')
+        if invoice_no_param:
+            queryset = queryset.filter(invoice_no__iexact=invoice_no_param)
+
+        # Search filter
+        search = self.request.query_params.get('search', '').strip()
+        if search:
+            from django.db.models import Q
+            queryset = queryset.filter(
+                Q(invoice_no__icontains=search) |
+                Q(customer__name__icontains=search) |
+                Q(customer__email__icontains=search) |
+                Q(created_user__email__icontains=search) |
+                Q(created_user__name__icontains=search)
+            )
+        
+        # Billing status filter
+        status_filter = self.request.query_params.get('status', '').strip().upper()
+        if status_filter and status_filter in ['BILLED', 'REVIEW', 'RE_INVOICED']:
+            queryset = queryset.filter(billing_status=status_filter)
+        
+        # Date filters
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+        
+        if start_date:
+            from datetime import datetime
+            try:
+                start_dt = datetime.strptime(start_date, '%Y-%m-%d').date()
+                queryset = queryset.filter(created_at__date__gte=start_dt)
+            except ValueError:
+                pass  # Invalid date format, skip filter
+        
+        if end_date:
+            from datetime import datetime
+            try:
+                end_dt = datetime.strptime(end_date, '%Y-%m-%d').date()
+                queryset = queryset.filter(created_at__date__lte=end_dt)
+            except ValueError:
+                pass  # Invalid date format, skip filter
+        
+        return queryset
+
+
 class BillingInvoicesView(generics.ListAPIView):
     """
     GET /api/sales/billing/invoices/

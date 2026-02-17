@@ -902,6 +902,44 @@ class DeliveryHistorySerializer(serializers.ModelSerializer):
 
 # ===== Billing Serializers =====
 
+class BillingHistorySerializer(serializers.ModelSerializer):
+    """Serializer for billing history with invoice creation details"""
+    invoice_no = serializers.CharField(source='invoice_no', read_only=True)
+    invoice_date = serializers.DateField(source='invoice_date', read_only=True)
+    invoice_status = serializers.CharField(source='status', read_only=True)
+    invoice_remarks = serializers.CharField(source='remarks', read_only=True)
+    customer_name = serializers.CharField(source='customer.name', read_only=True)
+    customer_email = serializers.CharField(source='customer.email', read_only=True)
+    customer_phone = serializers.CharField(source='customer.phone1', read_only=True)
+    customer_address = serializers.CharField(source='customer.address1', read_only=True)
+    salesman_name = serializers.CharField(source='salesman.name', read_only=True)
+    biller_email = serializers.CharField(source='created_user.email', read_only=True)
+    biller_name = serializers.CharField(source='created_user.name', read_only=True)
+    temp_name = serializers.CharField(source='temp_name', read_only=True)
+    items = InvoiceItemSerializer(source='items', many=True, read_only=True)
+    Total = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        read_only=True
+    )
+    start_time = serializers.DateTimeField(source='created_at', read_only=True)
+    end_time = serializers.DateTimeField(source='created_at', read_only=True)
+    duration = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Invoice
+        fields = [
+            'id', 'invoice_no', 'invoice_date', 'invoice_status', 'invoice_remarks',
+            'customer_name', 'customer_email', 'customer_phone', 'customer_address',
+            'salesman_name', 'biller_email', 'biller_name', 'temp_name', 'billing_status',
+            'items', 'Total', 'start_time', 'end_time', 'duration', 'created_at'
+        ]
+    
+    def get_duration(self, obj):
+        """For billing, duration is instant (0 minutes)"""
+        return 0
+
+
 class ReturnToBillingSerializer(serializers.Serializer):
     """Serializer for returning an invoice to billing for corrections"""
     invoice_no = serializers.CharField(help_text="Invoice number to return")
