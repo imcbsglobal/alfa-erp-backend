@@ -904,8 +904,8 @@ class DeliveryHistorySerializer(serializers.ModelSerializer):
 
 class BillingHistorySerializer(serializers.ModelSerializer):
     """Serializer for billing history with invoice creation details"""
-    invoice_no = serializers.CharField(source='invoice_no', read_only=True)
-    invoice_date = serializers.DateField(source='invoice_date', read_only=True)
+    invoice_no = serializers.CharField(read_only=True)
+    invoice_date = serializers.DateField(read_only=True)
     invoice_status = serializers.CharField(source='status', read_only=True)
     invoice_remarks = serializers.CharField(source='remarks', read_only=True)
     customer_name = serializers.CharField(source='customer.name', read_only=True)
@@ -915,8 +915,8 @@ class BillingHistorySerializer(serializers.ModelSerializer):
     salesman_name = serializers.CharField(source='salesman.name', read_only=True)
     biller_email = serializers.CharField(source='created_user.email', read_only=True)
     biller_name = serializers.CharField(source='created_user.name', read_only=True)
-    temp_name = serializers.CharField(source='temp_name', read_only=True)
-    items = InvoiceItemSerializer(source='items', many=True, read_only=True)
+    temp_name = serializers.CharField(read_only=True)
+    items = InvoiceItemSerializer(many=True, read_only=True)
     Total = serializers.DecimalField(
         max_digits=10,
         decimal_places=2,
