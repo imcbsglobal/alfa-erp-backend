@@ -42,6 +42,7 @@ from .views import (
     GetHeldBillsByCustomerView,
     CompleteConsolidatedPackingView,
     BillingUserSummaryView,
+    SaveBoxDraftView,
 )
 from .admin_views import AdminCompleteWorkflowView
 
@@ -67,6 +68,7 @@ urlpatterns = [
     path("picking/history/", PickingHistoryView.as_view(), name="picking-history"),
     path("picking/bulk-start/", BulkPickingStartView.as_view(), name="bulk-picking-start"),
     path("picking/bulk-complete/", BulkPickingCompleteView.as_view(), name="bulk-picking-complete"),
+    path("packing/save-draft/", SaveBoxDraftView.as_view(), name="packing-save-draft"),
     
     # Packing workflow
     path("packing/active/", MyActivePackingView.as_view(), name="packing-active"),

@@ -76,6 +76,13 @@ class Invoice(models.Model):
         help_text="Billing status of the invoice"
     )
 
+    is_hold = models.BooleanField(
+        default=True,
+        help_text="Marks invoice as a hold invoice at the time of creation"
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

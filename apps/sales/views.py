@@ -332,25 +332,29 @@ class ImportInvoiceView(APIView):
 
         try:
             invoice = serializer.save()
-        except IntegrityError:
-            # Race condition: another request created the invoice concurrently
-            existing = Invoice.objects.filter(invoice_no=invoice_no).first()
-            if existing:
-                return Response(
-                    {
-                        "success": False,
-                        "message": "Invoice with this invoice_no already exists (race).",
-                        "data": {"id": existing.id, "invoice_no": existing.invoice_no},
-                    },
-                    status=status.HTTP_409_CONFLICT,
-                )
-            # unexpected DB error — re-raise or return generic 500
-            logger.exception("IntegrityError on invoice save (unexpected)")
+        except Exception as e:
+            logger.exception("Invoice save failed")
+            import traceback
+            traceback.print_exc()
             return Response(
-                {"success": False, "message": "Failed to save invoice due to DB error."},
+                {
+                    "success": False,
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
+        except Exception as e:
+            logger.exception("Unexpected error on invoice save")
+            return Response(
+                {
+                    "success": False,
+                    "error_type": type(e).__name__,
+                    "error": str(e)
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        
         # Set created_user to the authenticated user
         if request.user and request.user.is_authenticated:
             invoice.created_user = request.user
@@ -2630,35 +2634,28 @@ class GetMyCheckingBillsView(APIView):
 
 
 class GetBillDetailsView(APIView):
-    """
-    GET /api/sales/packing/bill/<invoice_no>/
-    Returns detailed bill information for checking
-    """
     permission_classes = [IsAuthenticated]
     
     def get(self, request, invoice_no):
         try:
-            invoice = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(invoice_no=invoice_no)
+            invoice = Invoice.objects.select_related('customer', 'salesman').prefetch_related(
+                'items', 'boxes__items__invoice_item'
+            ).get(invoice_no=invoice_no)
         except Invoice.DoesNotExist:
-            return Response({
-                "success": False,
-                "message": "Invoice not found"
-            }, status=status.HTTP_404_NOT_FOUND)
+            return Response({"success": False, "message": "Invoice not found"}, status=status.HTTP_404_NOT_FOUND)
         
-        # Get packing session if exists
         packing_session = PackingSession.objects.filter(invoice=invoice).first()
-        
         invoice_data = InvoiceListSerializer(invoice).data
+        
         if packing_session and packing_session.checking_by:
             invoice_data['checking_by'] = packing_session.checking_by.email
             invoice_data['checking_by_name'] = packing_session.checking_by.name
         
-        return Response({
-            "success": True,
-            "message": "Bill details retrieved",
-            "data": invoice_data
-        }, status=status.HTTP_200_OK)
-
+        # ✅ Include existing boxes
+        boxes = invoice.boxes.prefetch_related('items__invoice_item').all()
+        invoice_data['boxes'] = BoxReadSerializer(boxes, many=True).data
+        
+        return Response({"success": True, "message": "Bill details retrieved", "data": invoice_data}, status=status.HTTP_200_OK)
 
 class StartCheckingView(APIView):
     """
@@ -2890,19 +2887,25 @@ class CompletePackingWithBoxesView(APIView):
                 packing_session.save()
                 
                 # Create boxes and assign items
+                # Create boxes and assign items
                 for box_data in boxes_data:
                     box_id = box_data['box_id']
                     box_items = box_data['items']
                     
-                    # Create box
-                    box = Box.objects.create(
+                    # Update existing draft box or create new one
+                    box, _ = Box.objects.update_or_create(
                         box_id=box_id,
-                        invoice=invoice,
-                        packing_session=packing_session,
-                        created_by=request.user,
-                        is_sealed=True,
-                        sealed_at=timezone.now()
+                        defaults={
+                            'invoice': invoice,
+                            'packing_session': packing_session,
+                            'created_by': request.user,
+                            'is_sealed': True,
+                            'sealed_at': timezone.now(),
+                        }
                     )
+                    
+                    # Clear old draft items and write final items
+                    box.items.all().delete()
                     
                     # Create box items
                     for item_data in box_items:
@@ -3601,3 +3604,80 @@ class BillingUserSummaryView(APIView):
                 "success": False,
                 "message": f"Failed to fetch billing user summary: {str(e)}"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# views.py
+class SaveBoxDraftView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        invoice_no = request.data.get('invoice_no')
+        boxes_data = request.data.get('boxes', [])
+        
+        if not invoice_no:
+            return Response({"success": False, "message": "invoice_no is required"}, status=400)
+        
+        try:
+            invoice = Invoice.objects.get(invoice_no=invoice_no)
+        except Invoice.DoesNotExist:
+            return Response({"success": False, "message": "Invoice not found"}, status=404)
+        
+        packing_session, _ = PackingSession.objects.get_or_create(
+            invoice=invoice,
+            defaults={'packing_status': 'PENDING'}
+        )
+        
+        valid_item_ids = set(invoice.items.values_list('id', flat=True))
+        
+        try:
+            with transaction.atomic():
+                # Collect box_ids being saved
+                incoming_box_ids = [
+                    b['box_id'] for b in boxes_data if b.get('items')
+                ]
+                
+                # Delete unsealed draft boxes NOT in the incoming list
+                # (avoids unique violation when re-saving the same box_id)
+                invoice.boxes.filter(is_sealed=False).exclude(
+                    box_id__in=incoming_box_ids
+                ).delete()
+                
+                for box_data in boxes_data:
+                    items = box_data.get('items', [])
+                    if not items:
+                        continue
+                    
+                    valid_items = [
+                        item for item in items
+                        if item.get('item_id') in valid_item_ids
+                    ]
+                    if not valid_items:
+                        continue
+                    
+                    # Use update_or_create to handle duplicate box_ids gracefully
+                    box, created = Box.objects.update_or_create(
+                        box_id=box_data['box_id'],
+                        defaults={
+                            'invoice': invoice,
+                            'packing_session': packing_session,
+                            'created_by': request.user,
+                            'is_sealed': box_data.get('is_sealed', False),
+                            'sealed_at': timezone.now() if box_data.get('is_sealed') else None,
+                            'notes': 'draft',
+                        }
+                    )
+                    
+                    # Only update items on unsealed boxes
+                    if not box.is_sealed:
+                        box.items.all().delete()
+                        for item in valid_items:
+                            BoxItem.objects.create(
+                                box=box,
+                                invoice_item_id=item['item_id'],
+                                quantity=item['quantity']
+                            )
+            
+            return Response({"success": True, "message": "Draft saved"})
+        
+        except Exception as e:
+            logger.exception("Failed to save draft")
+            return Response({"success": False, "message": str(e)}, status=500)
