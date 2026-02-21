@@ -1953,6 +1953,15 @@ class BillingInvoicesView(generics.ListAPIView):
         date_filter = self.request.query_params.get('date')
         if date_filter:
             queryset = queryset.filter(created_at__date=date_filter)
+
+        # Search by invoice number or customer name
+        search = self.request.query_params.get('search', '').strip()
+        if search:
+            queryset = queryset.filter(
+                Q(invoice_no__icontains=search) |
+                Q(customer__name__icontains=search) |
+                Q(temp_name__icontains=search)
+            )    
         
         return queryset
 

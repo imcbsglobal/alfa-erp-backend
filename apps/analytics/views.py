@@ -11,45 +11,6 @@ from apps.sales.models import Invoice, PickingSession, PackingSession, DeliveryS
 from apps.accounts.models import User
 from apps.analytics.models import DailyHoldSnapshot
 
-
-def get_hold_invoices_count():
-    """
-    Formula:
-    Hold Invoices = (Yesterday's snapshot + Today's total invoices) - Today's completed picking
-    Day 1 fallback: (0 + Today's total invoices) - Today's completed picking
-    """
-    today = timezone.localdate()
-    yesterday = today - timedelta(days=1)
-
-    # Get yesterday's snapshot (0 if Day 1)
-    yesterday_snapshot = DailyHoldSnapshot.objects.filter(
-        snapshot_date=yesterday
-    ).first()
-    yesterday_hold = yesterday_snapshot.hold_count if yesterday_snapshot else 0
-
-    # Today's total invoices
-    today_total = Invoice.objects.filter(
-        created_at__date=today
-    ).count()
-
-    # Today's completed picking
-    today_picked = PickingSession.objects.filter(
-        start_time__date=today,
-        picking_status='PICKED'
-    ).count()
-
-    # Formula
-    hold_invoices = max((yesterday_hold + today_total) - today_picked, 0)
-
-    # Save/update today's snapshot
-    DailyHoldSnapshot.objects.update_or_create(
-        snapshot_date=today,
-        defaults={'hold_count': hold_invoices}
-    )
-
-    return hold_invoices
-
-
 class DashboardStatsView(APIView):
     """
     GET /api/analytics/dashboard-stats/
@@ -58,6 +19,18 @@ class DashboardStatsView(APIView):
     def get(self, request):
         try:
             today = timezone.localdate()
+
+            # ✅ Auto-snapshot: runs once per day on first dashboard load
+            if not DailyHoldSnapshot.objects.filter(snapshot_date=today).exists():
+                hold_count = Invoice.objects.filter(status='INVOICED').count()
+                DailyHoldSnapshot.objects.create(
+                    snapshot_date=today,
+                    hold_count=hold_count
+                )
+
+            # Get today's fixed snapshot
+            snapshot = DailyHoldSnapshot.objects.filter(snapshot_date=today).first()
+            hold_invoices = snapshot.hold_count if snapshot else 0
 
             total_invoices = Invoice.objects.filter(
                 created_at__date=today
@@ -78,7 +51,7 @@ class DashboardStatsView(APIView):
                 delivery_status='DELIVERED'
             ).count()
 
-            hold_invoices = get_hold_invoices_count()
+            pending_invoices = max((hold_invoices + total_invoices) - completed_picking, 0)
 
             return Response({
                 'success': True,
@@ -88,15 +61,12 @@ class DashboardStatsView(APIView):
                     'completedPicking': completed_picking,
                     'completedPacking': completed_packing,
                     'completedDelivery': completed_delivery,
-                    'holdInvoices': hold_invoices
+                    'holdInvoices': hold_invoices,
+                    'pendingInvoices': pending_invoices,
                 }
             })
         except Exception as e:
-            return Response({
-                'success': False,
-                'message': str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+            return Response({'success': False, 'message': str(e)}, status=500)
 
 class DashboardStatsSSEView(View):
     """
@@ -156,7 +126,13 @@ class DashboardStatsSSEView(View):
                             delivery_status='DELIVERED'
                         ).count()
                     )
-                    hold_invoices = await asyncio.to_thread(get_hold_invoices_count)
+                    # Replace with:
+                    snapshot = await asyncio.to_thread(
+                        lambda: DailyHoldSnapshot.objects.filter(snapshot_date=today).first()
+                    )
+                    hold_invoices = snapshot.hold_count if snapshot else 0
+
+                    pending_invoices = max((hold_invoices + total_invoices) - completed_picking, 0)
 
                     data = {
                         'date': today.isoformat(),
@@ -165,7 +141,8 @@ class DashboardStatsSSEView(View):
                             'completedPicking': completed_picking,
                             'completedPacking': completed_packing,
                             'completedDelivery': completed_delivery,
-                            'holdInvoices': hold_invoices
+                            'holdInvoices': hold_invoices,
+                            'pendingInvoices': pending_invoices,
                         },
                         'timestamp': datetime.now().isoformat()
                     }
