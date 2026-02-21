@@ -766,6 +766,7 @@ class PickingHistorySerializer(serializers.ModelSerializer):
     customer_name = serializers.CharField(source='invoice.customer.name', read_only=True)
     customer_email = serializers.CharField(source='invoice.customer.email', read_only=True)
     customer_phone = serializers.CharField(source='invoice.customer.phone1', read_only=True)
+    customer_area = serializers.CharField(source='invoice.customer.area', read_only=True)
     customer_address = serializers.CharField(source='invoice.customer.address1', read_only=True)
     salesman_name = serializers.CharField(source='invoice.salesman.name', read_only=True)
     picker_email = serializers.CharField(source='picker.email', read_only=True)
@@ -784,7 +785,7 @@ class PickingHistorySerializer(serializers.ModelSerializer):
         model = PickingSession
         fields = [
             'id', 'invoice_no', 'invoice_date', 'invoice_status', 'invoice_remarks',
-            'customer_name', 'customer_email', 'customer_phone', 'customer_address',
+            'customer_name', 'customer_email', 'customer_phone', 'customer_address','customer_area',
             'salesman_name', 'picker_email', 'picker_name', 'temp_name', 'picking_status',
             'items', 'Total', 'start_time', 'end_time', 'duration', 'notes', 'created_at'
         ]
@@ -810,6 +811,7 @@ class PackingHistorySerializer(serializers.ModelSerializer):
     customer_name = serializers.CharField(source='invoice.customer.name', read_only=True)
     customer_email = serializers.CharField(source='invoice.customer.email', read_only=True)
     customer_phone = serializers.CharField(source='invoice.customer.phone1', read_only=True)
+    customer_area = serializers.CharField(source='invoice.customer.area', read_only=True)
     customer_address = serializers.CharField(source='invoice.customer.address1', read_only=True)
     salesman_name = serializers.CharField(source='invoice.salesman.name', read_only=True)
     packer_email = serializers.CharField(source='packer.email', read_only=True)
@@ -828,7 +830,7 @@ class PackingHistorySerializer(serializers.ModelSerializer):
         model = PackingSession
         fields = [
             'id', 'invoice_no', 'invoice_date', 'invoice_status', 'invoice_remarks',
-            'customer_name', 'customer_email', 'customer_phone', 'customer_address',
+            'customer_name', 'customer_email', 'customer_phone', 'customer_address','customer_area',
             'salesman_name', 'packer_email', 'packer_name', 'temp_name', 'packing_status',
             'items', 'Total', 'start_time', 'end_time', 'duration', 'notes', 'created_at'
         ]
@@ -855,6 +857,7 @@ class DeliveryHistorySerializer(serializers.ModelSerializer):
     customer_email = serializers.CharField(source='invoice.customer.email', read_only=True)
     customer_phone = serializers.CharField(source='invoice.customer.phone1', read_only=True)
     temp_name = serializers.CharField(source='invoice.temp_name', read_only=True)
+    customer_area = serializers.CharField(source='invoice.customer.area', read_only=True)
     customer_address = serializers.CharField(source='invoice.customer.address1', read_only=True)
     salesman_name = serializers.CharField(source='invoice.salesman.name', read_only=True)
     delivery_user_email = serializers.CharField(source='assigned_to.email', read_only=True)

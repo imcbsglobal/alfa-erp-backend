@@ -1546,7 +1546,7 @@ class PickingHistoryView(generics.ListAPIView):
             'picker'
         ).prefetch_related(
             'invoice__items'
-        ).order_by('-created_at')  # Most recent first
+        ).order_by('created_at')  # Most recent first
         
         # Permission check: regular users only see their own sessions.
         # Users with role 'PICKER' are treated like admins and can view all picking sessions.
@@ -1832,7 +1832,7 @@ class BillingHistoryView(generics.ListAPIView):
             'created_user'
         ).prefetch_related(
             'items'
-        ).order_by('-created_at')  # Most recent first
+        ).order_by('created_at') # Most recent first
         
         # Permission check: regular users only see invoices they created
         if not user.is_admin_or_superadmin():
@@ -1914,7 +1914,15 @@ class BillingInvoicesView(generics.ListAPIView):
             'items', 
             'invoice_returns', 
             'invoice_returns__returned_by',
-            'invoice_returns__resolved_by'
+            'invoice_returns__resolved_by',
+            'pickingsession',
+            'pickingsession__picker',
+            'packingsession',
+            'packingsession__packer',
+            'packingsession__held_by',
+            'deliverysession',
+            'deliverysession__assigned_to',
+            'deliverysession__delivered_by',
         ).order_by('created_at')
         
         # 🔴 EXCLUDE CLEARED INVOICES (Developer Settings feature)
@@ -1957,6 +1965,7 @@ class BillingInvoicesView(generics.ListAPIView):
         # Search by invoice number or customer name
         search = self.request.query_params.get('search', '').strip()
         if search:
+            from django.db.models import Q
             queryset = queryset.filter(
                 Q(invoice_no__icontains=search) |
                 Q(customer__name__icontains=search) |
