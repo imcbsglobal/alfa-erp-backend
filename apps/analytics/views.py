@@ -21,17 +21,40 @@ class DashboardStatsView(APIView):
             today = timezone.localdate()
 
             # ✅ Auto-snapshot: runs once per day on first dashboard load
+            # Saves yesterday's pending count as today's fixed hold count
             if not DailyHoldSnapshot.objects.filter(snapshot_date=today).exists():
-                hold_count = Invoice.objects.filter(status='INVOICED').count()
+                yesterday = today - timedelta(days=1)
+                
+                # Get yesterday's snapshot (hold count carried from day before)
+                yesterday_snapshot = DailyHoldSnapshot.objects.filter(
+                    snapshot_date=yesterday
+                ).first()
+                yesterday_hold = yesterday_snapshot.hold_count if yesterday_snapshot else 0
+
+                # Yesterday's new invoices
+                yesterday_total = Invoice.objects.filter(
+                    created_at__date=yesterday
+                ).count()
+
+                # Yesterday's completed picking
+                yesterday_picked = PickingSession.objects.filter(
+                    start_time__date=yesterday,
+                    picking_status='PICKED'
+                ).count()
+
+                # Yesterday's pending = what becomes today's hold
+                todays_hold = max((yesterday_hold + yesterday_total) - yesterday_picked, 0)
+
                 DailyHoldSnapshot.objects.create(
                     snapshot_date=today,
-                    hold_count=hold_count
+                    hold_count=todays_hold
                 )
 
-            # Get today's fixed snapshot
+            # Get today's fixed hold (won't change all day)
             snapshot = DailyHoldSnapshot.objects.filter(snapshot_date=today).first()
             hold_invoices = snapshot.hold_count if snapshot else 0
 
+            # Today's stats
             total_invoices = Invoice.objects.filter(
                 created_at__date=today
             ).count()
@@ -51,6 +74,7 @@ class DashboardStatsView(APIView):
                 delivery_status='DELIVERED'
             ).count()
 
+            # Pending = hold + today's invoices - today's picking done
             pending_invoices = max((hold_invoices + total_invoices) - completed_picking, 0)
 
             return Response({
@@ -126,7 +150,6 @@ class DashboardStatsSSEView(View):
                             delivery_status='DELIVERED'
                         ).count()
                     )
-                    # Replace with:
                     snapshot = await asyncio.to_thread(
                         lambda: DailyHoldSnapshot.objects.filter(snapshot_date=today).first()
                     )
