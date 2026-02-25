@@ -761,6 +761,7 @@ class PickingHistorySerializer(serializers.ModelSerializer):
     """Serializer for picking session history with invoice and timing details"""
     invoice_no = serializers.CharField(source='invoice.invoice_no', read_only=True)
     invoice_date = serializers.DateField(source='invoice.invoice_date', read_only=True)
+    invoice_created_at = serializers.DateTimeField(source='invoice.created_at', read_only=True)
     invoice_status = serializers.CharField(source='invoice.status', read_only=True)
     invoice_remarks = serializers.CharField(source='invoice.remarks', read_only=True)
     customer_name = serializers.CharField(source='invoice.customer.name', read_only=True)
@@ -784,7 +785,7 @@ class PickingHistorySerializer(serializers.ModelSerializer):
     class Meta:
         model = PickingSession
         fields = [
-            'id', 'invoice_no', 'invoice_date', 'invoice_status', 'invoice_remarks',
+            'id', 'invoice_no', 'invoice_date', 'invoice_created_at', 'invoice_status', 'invoice_remarks',
             'customer_name', 'customer_email', 'customer_phone', 'customer_address','customer_area',
             'salesman_name', 'picker_email', 'picker_name', 'temp_name', 'picking_status',
             'items', 'Total', 'start_time', 'end_time', 'duration', 'notes', 'created_at'
