@@ -3,6 +3,7 @@ from django.views import View
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from datetime import datetime, timedelta
 import json
@@ -11,91 +12,136 @@ from apps.sales.models import Invoice, PickingSession, PackingSession, DeliveryS
 from apps.accounts.models import User
 from apps.analytics.models import DailyHoldSnapshot
 
+
+def get_or_create_today_snapshot(today):
+    """
+    Creates today's hold snapshot if it doesn't exist yet.
+    HOLD = all invoices created BEFORE today that are still unpicked (status='INVOICED').
+    Runs once per day automatically on first dashboard load.
+    """
+    snapshot, created = DailyHoldSnapshot.objects.get_or_create(
+        snapshot_date=today,
+        defaults={'hold_count': 0}
+    )
+
+    if created:
+        hold_count = Invoice.objects.filter(
+            created_at__date__lt=today,
+            status='INVOICED'
+        ).count()
+        snapshot.hold_count = hold_count
+        snapshot.save(update_fields=['hold_count'])
+
+    return snapshot
+
+
+def compute_today_stats(today):
+    """Shared helper — computes all dashboard stats for today."""
+    snapshot = get_or_create_today_snapshot(today)
+    hold_invoices = snapshot.hold_count
+
+    total_invoices_today = Invoice.objects.filter(created_at__date=today).count()
+
+    completed_picking = PickingSession.objects.filter(
+        end_time__date=today,
+        picking_status='PICKED'
+    ).count()
+
+    completed_packing = PackingSession.objects.filter(
+        end_time__date=today,
+        packing_status='PACKED'
+    ).count()
+
+    completed_delivery = DeliverySession.objects.filter(
+        end_time__date=today,
+        delivery_status='DELIVERED'
+    ).count()
+
+    pending_invoices = max((hold_invoices + total_invoices_today) - completed_picking, 0)
+
+    return {
+        'holdInvoices': hold_invoices,
+        'totalInvoices': total_invoices_today,
+        'completedPicking': completed_picking,
+        'completedPacking': completed_packing,
+        'completedDelivery': completed_delivery,
+        'pendingInvoices': pending_invoices,
+    }
+
+
 class DashboardStatsView(APIView):
     """
     GET /api/analytics/dashboard-stats/
-    Returns real-time dashboard statistics for today
+    Returns real-time dashboard statistics for today.
     """
     def get(self, request):
         try:
             today = timezone.localdate()
-
-            # ✅ Auto-snapshot: runs once per day on first dashboard load
-            # Saves yesterday's pending count as today's fixed hold count
-            if not DailyHoldSnapshot.objects.filter(snapshot_date=today).exists():
-                yesterday = today - timedelta(days=1)
-                
-                # Get yesterday's snapshot (hold count carried from day before)
-                yesterday_snapshot = DailyHoldSnapshot.objects.filter(
-                    snapshot_date=yesterday
-                ).first()
-                yesterday_hold = yesterday_snapshot.hold_count if yesterday_snapshot else 0
-
-                # Yesterday's new invoices
-                yesterday_total = Invoice.objects.filter(
-                    created_at__date=yesterday
-                ).count()
-
-                # Yesterday's completed picking
-                yesterday_picked = PickingSession.objects.filter(
-                    start_time__date=yesterday,
-                    picking_status='PICKED'
-                ).count()
-
-                # Yesterday's pending = what becomes today's hold
-                todays_hold = max((yesterday_hold + yesterday_total) - yesterday_picked, 0)
-
-                DailyHoldSnapshot.objects.create(
-                    snapshot_date=today,
-                    hold_count=todays_hold
-                )
-
-            # Get today's fixed hold (won't change all day)
-            snapshot = DailyHoldSnapshot.objects.filter(snapshot_date=today).first()
-            hold_invoices = snapshot.hold_count if snapshot else 0
-
-            # Today's stats
-            total_invoices = Invoice.objects.filter(
-                created_at__date=today
-            ).count()
-
-            completed_picking = PickingSession.objects.filter(
-                start_time__date=today,
-                picking_status='PICKED'
-            ).count()
-
-            completed_packing = PackingSession.objects.filter(
-                start_time__date=today,
-                packing_status='PACKED'
-            ).count()
-
-            completed_delivery = DeliverySession.objects.filter(
-                start_time__date=today,
-                delivery_status='DELIVERED'
-            ).count()
-
-            # Pending = hold + today's invoices - today's picking done
-            pending_invoices = max((hold_invoices + total_invoices) - completed_picking, 0)
-
+            stats = compute_today_stats(today)
             return Response({
                 'success': True,
                 'date': today.isoformat(),
-                'stats': {
-                    'totalInvoices': total_invoices,
-                    'completedPicking': completed_picking,
-                    'completedPacking': completed_packing,
-                    'completedDelivery': completed_delivery,
-                    'holdInvoices': hold_invoices,
-                    'pendingInvoices': pending_invoices,
-                }
+                'stats': stats,
             })
         except Exception as e:
             return Response({'success': False, 'message': str(e)}, status=500)
 
+
+class RecalculateHoldSnapshotView(APIView):
+    """
+    POST /api/analytics/recalculate-hold/
+    SUPERADMIN only — deletes today's snapshot and rebuilds it from live data.
+    Use when the hold count is wrong (e.g. after data corrections).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        # Superadmin only
+        if request.user.role not in ['SUPERADMIN']:
+            return Response(
+                {'success': False, 'message': 'Superadmin access required.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        try:
+            today = timezone.localdate()
+
+            # Delete existing snapshot for today
+            deleted_count, _ = DailyHoldSnapshot.objects.filter(
+                snapshot_date=today
+            ).delete()
+
+            # Recount from live Invoice table
+            hold_count = Invoice.objects.filter(
+                created_at__date__lt=today,
+                status='INVOICED'
+            ).count()
+
+            # Save fresh snapshot
+            DailyHoldSnapshot.objects.create(
+                snapshot_date=today,
+                hold_count=hold_count
+            )
+
+            # Return full updated stats
+            stats = compute_today_stats(today)
+
+            return Response({
+                'success': True,
+                'message': f'Hold snapshot recalculated successfully.',
+                'date': today.isoformat(),
+                'previous_snapshot_existed': deleted_count > 0,
+                'stats': stats,
+            })
+
+        except Exception as e:
+            return Response({'success': False, 'message': str(e)}, status=500)
+
+
 class DashboardStatsSSEView(View):
     """
     GET /api/analytics/dashboard-stats-stream/
-    Server-Sent Events endpoint for real-time dashboard updates
+    Server-Sent Events endpoint for real-time dashboard updates (every 5s).
     """
 
     async def get(self, request):
@@ -104,17 +150,13 @@ class DashboardStatsSSEView(View):
             from django.http import JsonResponse
             return JsonResponse({'error': 'Authentication token required'}, status=401)
 
-        # Verify token - all DB calls wrapped in sync_to_async
         try:
             from rest_framework_simplejwt.tokens import AccessToken
             from asgiref.sync import sync_to_async
-            from apps.accounts.models import User
 
-            # Decode token (no DB call, safe in async)
             access_token = AccessToken(token)
             user_id = access_token['user_id']
 
-            # DB call must use sync_to_async
             get_user = sync_to_async(User.objects.get)
             user = await get_user(id=user_id)
             print(f"✅ SSE Auth success for user: {user}")
@@ -129,42 +171,45 @@ class DashboardStatsSSEView(View):
                 try:
                     today = timezone.localdate()
 
-                    total_invoices = await asyncio.to_thread(
+                    snapshot = await asyncio.to_thread(
+                        lambda: get_or_create_today_snapshot(today)
+                    )
+                    hold_invoices = snapshot.hold_count
+
+                    total_invoices_today = await asyncio.to_thread(
                         lambda: Invoice.objects.filter(created_at__date=today).count()
                     )
                     completed_picking = await asyncio.to_thread(
                         lambda: PickingSession.objects.filter(
-                            start_time__date=today,
+                            end_time__date=today,
                             picking_status='PICKED'
                         ).count()
                     )
                     completed_packing = await asyncio.to_thread(
                         lambda: PackingSession.objects.filter(
-                            start_time__date=today,
+                            end_time__date=today,
                             packing_status='PACKED'
                         ).count()
                     )
                     completed_delivery = await asyncio.to_thread(
                         lambda: DeliverySession.objects.filter(
-                            start_time__date=today,
+                            end_time__date=today,
                             delivery_status='DELIVERED'
                         ).count()
                     )
-                    snapshot = await asyncio.to_thread(
-                        lambda: DailyHoldSnapshot.objects.filter(snapshot_date=today).first()
-                    )
-                    hold_invoices = snapshot.hold_count if snapshot else 0
 
-                    pending_invoices = max((hold_invoices + total_invoices) - completed_picking, 0)
+                    pending_invoices = max(
+                        (hold_invoices + total_invoices_today) - completed_picking, 0
+                    )
 
                     data = {
                         'date': today.isoformat(),
                         'stats': {
-                            'totalInvoices': total_invoices,
+                            'holdInvoices': hold_invoices,
+                            'totalInvoices': total_invoices_today,
                             'completedPicking': completed_picking,
                             'completedPacking': completed_packing,
                             'completedDelivery': completed_delivery,
-                            'holdInvoices': hold_invoices,
                             'pendingInvoices': pending_invoices,
                         },
                         'timestamp': datetime.now().isoformat()
