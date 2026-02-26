@@ -36,8 +36,8 @@ class InvoiceReturnAdmin(admin.ModelAdmin):
 
 @admin.register(Customer)
 class CustomerAdmin(admin.ModelAdmin):
-    list_display = ['code', 'name', 'area', 'phone1', 'email']
-    search_fields = ['code', 'name', 'area', 'email']
+    list_display = ['code', 'name', 'area', 'address1', 'address2', 'pincode', 'phone1', 'phone2', 'email']
+    search_fields = ['code', 'name', 'area', 'address1', 'address2', 'pincode', 'phone1', 'phone2', 'email']
 
 
 @admin.register(Salesman)

@@ -16,6 +16,7 @@ class Customer(models.Model):
     area = models.CharField(max_length=150, blank=True)
     address1 = models.TextField(blank=True)
     address2 = models.TextField(blank=True)
+    pincode = models.CharField(max_length=10, blank=True)
     phone1 = models.CharField(max_length=20, blank=True)
     phone2 = models.CharField(max_length=20, blank=True)
     email = models.EmailField(blank=True)

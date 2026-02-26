@@ -36,8 +36,8 @@ This module contains 3 main integration points:
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/api/sales/invoices/` | Optional (IsAuthenticatedOrReadOnly) | List invoices (pagination + filters: `status`, `worker`, `user`, `created_by`) |
-| GET | `/api/sales/invoices/{id}/` | Optional (IsAuthenticatedOrReadOnly) | Invoice detail with nested customer, items, salesman |
+| GET | `/api/sales/invoices/` | Optional (IsAuthenticatedOrReadOnly) | List invoices (pagination + filters: `status`, `worker`, `user`, `created_by`). Customer object now includes `pincode` field. |
+| GET | `/api/sales/invoices/{id}/` | Optional (IsAuthenticatedOrReadOnly) | Invoice detail with nested customer (with `pincode`), items, salesman |
 | POST | `/api/sales/import/invoice/` | API key or JWT (HasAPIKeyOrAuthenticated) | Import an invoice (create-only; idempotent by `invoice_no`) |
 | PATCH | `/api/sales/update/invoice/` | API key or JWT (HasAPIKeyOrAuthenticated) | Update a returned invoice (resolve `InvoiceReturn`, update items/customer, set `billing_status=RE_INVOICED`) |
 | GET | `/api/sales/sse/invoices/` | Open by default (see notes) | Server-Sent Events stream of invoice events |
@@ -116,16 +116,17 @@ GET /api/sales/invoices/?status=PENDING&created_by=admin&page=2
       "id": 31,
       "invoice_no": "INV-77052",
       "invoice_date": "2025-01-18",
-      "customer": {
-        "code": "CUST-889",
-        "name": "LifeCare Pharmacy",
-        "area": "Kozhikode",
-        "address1": "Near Railway Station",
-        "address2": "",
-        "phone1": "9876543210",
-        "phone2": "",
-        "email": "lifecare@shop.com"
-      },
+        "customer": {
+          "code": "CUST-889",
+          "name": "LifeCare Pharmacy",
+          "area": "Kozhikode",
+          "address1": "Near Railway Station",
+          "address2": "",
+          "pincode": "673001",
+          "phone1": "9876543210",
+          "phone2": "",
+          "email": "lifecare@shop.com"
+        },
       "salesman": {
         "id": 1,
         "name": "Ajay",
@@ -189,7 +190,7 @@ Optional (IsAuthenticatedOrReadOnly) - public read access by default
   "id": 31,
   "invoice_no": "INV-77052",
   "invoice_date": "2025-01-18",
-  "customer": { ... },
+  "customer": { ... includes pincode ... },
   "salesman": { ... },
   "created_by": "admin",
   "items": [...],

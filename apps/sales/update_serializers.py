@@ -131,7 +131,7 @@ class InvoiceUpdateSerializer(serializers.Serializer):
                     code=customer_data['code'],
                     defaults={
                         k: v for k, v in customer_data.items() 
-                        if k in ['name', 'area', 'address1', 'address2', 'phone1', 'phone2', 'email']
+                        if k in ['name', 'area', 'address1', 'address2', 'pincode', 'phone1', 'phone2', 'email']
                     }
                 )
                 invoice.customer = customer
