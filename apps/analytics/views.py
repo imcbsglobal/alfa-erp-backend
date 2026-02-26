@@ -235,3 +235,114 @@ class DashboardStatsSSEView(View):
         response['Access-Control-Allow-Origin'] = '*'
         response['Access-Control-Allow-Credentials'] = 'true'
         return response
+
+class StatusBreakdownView(APIView):
+    """
+    GET /api/analytics/status-breakdown/
+    Returns live picking / packing / delivery counts for the dashboard donut charts.
+
+    Definitions
+    ───────────
+    Picking
+      • Completed  — PickingSession ended today with picking_status='PICKED'
+      • Preparing  — PickingSession currently picking_status='PREPARING'
+      • Pending    — Invoice status='INVOICED' with NO picking session yet
+
+    Packing
+      • Completed  — PackingSession ended today with packing_status='PACKED'
+      • Preparing  — PackingSession currently in PENDING/CHECKING/CHECKING_DONE/PACKING
+      • Pending    — Invoice status='PICKED' with NO packing session yet
+
+    Delivery
+      • Completed  — DeliverySession ended today with delivery_status='DELIVERED'
+      • Preparing  — DeliverySession currently delivery_status='IN_TRANSIT'
+      • Pending    — Invoice status='PACKED' with NO delivery session yet
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            today = timezone.localdate()
+
+            # ── PICKING ──────────────────────────────────────────────────────
+
+            picking_completed = PickingSession.objects.filter(
+                end_time__date=today,
+                picking_status='PICKED',
+            ).count()
+
+            picking_preparing = PickingSession.objects.filter(
+                picking_status='PREPARING',
+            ).count()
+
+            # Pending = INVOICED invoices with no picking session started yet
+            picking_pending = Invoice.objects.filter(
+                status='INVOICED',
+                pickingsession__isnull=True,
+            ).count()
+
+            # ── PACKING ──────────────────────────────────────────────────────
+
+            packing_completed = PackingSession.objects.filter(
+                end_time__date=today,
+                packing_status='PACKED',
+            ).count()
+
+            # Preparing = sessions actively being worked on
+            # Note: packing model has no IN_PROGRESS — active statuses are:
+            #   PENDING (assigned, not started) | CHECKING | CHECKING_DONE | PACKING
+            PACKING_ACTIVE_STATUSES = ['PENDING', 'CHECKING', 'CHECKING_DONE', 'PACKING']
+
+            packing_preparing = PackingSession.objects.filter(
+                packing_status__in=PACKING_ACTIVE_STATUSES,
+            ).count()
+
+            # Pending = PICKED invoices with no packing session created yet
+            packing_pending = Invoice.objects.filter(
+                status='PICKED',
+                packingsession__isnull=True,
+            ).count()
+
+            # ── DELIVERY ─────────────────────────────────────────────────────
+
+            delivery_completed = DeliverySession.objects.filter(
+                end_time__date=today,
+                delivery_status='DELIVERED',
+            ).count()
+
+            delivery_preparing = DeliverySession.objects.filter(
+                delivery_status='IN_TRANSIT',
+            ).count()
+
+            # Pending = PACKED invoices with no delivery session created yet
+            delivery_pending = Invoice.objects.filter(
+                status='PACKED',
+                deliverysession__isnull=True,
+            ).count()
+
+            # ─────────────────────────────────────────────────────────────────
+
+            return Response({
+                'success': True,
+                'date': today.isoformat(),
+                'breakdown': {
+                    'picking': {
+                        'completed': picking_completed,
+                        'preparing': picking_preparing,
+                        'pending':   picking_pending,
+                    },
+                    'packing': {
+                        'completed': packing_completed,
+                        'preparing': packing_preparing,
+                        'pending':   packing_pending,
+                    },
+                    'delivery': {
+                        'completed': delivery_completed,
+                        'preparing': delivery_preparing,
+                        'pending':   delivery_pending,
+                    },
+                },
+            })
+
+        except Exception as e:
+            return Response({'success': False, 'message': str(e)}, status=500)        
