@@ -11,7 +11,7 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 
-from .models import Invoice, PickingSession, PackingSession, DeliverySession
+from .models import Invoice, PickingSession, PackingSession, DeliverySession, BulkStatusUpdateLog
 from apps.accounts.models import User
 
 logger = logging.getLogger(__name__)
@@ -190,3 +190,180 @@ class AdminCompleteWorkflowView(APIView):
                 "admin_note": admin_note
             }
         }, status=status.HTTP_200_OK)
+
+
+class AdminBulkStatusUpdateView(APIView):
+    """
+    GET  /api/sales/admin/bulk-status-update/?from_status=INVOICED&from_date=2026-02-05&to_date=2026-02-06
+         Preview invoices that match the filter (no DB changes).
+
+    POST /api/sales/admin/bulk-status-update/
+         Body: { "from_status": "INVOICED", "to_status": "PICKED",
+                 "from_date": "2026-02-05", "to_date": "2026-02-06" }
+         Bulk-moves invoice statuses and returns affected invoices with timestamp.
+
+    Valid transitions: INVOICED→PICKED, PICKED→PACKED, PACKED→DELIVERED
+    """
+
+    VALID_TRANSITIONS = {
+        "INVOICED": "PICKED",
+        "PICKED": "PACKED",
+        "PACKED": "DELIVERED",
+    }
+
+    permission_classes = [IsAdminOrSuperadmin]
+
+    def _build_queryset(self, from_status, from_date, to_date):
+        qs = Invoice.objects.filter(status=from_status)
+        if from_date:
+            qs = qs.filter(invoice_date__gte=from_date)
+        if to_date:
+            qs = qs.filter(invoice_date__lte=to_date)
+        return qs
+
+    def get(self, request):
+        from_status = request.query_params.get("from_status", "").upper()
+        from_date = request.query_params.get("from_date")
+        to_date = request.query_params.get("to_date")
+
+        if from_status not in self.VALID_TRANSITIONS:
+            return Response(
+                {"success": False,
+                 "message": f"Invalid from_status '{from_status}'. Must be one of: {', '.join(self.VALID_TRANSITIONS.keys())}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        to_status = self.VALID_TRANSITIONS[from_status]
+        qs = self._build_queryset(from_status, from_date, to_date)
+        invoices = list(
+            qs.select_related("customer").values(
+                "invoice_no", "invoice_date", "customer__name", "Total", "status"
+            )
+        )
+
+        return Response({
+            "success": True,
+            "from_status": from_status,
+            "to_status": to_status,
+            "count": len(invoices),
+            "invoices": [
+                {
+                    "invoice_no": inv["invoice_no"],
+                    "invoice_date": str(inv["invoice_date"]),
+                    "customer_name": inv["customer__name"],
+                    "total": float(inv["Total"]),
+                    "current_status": inv["status"],
+                }
+                for inv in invoices
+            ],
+        })
+
+    @transaction.atomic
+    def post(self, request):
+        from_status = (request.data.get("from_status") or "").upper()
+        to_status = (request.data.get("to_status") or "").upper()
+        from_date = request.data.get("from_date")
+        to_date = request.data.get("to_date")
+
+        if from_status not in self.VALID_TRANSITIONS:
+            return Response(
+                {"success": False,
+                 "message": f"Invalid from_status '{from_status}'. Must be one of: {', '.join(self.VALID_TRANSITIONS.keys())}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        expected_to = self.VALID_TRANSITIONS[from_status]
+        if to_status != expected_to:
+            return Response(
+                {"success": False,
+                 "message": f"Invalid transition {from_status}→{to_status}. Expected target: {expected_to}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        qs = self._build_queryset(from_status, from_date, to_date)
+        affected = list(
+            qs.select_related("customer").values(
+                "invoice_no", "invoice_date", "customer__name", "Total", "status"
+            )
+        )
+        count = qs.count()
+        update_time = timezone.now()
+
+        qs.update(status=to_status)
+
+        # Persist audit log to DB
+        snapshot = [
+            {
+                "invoice_no": inv["invoice_no"],
+                "invoice_date": str(inv["invoice_date"]),
+                "customer_name": inv["customer__name"],
+                "total": float(inv["Total"]),
+                "new_status": to_status,
+            }
+            for inv in affected
+        ]
+        BulkStatusUpdateLog.objects.create(
+            performed_by=request.user,
+            from_status=from_status,
+            to_status=to_status,
+            from_date=from_date or None,
+            to_date=to_date or None,
+            count=count,
+            invoices_snapshot=snapshot,
+        )
+
+        logger.info(
+            f"Admin {request.user.email} bulk-updated {count} invoices "
+            f"{from_status}→{to_status} (dates {from_date}–{to_date})"
+        )
+
+        return Response({
+            "success": True,
+            "message": f"Updated {count} invoice(s) from {from_status} to {to_status}.",
+            "from_status": from_status,
+            "to_status": to_status,
+            "count": count,
+            "updated_at": update_time.isoformat(),
+            "invoices": [
+                {
+                    "invoice_no": inv["invoice_no"],
+                    "invoice_date": str(inv["invoice_date"]),
+                    "customer_name": inv["customer__name"],
+                    "total": float(inv["Total"]),
+                    "previous_status": inv["status"],
+                    "new_status": to_status,
+                }
+                for inv in affected
+            ],
+        })
+
+
+class AdminBulkStatusHistoryView(APIView):
+    """
+    GET /api/sales/admin/bulk-status-history/
+    Returns the last 200 bulk-status-update audit log entries.
+    Optional query params: ?limit=50
+    """
+    permission_classes = [IsAdminOrSuperadmin]
+
+    def get(self, request):
+        limit = min(int(request.query_params.get('limit', 200)), 500)
+        logs = BulkStatusUpdateLog.objects.select_related('performed_by')[:limit]
+        data = [
+            {
+                "id":          log.id,
+                "from_status": log.from_status,
+                "to_status":   log.to_status,
+                "from_date":   str(log.from_date) if log.from_date else None,
+                "to_date":     str(log.to_date)   if log.to_date   else None,
+                "count":       log.count,
+                "executed_at": log.executed_at.isoformat(),
+                "performed_by": (
+                    log.performed_by.name or log.performed_by.email
+                    if log.performed_by else "Unknown"
+                ),
+                "invoices":    log.invoices_snapshot,
+            }
+            for log in logs
+        ]
+        return Response({"success": True, "results": data})

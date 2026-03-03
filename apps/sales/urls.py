@@ -44,7 +44,7 @@ from .views import (
     BillingUserSummaryView,
     SaveBoxDraftView,
 )
-from .admin_views import AdminCompleteWorkflowView
+from .admin_views import AdminCompleteWorkflowView, AdminBulkStatusUpdateView, AdminBulkStatusHistoryView
 
 router = DefaultRouter()
 router.register(r'couriers', CourierViewSet, basename='courier')
@@ -108,6 +108,8 @@ urlpatterns = [
     
     # Admin endpoints
     path("admin/complete-workflow/", AdminCompleteWorkflowView.as_view(), name="admin-complete-workflow"),
+    path("admin/bulk-status-update/", AdminBulkStatusUpdateView.as_view(), name="admin-bulk-status-update"),
+    path("admin/bulk-status-history/", AdminBulkStatusHistoryView.as_view(), name="admin-bulk-status-history"),
     
     # Missing Invoice Finder
     path("missing-invoices/", MissingInvoiceFinderView.as_view(), name="missing-invoices"),

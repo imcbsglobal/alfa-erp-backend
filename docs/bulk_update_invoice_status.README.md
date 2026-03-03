@@ -10,7 +10,7 @@ This management command allows you to update the status of invoices from PICKED,
 cd alfa-erp-backend
 ```
 
-2. Run the command with your desired options:
+2. Run the command with your desired options: 
 
 ### Update all invoices in selected statuses:
 ```
@@ -25,6 +25,9 @@ python manage.py bulk_update_invoice_status --from-date 2026-02-01 --to-date 202
 ### Update only specific statuses (e.g., only PICKED):
 ```
 python manage.py bulk_update_invoice_status --statuses PICKED
+
+
+python manage.py bulk_update_invoice_status --statuses PICKED --from-date 2026-02-05 --to-date 2026-02-06
 ```
 
 ### Combine options:

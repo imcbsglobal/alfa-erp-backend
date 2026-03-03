@@ -356,3 +356,28 @@ class DeliverySession(models.Model):
     def __str__(self):
         return f"Delivery - {self.invoice.invoice_no}"
 
+
+class BulkStatusUpdateLog(models.Model):
+    """
+    Audit log for every admin bulk-status-progression run.
+    One row per execution (not per invoice) — the affected invoice list is stored as JSON.
+    """
+    performed_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name='bulk_status_logs'
+    )
+    from_status = models.CharField(max_length=20)
+    to_status   = models.CharField(max_length=20)
+    from_date   = models.DateField(null=True, blank=True)
+    to_date     = models.DateField(null=True, blank=True)
+    count       = models.PositiveIntegerField(default=0)
+    # Snapshot of affected invoices: list of {invoice_no, invoice_date, customer_name, total}
+    invoices_snapshot = models.JSONField(default=list)
+    executed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-executed_at']
+        indexes = [models.Index(fields=['-executed_at'])]
+
+    def __str__(self):
+        return f"{self.from_status}→{self.to_status} ({self.count}) @ {self.executed_at:%Y-%m-%d %H:%M}"
+
