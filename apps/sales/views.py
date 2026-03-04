@@ -1509,7 +1509,14 @@ class HistoryPagination(PageNumberPagination):
     """Pagination for history endpoints"""
     page_size = 10
     page_size_query_param = 'page_size'
-    max_page_size = 100
+    max_page_size = None  # unlimited
+
+    def get_page_size(self, request):
+        # If page_size=0 or page_size=all passed, return everything
+        param = request.query_params.get(self.page_size_query_param)
+        if param in ('0', 'all'):
+            return None
+        return super().get_page_size(request)
 
 
 class PickingHistoryView(generics.ListAPIView):
