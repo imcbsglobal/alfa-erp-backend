@@ -14,16 +14,10 @@ from apps.analytics.models import DailyHoldSnapshot
 
 
 def get_or_create_today_snapshot(today):
-    """
-    Creates today's hold snapshot if it doesn't exist yet.
-    HOLD = all invoices created BEFORE today that are still unpicked (status='INVOICED').
-    Runs once per day automatically on first dashboard load.
-    """
     snapshot, created = DailyHoldSnapshot.objects.get_or_create(
         snapshot_date=today,
         defaults={'hold_count': 0}
     )
-
     if created:
         hold_count = Invoice.objects.filter(
             created_at__date__lt=today,
@@ -31,12 +25,10 @@ def get_or_create_today_snapshot(today):
         ).count()
         snapshot.hold_count = hold_count
         snapshot.save(update_fields=['hold_count'])
-
     return snapshot
 
 
 def compute_today_stats(today):
-    """Shared helper — computes all dashboard stats for today."""
     snapshot = get_or_create_today_snapshot(today)
     hold_invoices = snapshot.hold_count
 
@@ -59,15 +51,10 @@ def compute_today_stats(today):
 
     pending_invoices = max((hold_invoices + total_invoices_today) - completed_picking, 0)
 
-    # completedHoldInvoices:
-    # Hold invoices = invoices created BEFORE today (captured in snapshot).
-    # "Completed today" = those hold invoices whose PickingSession was PICKED today.
-    # This is the only accurate measure — checking invoice status alone would include
-    # invoices processed on previous days, giving a wrong inflated count.
     completed_hold_invoices = PickingSession.objects.filter(
         end_time__date=today,
         picking_status='PICKED',
-        invoice__created_at__date__lt=today,  # must be a hold invoice (pre-today)
+        invoice__created_at__date__lt=today,
     ).count()
 
     return {
@@ -77,34 +64,21 @@ def compute_today_stats(today):
         'completedPacking': completed_packing,
         'completedDelivery': completed_delivery,
         'pendingInvoices': pending_invoices,
-        'completedHoldInvoices': completed_hold_invoices,  # ← NEW
+        'completedHoldInvoices': completed_hold_invoices,
     }
 
 
 class DashboardStatsView(APIView):
-    """
-    GET /api/analytics/dashboard-stats/
-    Returns real-time dashboard statistics for today.
-    """
     def get(self, request):
         try:
             today = timezone.localdate()
             stats = compute_today_stats(today)
-            return Response({
-                'success': True,
-                'date': today.isoformat(),
-                'stats': stats,
-            })
+            return Response({'success': True, 'date': today.isoformat(), 'stats': stats})
         except Exception as e:
             return Response({'success': False, 'message': str(e)}, status=500)
 
 
 class RecalculateHoldSnapshotView(APIView):
-    """
-    POST /api/analytics/recalculate-hold/
-    SUPERADMIN only — deletes today's snapshot and rebuilds it from live data.
-    Use when the hold count is wrong (e.g. after data corrections).
-    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -113,44 +87,26 @@ class RecalculateHoldSnapshotView(APIView):
                 {'success': False, 'message': 'Superadmin access required.'},
                 status=status.HTTP_403_FORBIDDEN
             )
-
         try:
             today = timezone.localdate()
-
-            deleted_count, _ = DailyHoldSnapshot.objects.filter(
-                snapshot_date=today
-            ).delete()
-
+            deleted_count, _ = DailyHoldSnapshot.objects.filter(snapshot_date=today).delete()
             hold_count = Invoice.objects.filter(
-                created_at__date__lt=today,
-                status='INVOICED'
+                created_at__date__lt=today, status='INVOICED'
             ).count()
-
-            DailyHoldSnapshot.objects.create(
-                snapshot_date=today,
-                hold_count=hold_count
-            )
-
+            DailyHoldSnapshot.objects.create(snapshot_date=today, hold_count=hold_count)
             stats = compute_today_stats(today)
-
             return Response({
                 'success': True,
-                'message': f'Hold snapshot recalculated successfully.',
+                'message': 'Hold snapshot recalculated successfully.',
                 'date': today.isoformat(),
                 'previous_snapshot_existed': deleted_count > 0,
                 'stats': stats,
             })
-
         except Exception as e:
             return Response({'success': False, 'message': str(e)}, status=500)
 
 
 class DashboardStatsSSEView(View):
-    """
-    GET /api/analytics/dashboard-stats-stream/
-    Server-Sent Events endpoint for real-time dashboard updates (every 5s).
-    """
-
     async def get(self, request):
         token = request.GET.get('token')
         if not token:
@@ -163,7 +119,6 @@ class DashboardStatsSSEView(View):
 
             access_token = AccessToken(token)
             user_id = access_token['user_id']
-
             get_user = sync_to_async(User.objects.get)
             user = await get_user(id=user_id)
             print(f"✅ SSE Auth success for user: {user}")
@@ -177,35 +132,21 @@ class DashboardStatsSSEView(View):
             while True:
                 try:
                     today = timezone.localdate()
-
-                    snapshot = await asyncio.to_thread(
-                        lambda: get_or_create_today_snapshot(today)
-                    )
+                    snapshot = await asyncio.to_thread(lambda: get_or_create_today_snapshot(today))
                     hold_invoices = snapshot.hold_count
 
                     total_invoices_today = await asyncio.to_thread(
                         lambda: Invoice.objects.filter(created_at__date=today).count()
                     )
                     completed_picking = await asyncio.to_thread(
-                        lambda: PickingSession.objects.filter(
-                            end_time__date=today,
-                            picking_status='PICKED'
-                        ).count()
+                        lambda: PickingSession.objects.filter(end_time__date=today, picking_status='PICKED').count()
                     )
                     completed_packing = await asyncio.to_thread(
-                        lambda: PackingSession.objects.filter(
-                            end_time__date=today,
-                            packing_status='PACKED'
-                        ).count()
+                        lambda: PackingSession.objects.filter(end_time__date=today, packing_status='PACKED').count()
                     )
                     completed_delivery = await asyncio.to_thread(
-                        lambda: DeliverySession.objects.filter(
-                            end_time__date=today,
-                            delivery_status='DELIVERED'
-                        ).count()
+                        lambda: DeliverySession.objects.filter(end_time__date=today, delivery_status='DELIVERED').count()
                     )
-
-                    # Count hold invoices cleared today (picked today, created before today)
                     completed_hold_invoices = await asyncio.to_thread(
                         lambda: PickingSession.objects.filter(
                             end_time__date=today,
@@ -213,10 +154,7 @@ class DashboardStatsSSEView(View):
                             invoice__created_at__date__lt=today,
                         ).count()
                     )
-
-                    pending_invoices = max(
-                        (hold_invoices + total_invoices_today) - completed_picking, 0
-                    )
+                    pending_invoices = max((hold_invoices + total_invoices_today) - completed_picking, 0)
 
                     data = {
                         'date': today.isoformat(),
@@ -227,26 +165,18 @@ class DashboardStatsSSEView(View):
                             'completedPacking': completed_packing,
                             'completedDelivery': completed_delivery,
                             'pendingInvoices': pending_invoices,
-                            'completedHoldInvoices': completed_hold_invoices,  # ← NEW
+                            'completedHoldInvoices': completed_hold_invoices,
                         },
                         'timestamp': datetime.now().isoformat()
                     }
-
                     yield f"data: {json.dumps(data)}\n\n"
                     await asyncio.sleep(5)
 
                 except Exception as e:
-                    error_data = {
-                        'error': str(e),
-                        'timestamp': datetime.now().isoformat()
-                    }
-                    yield f"data: {json.dumps(error_data)}\n\n"
+                    yield f"data: {json.dumps({'error': str(e), 'timestamp': datetime.now().isoformat()})}\n\n"
                     await asyncio.sleep(5)
 
-        response = StreamingHttpResponse(
-            event_stream(),
-            content_type='text/event-stream'
-        )
+        response = StreamingHttpResponse(event_stream(), content_type='text/event-stream')
         response['Cache-Control'] = 'no-cache'
         response['X-Accel-Buffering'] = 'no'
         response['Access-Control-Allow-Origin'] = '*'
@@ -286,15 +216,27 @@ class StatusBreakdownView(APIView):
                 packing_status='PACKED',
             ).count()
 
-            PACKING_ACTIVE_STATUSES = ['PENDING', 'CHECKING', 'CHECKING_DONE', 'PACKING']
+            # ✅ FIX: IN_PROGRESS is the status set by StartPackingView.
+            # CHECKING is set by StartCheckingView (box-based flow).
+            # Both mean "actively being worked on" → Preparing on the chart.
+            # PENDING and CHECKING_DONE are waiting states → NOT preparing.
+            PACKING_ACTIVE_STATUSES = ['IN_PROGRESS', 'CHECKING']
             packing_preparing = PackingSession.objects.filter(
                 packing_status__in=PACKING_ACTIVE_STATUSES,
             ).count()
 
-            packing_pending = Invoice.objects.filter(
-                status='PICKED',
-                packingsession__isnull=True,
-            ).count()
+            # ✅ FIX: Pending = invoices with status PICKED but no packing session yet,
+            # PLUS packing sessions that are PENDING or CHECKING_DONE (waiting to be packed).
+            packing_pending = (
+                Invoice.objects.filter(
+                    status='PICKED',
+                    packingsession__isnull=True,
+                ).count()
+                +
+                PackingSession.objects.filter(
+                    packing_status__in=['PENDING', 'CHECKING_DONE'],
+                ).count()
+            )
 
             # ── DELIVERY ─────────────────────────────────────────────────────
             delivery_completed = DeliverySession.objects.filter(
@@ -303,7 +245,7 @@ class StatusBreakdownView(APIView):
             ).count()
 
             delivery_preparing = DeliverySession.objects.filter(
-                delivery_status='IN_TRANSIT',
+                delivery_status__in=['IN_TRANSIT', 'TO_CONSIDER'],
             ).count()
 
             delivery_pending = Invoice.objects.filter(

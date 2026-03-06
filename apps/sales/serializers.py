@@ -827,6 +827,7 @@ class PackingHistorySerializer(serializers.ModelSerializer):
         read_only=True
     )
     duration = serializers.SerializerMethodField()
+    boxes = serializers.SerializerMethodField()
     
     class Meta:
         model = PackingSession
@@ -834,7 +835,8 @@ class PackingHistorySerializer(serializers.ModelSerializer):
             'id', 'invoice_no', 'invoice_date', 'invoice_status', 'invoice_remarks',
             'customer_name', 'customer_email', 'customer_phone', 'customer_address','customer_area',
             'salesman_name', 'packer_email', 'packer_name', 'temp_name', 'packing_status',
-            'items', 'Total', 'start_time', 'end_time', 'duration', 'notes', 'created_at'
+            'items', 'Total', 'start_time', 'end_time', 'duration', 'notes', 'created_at',
+            'boxes',
         ]
     
     # def get_total_amount(self, obj):
@@ -847,6 +849,14 @@ class PackingHistorySerializer(serializers.ModelSerializer):
             delta = obj.end_time - obj.start_time
             return round(delta.total_seconds() / 60, 2)  # minutes
         return None
+
+    def get_boxes(self, obj):
+        """Return list of box_id strings for the invoice"""
+        try:
+            boxes = obj.invoice.boxes.all().order_by('created_at')
+            return [{'box_id': b.box_id, 'is_sealed': b.is_sealed} for b in boxes]
+        except Exception:
+            return []
 
 
 class DeliveryHistorySerializer(serializers.ModelSerializer):

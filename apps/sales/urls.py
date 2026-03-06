@@ -4,6 +4,7 @@ import django_eventstream
 from rest_framework.routers import DefaultRouter
 from .views import (
     ImportInvoiceView,
+    InvoiceReportExportView,
     UpdateInvoiceView,
     InvoiceListView, 
     InvoiceDetailView,
@@ -116,5 +117,6 @@ urlpatterns = [
     
     # Invoice Report
     path("invoice-report/", InvoiceReportView.as_view(), name="invoice-report"),
+    path('invoice-report/export/', InvoiceReportExportView.as_view(), name='invoice-report-export'),
 ]
 

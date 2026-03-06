@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 class InvoiceListPagination(PageNumberPagination):
     page_size = 20
     page_size_query_param = 'page_size'
-    max_page_size = 100
+    max_page_size = 100000  # ✅ allows up to 100,000 records
 
 
 # ===== List Invoices API =====
@@ -1646,7 +1646,8 @@ class PackingHistoryView(generics.ListAPIView):
             'invoice__created_user',
             'packer'
         ).prefetch_related(
-            'invoice__items'
+            'invoice__items',
+            'invoice__boxes',
         ).order_by('created_at')
         
         # Permission check: regular users only see their own sessions
@@ -3706,3 +3707,64 @@ class SaveBoxDraftView(APIView):
         except Exception as e:
             logger.exception("Failed to save draft")
             return Response({"success": False, "message": str(e)}, status=500)
+
+class InvoiceReportExportView(APIView):
+    """
+    GET /api/sales/invoice-report/export/
+    Lightweight export endpoint - only fetches fields needed for Excel
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from django.db.models import F
+
+        queryset = Invoice.objects.select_related(
+            'customer', 'salesman'
+        ).order_by('created_at')
+
+        # Apply same filters as InvoiceReportView
+        search = request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(invoice_no__icontains=search) |
+                Q(customer__name__icontains=search)
+            )
+
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+
+        start_date = request.query_params.get('start_date')
+        if start_date:
+            queryset = queryset.filter(created_at__date__gte=start_date)
+
+        end_date = request.query_params.get('end_date')
+        if end_date:
+            queryset = queryset.filter(created_at__date__lte=end_date)
+
+        # Only fetch the exact columns needed — no items, no sessions
+        data = queryset.values(
+            'invoice_no',
+            'created_at',
+            'Total',
+            'status',
+            salesman_name=F('salesman__name'),
+            customer_name=F('customer__name'),
+            customer_area=F('customer__area'),
+            temp_name_val=F('temp_name'),
+        )
+
+        results = [
+            {
+                'invoice_no':    row['invoice_no'] or '',
+                'created_by':    row['salesman_name'] or 'N/A',
+                'created_at':    row['created_at'].isoformat() if row['created_at'] else '',
+                'customer_name': row['customer_name'] or row['temp_name_val'] or 'N/A',
+                'area':          row['customer_area'] or '',
+                'amount':        float(row['Total']) if row['Total'] else 0,
+                'status':        row['status'] or '',
+            }
+            for row in data
+        ]
+
+        return Response({'success': True, 'count': len(results), 'data': results})            
