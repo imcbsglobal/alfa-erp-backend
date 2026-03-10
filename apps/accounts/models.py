@@ -246,3 +246,25 @@ class Courier(models.Model):
     
     def __str__(self):
         return f"{self.courier_code} - {self.courier_name}"
+
+# Tray Master Model
+class Tray(models.Model):
+    STATUS_CHOICES = [
+        ('ACTIVE', 'Active'),
+        ('INACTIVE', 'Inactive'),
+    ]
+    tray_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tray_code = models.CharField(max_length=50, unique=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='ACTIVE')  # ← add back
+    remarks = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'trays'
+        ordering = ['-created_at']
+        verbose_name = 'Tray'
+        verbose_name_plural = 'Trays'
+
+    def __str__(self):
+        return self.tray_code 

@@ -4,7 +4,7 @@ Admin configuration for accounts app
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth import get_user_model
-from .models import JobTitle, Department,Courier
+from .models import JobTitle, Department, Courier, Tray
 
 User = get_user_model()
 
@@ -90,4 +90,23 @@ class CourierAdmin(admin.ModelAdmin):
         }),
     )
     
+    ordering = ['-created_at']
+
+# Tray admin registration
+@admin.register(Tray)
+class TrayAdmin(admin.ModelAdmin):
+    """Admin for Tray model"""
+    search_fields = ['tray_code', 'tray_name', 'description']
+    readonly_fields = ['tray_id', 'created_at', 'updated_at']
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('tray_id', 'tray_code')
+        }),
+        ('Description', {
+            'fields': ('description',)
+        }),
+        ('Additional Information', {
+            'fields': ('remarks', 'created_at', 'updated_at')
+        }),
+    )
     ordering = ['-created_at']

@@ -99,6 +99,14 @@ class DepartmentSerializer(serializers.ModelSerializer):
 #     class Meta:
 #         from apps.accounts.models import Department
 #         model = Department
+# Tray Serializer
+from apps.accounts.models import Tray
+
+class TraySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tray
+        fields = ['tray_id', 'tray_code', 'status', 'remarks', 'created_at', 'updated_at']
+        read_only_fields = ['tray_id', 'created_at', 'updated_at']
 #         fields = ['id', 'name', 'description', 'is_active', 'job_titles']
     
 #     def get_job_titles(self, obj):

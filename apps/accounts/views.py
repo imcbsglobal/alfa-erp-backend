@@ -25,6 +25,8 @@ from .serializers import (
     DepartmentSerializer
 )
 from .models import JobTitle, Department
+from .models import Tray
+from .serializers import TraySerializer
 
 User = get_user_model()
 
@@ -178,3 +180,22 @@ class DepartmentViewSet(BaseModelViewSet):
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
             return [IsAdminOrSuperAdmin()]
         return [IsAuthenticated()]
+    
+# Tray CRUD ViewSet
+class TrayViewSet(BaseModelViewSet):
+    """ViewSet for Tray management"""
+    queryset = Tray.objects.all()
+    serializer_class = TraySerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            return [IsAdminOrSuperAdmin()]
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        status = self.request.query_params.get('status') if hasattr(self, 'request') else None
+        if status:
+            return qs.filter(status=status)
+        return qs

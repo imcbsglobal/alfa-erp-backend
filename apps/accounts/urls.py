@@ -7,6 +7,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from .views import (
     CustomTokenObtainPairView,
+    TrayViewSet,
     UserViewSet,
     JobTitleViewSet,
     DepartmentViewSet
@@ -17,6 +18,7 @@ router = DefaultRouter()
 router.register(r'users', UserViewSet, basename='user')
 router.register(r'job-titles', JobTitleViewSet, basename='job-title')
 router.register(r'departments', DepartmentViewSet, basename='department')
+router.register(r'trays', TrayViewSet, basename='tray')
 
 app_name = 'accounts'
 
