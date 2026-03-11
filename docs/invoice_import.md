@@ -52,6 +52,8 @@ If an invoice with the provided `invoice_no` already exists:
     "area": "Gulberg",
     "address1": "Plot 45, Main Boulevard",
     "address2": "Near City Hospital",
+    "address3": "Block C, 2nd Floor, Room 12",
+    "pincode": "673001",
     "phone1": "+92-300-1234567",
     "phone2": "+92-42-35123456",
     "email": "orders@mediplus.pk"
@@ -126,7 +128,8 @@ If an invoice with the provided `invoice_no` already exists:
 - `code` (required): Unique customer code
 - `name` (required): Customer name
 - `area` (optional): Customer area/location
-- `address1`, `address2` (optional): Address lines
+- `address1`, `address2`, `address3` (optional): Address lines
+- `pincode` (optional): Postal code
 - `phone1`, `phone2` (optional): Contact numbers
 - `email` (optional): Email address
 
@@ -255,7 +258,6 @@ Consider implementing:
 ## Request Format
 
 ```json
-
 {
   "invoice_no": "INV-TEST-2026-0014",
   "invoice_date": "2026-01-29",
@@ -271,6 +273,8 @@ Consider implementing:
     "area": "",
     "address1": "",
     "address2": "",
+    "address3": "Block C, 2nd Floor, Room 12",
+    "pincode": "673001",
     "phone1": "+92-300-9876543",
     "phone2": "",
     "email": "contact@healthcare.pk"

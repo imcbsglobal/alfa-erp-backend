@@ -3767,4 +3767,406 @@ class InvoiceReportExportView(APIView):
             for row in data
         ]
 
-        return Response({'success': True, 'count': len(results), 'data': results})            
+        return Response({'success': True, 'count': len(results), 'data': results})
+
+
+# ===== TRAY-BASED PACKING WORKFLOW VIEWS =====
+
+from .models import PackingTray, PackingTrayItem
+
+
+class SearchTrayView(APIView):
+    """
+    GET /api/sales/packing/search-trays/?q=TRAY001
+    Search tray master by tray_code for scan or type input.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        q = request.query_params.get('q', '').strip()
+        if not q:
+            return Response({"success": False, "message": "q parameter is required"}, status=400)
+
+        from apps.accounts.models import Tray
+        trays = Tray.objects.filter(tray_code__icontains=q, status='ACTIVE').order_by('tray_code')[:10]
+        data = [{'tray_id': str(t.tray_id), 'tray_code': t.tray_code} for t in trays]
+        return Response({"success": True, "data": data})
+
+
+class GetTrayBillDetailsView(APIView):
+    """
+    GET /api/sales/packing/tray-bill/<invoice_no>/
+    Returns invoice details with existing packing tray assignments (draft).
+    Uses 'boxes' key in response for frontend compatibility.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, invoice_no):
+        try:
+            invoice = Invoice.objects.select_related('customer', 'salesman').prefetch_related(
+                'items', 'packing_trays__items__invoice_item', 'packing_trays__tray'
+            ).get(invoice_no=invoice_no)
+        except Invoice.DoesNotExist:
+            return Response({"success": False, "message": "Invoice not found"}, status=404)
+
+        packing_session = PackingSession.objects.filter(invoice=invoice).first()
+        invoice_data = InvoiceListSerializer(invoice).data
+
+        if packing_session and packing_session.checking_by:
+            invoice_data['checking_by'] = packing_session.checking_by.email
+            invoice_data['checking_by_name'] = packing_session.checking_by.name
+
+        trays = invoice.packing_trays.prefetch_related('items__invoice_item').select_related('tray').all()
+        trays_serialized = []
+        for t in trays:
+            trays_serialized.append({
+                'id': t.id,
+                'box_id': t.tray.tray_code,   # 'box_id' key for frontend compat
+                'tray_code': t.tray.tray_code,
+                'tray_id': str(t.tray.tray_id),
+                'is_sealed': t.is_sealed,
+                'sealed_at': t.sealed_at,
+                'items': [{
+                    'id': ti.id,
+                    'invoice_item_id': ti.invoice_item.id,
+                    'item_name': ti.invoice_item.name,
+                    'item_code': ti.invoice_item.item_code,
+                    'quantity': str(ti.quantity),
+                } for ti in t.items.all()]
+            })
+        invoice_data['boxes'] = trays_serialized  # 'boxes' key for frontend compat
+
+        return Response({"success": True, "message": "Bill details retrieved", "data": invoice_data}, status=200)
+
+
+class SaveTrayDraftView(APIView):
+    """
+    POST /api/sales/packing/save-tray-draft/
+    Save tray assignment draft (unsealed trays).
+    Accepts 'boxes' key with box_id = tray_code for frontend compatibility.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        invoice_no = request.data.get('invoice_no')
+        trays_data = request.data.get('boxes', [])
+
+        if not invoice_no:
+            return Response({"success": False, "message": "invoice_no is required"}, status=400)
+
+        try:
+            invoice = Invoice.objects.get(invoice_no=invoice_no)
+        except Invoice.DoesNotExist:
+            return Response({"success": False, "message": "Invoice not found"}, status=404)
+
+        packing_session, _ = PackingSession.objects.get_or_create(
+            invoice=invoice,
+            defaults={'packing_status': 'PENDING'}
+        )
+
+        valid_item_ids = set(invoice.items.values_list('id', flat=True))
+        from apps.accounts.models import Tray
+
+        try:
+            with transaction.atomic():
+                incoming_tray_codes = [t['box_id'] for t in trays_data if t.get('items')]
+
+                # Delete unsealed draft trays not in incoming list
+                invoice.packing_trays.filter(is_sealed=False).exclude(
+                    tray__tray_code__in=incoming_tray_codes
+                ).delete()
+
+                for tray_data in trays_data:
+                    items = tray_data.get('items', [])
+                    if not items:
+                        continue
+
+                    valid_items = [i for i in items if i.get('item_id') in valid_item_ids]
+                    if not valid_items:
+                        continue
+
+                    tray_code = tray_data['box_id']
+                    try:
+                        tray_obj = Tray.objects.get(tray_code=tray_code)
+                    except Tray.DoesNotExist:
+                        continue
+
+                    packing_tray, _ = PackingTray.objects.update_or_create(
+                        invoice=invoice,
+                        tray=tray_obj,
+                        defaults={
+                            'packing_session': packing_session,
+                            'created_by': request.user,
+                            'is_sealed': tray_data.get('is_sealed', False),
+                            'sealed_at': timezone.now() if tray_data.get('is_sealed') else None,
+                            'notes': 'draft',
+                        }
+                    )
+
+                    if not packing_tray.is_sealed:
+                        packing_tray.items.all().delete()
+                        for item in valid_items:
+                            PackingTrayItem.objects.create(
+                                tray=packing_tray,
+                                invoice_item_id=item['item_id'],
+                                quantity=item['quantity']
+                            )
+
+            return Response({"success": True, "message": "Tray draft saved"})
+
+        except Exception as e:
+            logger.exception("Failed to save tray draft")
+            return Response({"success": False, "message": str(e)}, status=500)
+
+
+class CompletePackingWithTraysView(APIView):
+    """
+    POST /api/sales/packing/complete-tray-packing/
+    Seal all trays, mark packing session PACKED, move invoice to BOXING.
+    Accepts 'boxes' key with box_id = tray_code for frontend compatibility.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        invoice_no = request.data.get('invoice_no')
+        trays_data = request.data.get('boxes', [])
+        self_boxing = bool(request.data.get('self_boxing', False))
+
+        if not invoice_no:
+            return Response({"success": False, "message": "invoice_no is required"}, status=400)
+
+        try:
+            invoice = Invoice.objects.prefetch_related('items').get(invoice_no=invoice_no)
+        except Invoice.DoesNotExist:
+            return Response({"success": False, "message": "Invoice not found"}, status=404)
+
+        try:
+            packing_session = PackingSession.objects.get(invoice=invoice)
+        except PackingSession.DoesNotExist:
+            return Response({"success": False, "message": "Packing session not found"}, status=404)
+
+        from apps.accounts.models import Tray
+
+        try:
+            with transaction.atomic():
+                invoice_items = {item.id: item for item in invoice.items.all()}
+
+                for tray_data in trays_data:
+                    tray_code = tray_data['box_id']
+                    tray_items = tray_data.get('items', [])
+
+                    try:
+                        tray_obj = Tray.objects.get(tray_code=tray_code)
+                    except Tray.DoesNotExist:
+                        return Response({
+                            "success": False,
+                            "message": f"Tray '{tray_code}' not found in tray master"
+                        }, status=400)
+
+                    packing_tray, _ = PackingTray.objects.update_or_create(
+                        invoice=invoice,
+                        tray=tray_obj,
+                        defaults={
+                            'packing_session': packing_session,
+                            'created_by': request.user,
+                            'is_sealed': True,
+                            'sealed_at': timezone.now(),
+                        }
+                    )
+
+                    packing_tray.items.all().delete()
+                    for item_data in tray_items:
+                        invoice_item = invoice_items.get(item_data['item_id'])
+                        if invoice_item:
+                            PackingTrayItem.objects.create(
+                                tray=packing_tray,
+                                invoice_item=invoice_item,
+                                quantity=item_data['quantity']
+                            )
+
+                packing_session.packing_status = 'PACKED'
+                packing_session.end_time = timezone.now()
+                packing_session.held_for_consolidation = False
+                if not packing_session.packer:
+                    packing_session.packer = packing_session.checking_by or request.user
+                if not packing_session.start_time:
+                    packing_session.start_time = packing_session.checking_start_time or timezone.now()
+                packing_session.save()
+
+                invoice.status = 'BOXING'
+                invoice.self_boxing = self_boxing
+                invoice.save(update_fields=['status', 'self_boxing'])
+
+                try:
+                    invoice_refreshed = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(id=invoice.id)
+                    invoice_data = InvoiceListSerializer(invoice_refreshed).data
+                    invoice_data['type'] = 'invoice_updated'
+                    django_eventstream.send_event(INVOICE_CHANNEL, 'message', invoice_data)
+                except Exception:
+                    logger.exception("Failed to emit tray packing complete event")
+
+                return Response({
+                    "success": True,
+                    "message": f"Tray packing completed for {invoice_no}. Moved to Boxing.",
+                    "data": {
+                        "invoice_no": invoice_no,
+                        "trays_count": len(trays_data),
+                        "status": "BOXING"
+                    }
+                }, status=200)
+
+        except Exception as e:
+            logger.exception("Error completing tray packing")
+            return Response({"success": False, "message": str(e)}, status=500)
+
+
+class GetBoxingInvoicesView(generics.ListAPIView):
+    """
+    GET /api/sales/packing/boxing-invoices/
+    List invoices in BOXING status (tray packing done, waiting for address label printing).
+    """
+    serializer_class = InvoiceListSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = InvoiceListPagination
+
+    def get_queryset(self):
+        qs = Invoice.objects.filter(status='BOXING', self_boxing=False).select_related(
+            'customer', 'salesman', 'created_user',
+            'packingsession', 'packingsession__packer'
+        ).prefetch_related(
+            'items',
+            'packing_trays__tray',
+            'packing_trays__items__invoice_item'
+        ).order_by('created_at')
+
+        search = self.request.query_params.get('search', '').strip()
+        if search:
+            qs = qs.filter(
+                Q(invoice_no__icontains=search) |
+                Q(customer__name__icontains=search)
+            )
+        return qs
+
+
+class GetBoxingDataView(APIView):
+    """
+    GET /api/sales/packing/boxing-data/<invoice_no>/
+    Get tray and customer data for address label printing in boxing stage.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, invoice_no):
+        try:
+            invoice = Invoice.objects.select_related('customer').prefetch_related(
+                'packing_trays__tray', 'packing_trays__items__invoice_item'
+            ).get(invoice_no=invoice_no)
+        except Invoice.DoesNotExist:
+            return Response({"success": False, "message": "Invoice not found"}, status=404)
+
+        if invoice.status not in ('BOXING', 'PACKED'):
+            return Response({
+                "success": False,
+                "message": f"Invoice is not in BOXING or PACKED status. Current: {invoice.status}"
+            }, status=400)
+
+        trays = invoice.packing_trays.select_related('tray').prefetch_related('items__invoice_item').all()
+        trays_data = [{
+            'id': t.id,
+            'tray_code': t.tray.tray_code,
+            'tray_id': str(t.tray.tray_id),
+            'is_sealed': t.is_sealed,
+            'items': [{
+                'item_name': ti.invoice_item.name,
+                'item_code': ti.invoice_item.item_code,
+                'quantity': str(ti.quantity)
+            } for ti in t.items.all()]
+        } for t in trays]
+
+        customer = invoice.customer
+        return Response({
+            "success": True,
+            "data": {
+                "invoice_no": invoice.invoice_no,
+                "status": invoice.status,
+                "customer": {
+                    "name": customer.name if customer else invoice.temp_name,
+                    "address1": customer.address1 if customer else '',
+                    "address2": customer.address2 if customer else '',
+                    "address3": customer.address3 if customer else '',
+                    "area": customer.area if customer else '',
+                    "pincode": customer.pincode if customer else '',
+                    "phone1": customer.phone1 if customer else '',
+                    "phone2": customer.phone2 if customer else '',
+                },
+                "trays": trays_data,
+                "trays_count": len(trays_data),
+            }
+        }, status=200)
+
+
+class CompleteBoxingView(APIView):
+    """
+    POST /api/sales/packing/complete-boxing/
+    Complete boxing for an invoice — moves it from BOXING to PACKED.
+    Body: { "invoice_no": "INV-001", "label_count": 2 }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        invoice_no = request.data.get('invoice_no')
+        label_count = request.data.get('label_count', 1)
+
+        if not invoice_no:
+            return Response({"success": False, "message": "invoice_no is required"}, status=400)
+
+        try:
+            invoice = Invoice.objects.select_related('customer').prefetch_related(
+                'packing_trays__tray', 'packing_trays__items__invoice_item'
+            ).get(invoice_no=invoice_no)
+        except Invoice.DoesNotExist:
+            return Response({"success": False, "message": "Invoice not found"}, status=404)
+
+        if invoice.status != 'BOXING':
+            return Response({
+                "success": False,
+                "message": f"Invoice is not in BOXING status. Current: {invoice.status}"
+            }, status=400)
+
+        invoice.status = 'PACKED'
+        invoice.save(update_fields=['status'])
+
+        try:
+            invoice_refreshed = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(id=invoice.id)
+            emit_data = InvoiceListSerializer(invoice_refreshed).data
+            emit_data['type'] = 'invoice_updated'
+            django_eventstream.send_event(INVOICE_CHANNEL, 'message', emit_data)
+        except Exception:
+            logger.exception("Failed to emit boxing complete event")
+
+        customer = invoice.customer
+        trays = invoice.packing_trays.select_related('tray').prefetch_related('items__invoice_item').all()
+        trays_data = [{
+            'tray_code': t.tray.tray_code,
+            'items': [{'item_name': ti.invoice_item.name, 'quantity': str(ti.quantity)} for ti in t.items.all()]
+        } for t in trays]
+
+        return Response({
+            "success": True,
+            "message": f"Boxing completed for {invoice_no}. Moved to PACKED.",
+            "data": {
+                "invoice_no": invoice_no,
+                "status": "PACKED",
+                "label_count": label_count,
+                "trays": trays_data,
+                "customer": {
+                    "name": customer.name if customer else invoice.temp_name,
+                    "address1": customer.address1 if customer else '',
+                    "address2": customer.address2 if customer else '',
+                    "address3": customer.address3 if customer else '',
+                    "area": customer.area if customer else '',
+                    "pincode": customer.pincode if customer else '',
+                    "phone1": customer.phone1 if customer else '',
+                    "phone2": customer.phone2 if customer else '',
+                }
+            }
+        }, status=200)

@@ -44,6 +44,14 @@ from .views import (
     CompleteConsolidatedPackingView,
     BillingUserSummaryView,
     SaveBoxDraftView,
+    # Tray-based packing workflow
+    SearchTrayView,
+    GetTrayBillDetailsView,
+    SaveTrayDraftView,
+    CompletePackingWithTraysView,
+    GetBoxingInvoicesView,
+    GetBoxingDataView,
+    CompleteBoxingView,
 )
 from .admin_views import AdminCompleteWorkflowView, AdminBulkStatusUpdateView, AdminBulkStatusHistoryView
 
@@ -89,6 +97,15 @@ urlpatterns = [
     path("packing/all-checking-done-bills/", GetAllCheckingDoneBillsView.as_view(), name="packing-all-checking-done"),
     path("packing/held-bills-by-customer/", GetHeldBillsByCustomerView.as_view(), name="packing-held-bills-by-customer"),
     path("packing/complete-consolidated-packing/", CompleteConsolidatedPackingView.as_view(), name="packing-complete-consolidated"),
+    
+    # Tray-based packing workflow
+    path("packing/search-trays/", SearchTrayView.as_view(), name="packing-search-trays"),
+    path("packing/tray-bill/<str:invoice_no>/", GetTrayBillDetailsView.as_view(), name="packing-tray-bill-details"),
+    path("packing/save-tray-draft/", SaveTrayDraftView.as_view(), name="packing-save-tray-draft"),
+    path("packing/complete-tray-packing/", CompletePackingWithTraysView.as_view(), name="packing-complete-with-trays"),
+    path("packing/boxing-invoices/", GetBoxingInvoicesView.as_view(), name="packing-boxing-invoices"),
+    path("packing/boxing-data/<str:invoice_no>/", GetBoxingDataView.as_view(), name="packing-boxing-data"),
+    path("packing/complete-boxing/", CompleteBoxingView.as_view(), name="packing-complete-boxing"),
     
     # Delivery workflow
     path("delivery/start/", StartDeliveryView.as_view(), name="delivery-start"),

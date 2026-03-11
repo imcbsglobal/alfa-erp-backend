@@ -47,7 +47,7 @@ class CustomerReadSerializer(serializers.ModelSerializer):
     """Read-only serializer for customer in invoice responses"""
     class Meta:
         model = Customer
-        fields = ['code', 'name', 'area', 'address1', 'address2', 'pincode', 'phone1', 'phone2', 'email']
+        fields = ['code', 'name', 'area', 'address1', 'address2', 'address3', 'pincode', 'phone1', 'phone2', 'email']
 
 
 class SalesmanReadSerializer(serializers.ModelSerializer):
@@ -255,6 +255,7 @@ class CustomerSerializer(serializers.Serializer):
     area = serializers.CharField(max_length=150, required=False, allow_blank=True, default='')
     address1 = serializers.CharField(required=False, allow_blank=True, default='')
     address2 = serializers.CharField(required=False, allow_blank=True, default='')
+    address3 = serializers.CharField(required=False, allow_blank=True, default='')
     pincode = serializers.CharField(max_length=10, required=False, allow_blank=True, default='')
     phone1 = serializers.CharField(max_length=20, required=False, allow_blank=True, default='')
     phone2 = serializers.CharField(max_length=20, required=False, allow_blank=True, default='')

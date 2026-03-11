@@ -16,6 +16,7 @@ class Customer(models.Model):
     area = models.CharField(max_length=150, blank=True)
     address1 = models.TextField(blank=True)
     address2 = models.TextField(blank=True)
+    address3 = models.TextField(blank=True)
     pincode = models.CharField(max_length=10, blank=True)
     phone1 = models.CharField(max_length=20, blank=True)
     phone2 = models.CharField(max_length=20, blank=True)
@@ -44,8 +45,9 @@ class Invoice(models.Model):
             ("INVOICED", "Invoiced"),          # invoice/order created; waiting to be processed
             ("PICKING", "Picking"),            # picking in progress
             ("PICKED", "Picked"),              # all items picked; ready for packing
-            ("PACKING", "Packing"),            # packing in progress (bag/box preparation)
-            ("PACKED", "Packed"),              # packing completed; ready for dispatch
+            ("PACKING", "Packing"),            # packing in progress (tray/bag preparation)
+            ("BOXING", "Boxing"),              # tray packing done; waiting for address label printing
+            ("PACKED", "Packed"),              # boxing completed; ready for dispatch
             ("DISPATCHED", "Dispatched"),      # left the store / handed to delivery person
             ("DELIVERED", "Delivered"),        # delivered to customer / order completed
             ("REVIEW", "Under Review"),        # needs billing/admin review for corrections
@@ -82,7 +84,10 @@ class Invoice(models.Model):
         help_text="Marks invoice as a hold invoice at the time of creation"
     )
 
-    created_at = models.DateTimeField(auto_now_add=True)
+    self_boxing = models.BooleanField(
+        default=False,
+        help_text="True when the packer chose to print address labels themselves (bypasses Boxing Queue)"
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -251,6 +256,47 @@ class BoxItem(models.Model):
     
     def __str__(self):
         return f"{self.invoice_item.name} x{self.quantity} in {self.box.box_id}"
+
+
+class PackingTray(models.Model):
+    """
+    Represents a physical tray (from Tray master) used during packing.
+    Replaces auto-generated boxes with pre-defined tray codes.
+    """
+    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='packing_trays')
+    packing_session = models.ForeignKey(PackingSession, on_delete=models.CASCADE, related_name='packing_trays')
+    tray = models.ForeignKey('accounts.Tray', on_delete=models.PROTECT, related_name='packing_assignments')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_packing_trays')
+    created_at = models.DateTimeField(auto_now_add=True)
+    sealed_at = models.DateTimeField(null=True, blank=True)
+    is_sealed = models.BooleanField(default=False)
+    notes = models.TextField(blank=True, null=True)
+
+    class Meta:
+        ordering = ['created_at']
+        indexes = [
+            models.Index(fields=['invoice']),
+        ]
+        unique_together = [['invoice', 'tray']]
+
+    def __str__(self):
+        return f"Tray {self.tray.tray_code} - Invoice {self.invoice.invoice_no}"
+
+
+class PackingTrayItem(models.Model):
+    """
+    Represents an item assigned to a specific packing tray.
+    """
+    tray = models.ForeignKey(PackingTray, on_delete=models.CASCADE, related_name='items')
+    invoice_item = models.ForeignKey('InvoiceItem', on_delete=models.CASCADE, related_name='tray_assignments')
+    quantity = models.DecimalField(max_digits=10, decimal_places=2)
+
+    class Meta:
+        ordering = ['id']
+
+    def __str__(self):
+        return f"{self.invoice_item.name} x{self.quantity} in {self.tray.tray.tray_code}"
+
 
 # Add these fields to your DeliverySession model in models.py
 
