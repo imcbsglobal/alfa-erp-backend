@@ -207,6 +207,15 @@ class PackingSession(models.Model):
     held_for_consolidation = models.BooleanField(default=False, help_text='Whether this bill is held waiting for more bills from same customer')
     consolidation_customer_name = models.CharField(max_length=255, blank=True, null=True, help_text='Customer name used for grouping held bills')
     held_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='held_bills', help_text='User who first held the bill for consolidation')
+    label_count = models.PositiveIntegerField(default=1, help_text='Number of address labels printed during boxing')
+    courier = models.ForeignKey(
+        'accounts.Courier',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='packing_sessions',
+        help_text='Courier service selected during label printing'
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     
     def __str__(self):

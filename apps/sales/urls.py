@@ -13,7 +13,6 @@ from .views import (
     StartPickingView,
     CompletePickingView,
     StartPackingView,
-    CompletePackingView,
     StartDeliveryView,
     CompleteDeliveryView,
     PickingHistoryView,
@@ -22,6 +21,7 @@ from .views import (
     BillingHistoryView,
     BillingInvoicesView,
     ReturnToBillingView,
+    BillingUserSummaryView,
     CourierViewSet,
     DeliveryConsiderListView,
     AssignDeliveryStaffView,
@@ -34,17 +34,6 @@ from .views import (
     GetMyCheckingBillsView,
     GetBillDetailsView,
     StartCheckingView,
-    CompleteCheckingView,
-    CompletePackingWithBoxesView,
-    GetCompletedPackingDataView,
-    BoxDetailsView,
-    GetBillsByAddressView,
-    GetAllCheckingDoneBillsView,
-    GetHeldBillsByCustomerView,
-    CompleteConsolidatedPackingView,
-    BillingUserSummaryView,
-    SaveBoxDraftView,
-    # Tray-based packing workflow
     SearchTrayView,
     GetTrayBillDetailsView,
     SaveTrayDraftView,
@@ -52,6 +41,7 @@ from .views import (
     GetBoxingInvoicesView,
     GetBoxingDataView,
     CompleteBoxingView,
+    InvoicePublicDetailView,
 )
 from .admin_views import AdminCompleteWorkflowView, AdminBulkStatusUpdateView, AdminBulkStatusHistoryView
 
@@ -77,28 +67,17 @@ urlpatterns = [
     path("picking/history/", PickingHistoryView.as_view(), name="picking-history"),
     path("picking/bulk-start/", BulkPickingStartView.as_view(), name="bulk-picking-start"),
     path("picking/bulk-complete/", BulkPickingCompleteView.as_view(), name="bulk-picking-complete"),
-    path("packing/save-draft/", SaveBoxDraftView.as_view(), name="packing-save-draft"),
     
     # Packing workflow
     path("packing/active/", MyActivePackingView.as_view(), name="packing-active"),
     path("packing/start/", StartPackingView.as_view(), name="packing-start"),
-    path("packing/complete/", CompletePackingView.as_view(), name="packing-complete"),
     path("packing/history/", PackingHistoryView.as_view(), name="packing-history"),
     
-    # Box-based packing workflow
+    # Box-based packing (checking)
     path("packing/my-checking/", GetMyCheckingBillsView.as_view(), name="packing-my-checking"),
     path("packing/bill/<str:invoice_no>/", GetBillDetailsView.as_view(), name="packing-bill-details"),
     path("packing/start-checking/", StartCheckingView.as_view(), name="packing-start-checking"),
-    path("packing/complete-checking/", CompleteCheckingView.as_view(), name="packing-complete-checking"),
-    path("packing/complete-packing/", CompletePackingWithBoxesView.as_view(), name="packing-complete-with-boxes"),
-    path("packing/completed/<str:invoice_no>/", GetCompletedPackingDataView.as_view(), name="packing-completed-data"),
-    path("packing/box-details/<str:box_id>/", BoxDetailsView.as_view(), name="packing-box-details"),
-    path("packing/bills-by-address/", GetBillsByAddressView.as_view(), name="packing-bills-by-address"),
-    path("packing/all-checking-done-bills/", GetAllCheckingDoneBillsView.as_view(), name="packing-all-checking-done"),
-    path("packing/held-bills-by-customer/", GetHeldBillsByCustomerView.as_view(), name="packing-held-bills-by-customer"),
-    path("packing/complete-consolidated-packing/", CompleteConsolidatedPackingView.as_view(), name="packing-complete-consolidated"),
-    
-    # Tray-based packing workflow
+    path("packing/invoice-public/<str:invoice_no>/", InvoicePublicDetailView.as_view(), name="packing-invoice-public"),
     path("packing/search-trays/", SearchTrayView.as_view(), name="packing-search-trays"),
     path("packing/tray-bill/<str:invoice_no>/", GetTrayBillDetailsView.as_view(), name="packing-tray-bill-details"),
     path("packing/save-tray-draft/", SaveTrayDraftView.as_view(), name="packing-save-tray-draft"),

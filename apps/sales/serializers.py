@@ -829,7 +829,8 @@ class PackingHistorySerializer(serializers.ModelSerializer):
     )
     duration = serializers.SerializerMethodField()
     boxes = serializers.SerializerMethodField()
-    
+    courier_name = serializers.SerializerMethodField()
+
     class Meta:
         model = PackingSession
         fields = [
@@ -837,7 +838,7 @@ class PackingHistorySerializer(serializers.ModelSerializer):
             'customer_name', 'customer_email', 'customer_phone', 'customer_address','customer_area',
             'salesman_name', 'packer_email', 'packer_name', 'temp_name', 'packing_status',
             'items', 'Total', 'start_time', 'end_time', 'duration', 'notes', 'created_at',
-            'boxes',
+            'boxes', 'label_count', 'courier_name',
         ]
     
     # def get_total_amount(self, obj):
@@ -858,6 +859,15 @@ class PackingHistorySerializer(serializers.ModelSerializer):
             return [{'box_id': b.box_id, 'is_sealed': b.is_sealed} for b in boxes]
         except Exception:
             return []
+
+    def get_courier_name(self, obj):
+        """Return courier name if a courier was selected during boxing"""
+        if obj.courier_id:
+            try:
+                return obj.courier.courier_name
+            except Exception:
+                pass
+        return None
 
 
 class DeliveryHistorySerializer(serializers.ModelSerializer):
