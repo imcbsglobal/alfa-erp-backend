@@ -2986,12 +2986,32 @@ class SearchTrayView(APIView):
 
     def get(self, request):
         q = request.query_params.get('q', '').strip()
+        invoice_no = request.query_params.get('invoice_no', '').strip()
         if not q:
             return Response({"success": False, "message": "q parameter is required"}, status=400)
 
         from apps.accounts.models import Tray
+        ACTIVE_STATUSES = ['PACKING', 'BOXING']
+
+        # Find trays in use by other active invoices
+        in_use_qs = PackingTray.objects.filter(
+            invoice__status__in=ACTIVE_STATUSES
+        ).select_related('invoice')
+        if invoice_no:
+            in_use_qs = in_use_qs.exclude(invoice__invoice_no=invoice_no)
+        in_use_map = {str(pt.tray_id): pt.invoice.invoice_no for pt in in_use_qs}
+
         trays = Tray.objects.filter(tray_code__icontains=q, status='ACTIVE').order_by('tray_code')[:10]
-        data = [{'tray_id': str(t.tray_id), 'tray_code': t.tray_code} for t in trays]
+        data = []
+        for t in trays:
+            tray_id_str = str(t.tray_id)
+            in_use_invoice = in_use_map.get(tray_id_str)
+            data.append({
+                'tray_id': tray_id_str,
+                'tray_code': t.tray_code,
+                'in_use': bool(in_use_invoice),
+                'in_use_invoice': in_use_invoice,
+            })
         return Response({"success": True, "data": data})
 
 
@@ -3069,6 +3089,11 @@ class SaveTrayDraftView(APIView):
         valid_item_ids = set(invoice.items.values_list('id', flat=True))
         from apps.accounts.models import Tray
 
+        class TrayConflict(Exception):
+            pass
+
+        ACTIVE_STATUSES = ['PACKING', 'BOXING']
+
         try:
             with transaction.atomic():
                 incoming_tray_codes = [t['box_id'] for t in trays_data if t.get('items')]
@@ -3093,6 +3118,16 @@ class SaveTrayDraftView(APIView):
                     except Tray.DoesNotExist:
                         continue
 
+                    # Block if this tray is currently in use by another active invoice
+                    conflict = PackingTray.objects.filter(
+                        tray=tray_obj,
+                        invoice__status__in=ACTIVE_STATUSES
+                    ).exclude(invoice=invoice).select_related('invoice').first()
+                    if conflict:
+                        raise TrayConflict(
+                            f"Tray '{tray_code}' is currently in use by invoice #{conflict.invoice.invoice_no}"
+                        )
+
                     packing_tray, _ = PackingTray.objects.update_or_create(
                         invoice=invoice,
                         tray=tray_obj,
@@ -3116,6 +3151,8 @@ class SaveTrayDraftView(APIView):
 
             return Response({"success": True, "message": "Tray draft saved"})
 
+        except TrayConflict as e:
+            return Response({"success": False, "message": str(e)}, status=400)
         except Exception as e:
             logger.exception("Failed to save tray draft")
             return Response({"success": False, "message": str(e)}, status=500)
@@ -3149,6 +3186,8 @@ class CompletePackingWithTraysView(APIView):
 
         from apps.accounts.models import Tray
 
+        ACTIVE_STATUSES = ['PACKING', 'BOXING']
+
         try:
             with transaction.atomic():
                 invoice_items = {item.id: item for item in invoice.items.all()}
@@ -3163,6 +3202,17 @@ class CompletePackingWithTraysView(APIView):
                         return Response({
                             "success": False,
                             "message": f"Tray '{tray_code}' not found in tray master"
+                        }, status=400)
+
+                    # Block if this tray is currently in use by another active invoice
+                    conflict = PackingTray.objects.filter(
+                        tray=tray_obj,
+                        invoice__status__in=ACTIVE_STATUSES
+                    ).exclude(invoice=invoice).select_related('invoice').first()
+                    if conflict:
+                        return Response({
+                            "success": False,
+                            "message": f"Tray '{tray_code}' is currently in use by invoice #{conflict.invoice.invoice_no}"
                         }, status=400)
 
                     packing_tray, _ = PackingTray.objects.update_or_create(
@@ -3186,7 +3236,7 @@ class CompletePackingWithTraysView(APIView):
                                 quantity=item_data['quantity']
                             )
 
-                packing_session.packing_status = 'PACKED'
+                packing_session.packing_status = 'PACKING'  # Awaiting boxing — not fully packed yet
                 packing_session.end_time = timezone.now()
                 packing_session.held_for_consolidation = False
                 if not packing_session.packer:
@@ -3245,8 +3295,9 @@ class GetBoxingInvoicesView(generics.ListAPIView):
         if search:
             qs = qs.filter(
                 Q(invoice_no__icontains=search) |
-                Q(customer__name__icontains=search)
-            )
+                Q(customer__name__icontains=search) |
+                Q(packing_trays__tray__tray_code__icontains=search)
+            ).distinct()
         return qs
 
 
@@ -3338,9 +3389,10 @@ class CompleteBoxingView(APIView):
         invoice.status = 'PACKED'
         invoice.save(update_fields=['status'])
 
-        # Save label_count and courier to the PackingSession
+        # Mark packing session as fully PACKED now boxing is complete
         try:
             packing_session = invoice.packingsession
+            packing_session.packing_status = 'PACKED'
             packing_session.label_count = int(label_count) if label_count else 1
             if courier_id:
                 from apps.accounts.models import Courier
@@ -3348,9 +3400,9 @@ class CompleteBoxingView(APIView):
                     packing_session.courier = Courier.objects.get(courier_id=courier_id)
                 except Courier.DoesNotExist:
                     pass
-            packing_session.save(update_fields=['label_count', 'courier'])
+            packing_session.save(update_fields=['packing_status', 'label_count', 'courier'])
         except Exception:
-            logger.exception("Failed to save label_count/courier to PackingSession")
+            logger.exception("Failed to save packing_status/label_count/courier to PackingSession")
 
         try:
             invoice_refreshed = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(id=invoice.id)

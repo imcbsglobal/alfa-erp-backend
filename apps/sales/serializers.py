@@ -84,6 +84,7 @@ class InvoiceListSerializer(serializers.ModelSerializer):
     packer_info = serializers.SerializerMethodField()
     delivery_info = serializers.SerializerMethodField() 
     current_handler = serializers.SerializerMethodField()
+    tray_codes = serializers.SerializerMethodField()
     
     class Meta:
         model = Invoice
@@ -91,8 +92,15 @@ class InvoiceListSerializer(serializers.ModelSerializer):
             'id', 'invoice_no', 'invoice_date', 'customer','status', 'priority', 'salesman', 
             'created_by', 'items', 'Total', 'temp_name', 'remarks', 'created_at',
             'billing_status', 'return_info',
-            'picker_info', 'packer_info', 'delivery_info', 'current_handler' ]
+            'picker_info', 'packer_info', 'delivery_info', 'current_handler', 'tray_codes' ]
     
+    def get_tray_codes(self, obj):
+        """Get list of tray codes for this invoice"""
+        try:
+            return [pt.tray.tray_code for pt in obj.packing_trays.all() if pt.tray]
+        except:
+            return []
+
     def get_return_info(self, obj):
         """Get return information if invoice has been returned"""
         try:

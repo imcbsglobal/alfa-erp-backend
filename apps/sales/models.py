@@ -194,8 +194,8 @@ class PackingSession(models.Model):
             ("PENDING", "Pending"),            # waiting to pack
             ("CHECKING", "Checking"),          # checking/verification in progress
             ("CHECKING_DONE", "Checking Done"), # checking completed, ready for box assignment
-            ("PACKING", "Packing"),            # box assignment in progress
-            ("PACKED", "Packed"),              # packing completed with boxes
+            ("PACKING", "Packing"),            # box assignment in progress / awaiting boxing
+            ("PACKED", "Packed"),              # packing + boxing fully completed
             ("CANCELLED", "Cancelled"),        # packing cancelled (e.g., sent for review)
             ("REVIEW", "Under Review"),        # packing sent for review/corrections
         ],
