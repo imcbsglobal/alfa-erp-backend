@@ -1624,6 +1624,10 @@ class PackingHistoryView(generics.ListAPIView):
         status_filter = self.request.query_params.get('status', '').strip().upper()
         if status_filter and status_filter in ['PENDING', 'IN_PROGRESS', 'PACKED', 'CANCELLED', 'REVIEW']:
             queryset = queryset.filter(packing_status=status_filter)
+
+        boxing_group_id = self.request.query_params.get('boxing_group_id')
+        if boxing_group_id:
+            queryset = queryset.filter(boxing_group_id=boxing_group_id)    
         
         # Date filters
         start_date = self.request.query_params.get('start_date')
@@ -3001,7 +3005,10 @@ class SearchTrayView(APIView):
             in_use_qs = in_use_qs.exclude(invoice__invoice_no=invoice_no)
         in_use_map = {str(pt.tray_id): pt.invoice.invoice_no for pt in in_use_qs}
 
-        trays = Tray.objects.filter(tray_code__icontains=q, status='ACTIVE').order_by('tray_code')[:10]
+        limit = min(int(request.GET.get('limit', 100)), 500)
+        trays = Tray.objects.filter(
+                tray_code__icontains=q, status='ACTIVE'
+            )[:limit]
         data = []
         for t in trays:
             tray_id_str = str(t.tray_id)
@@ -3361,7 +3368,7 @@ class CompleteBoxingView(APIView):
     """
     POST /api/sales/packing/complete-boxing/
     Complete boxing for an invoice — moves it from BOXING to PACKED.
-    Body: { "invoice_no": "INV-001", "label_count": 2 }
+    Body: { "invoice_no": "INV-001", "label_count": 2, "boxing_group_id": "group-uuid" }
     """
     permission_classes = [IsAuthenticated]
 
@@ -3369,6 +3376,7 @@ class CompleteBoxingView(APIView):
         invoice_no = request.data.get('invoice_no')
         label_count = request.data.get('label_count', 1)
         courier_id = request.data.get('courier_id')
+        boxing_group_id = request.data.get('boxing_group_id')
 
         if not invoice_no:
             return Response({"success": False, "message": "invoice_no is required"}, status=400)
@@ -3394,15 +3402,25 @@ class CompleteBoxingView(APIView):
             packing_session = invoice.packingsession
             packing_session.packing_status = 'PACKED'
             packing_session.label_count = int(label_count) if label_count else 1
+            
+            # Build update_fields dynamically based on what's being set
+            update_fields = ['packing_status', 'label_count']
+            
             if courier_id:
                 from apps.accounts.models import Courier
                 try:
                     packing_session.courier = Courier.objects.get(courier_id=courier_id)
+                    update_fields.append('courier')
                 except Courier.DoesNotExist:
                     pass
-            packing_session.save(update_fields=['packing_status', 'label_count', 'courier'])
+            
+            if boxing_group_id:
+                packing_session.boxing_group_id = boxing_group_id
+                update_fields.append('boxing_group_id')
+            
+            packing_session.save(update_fields=update_fields)
         except Exception:
-            logger.exception("Failed to save packing_status/label_count/courier to PackingSession")
+            logger.exception("Failed to save packing_status/label_count/courier/boxing_group_id to PackingSession")
 
         try:
             invoice_refreshed = Invoice.objects.select_related('customer', 'salesman').prefetch_related('items').get(id=invoice.id)

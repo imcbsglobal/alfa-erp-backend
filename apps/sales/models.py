@@ -216,6 +216,7 @@ class PackingSession(models.Model):
         related_name='packing_sessions',
         help_text='Courier service selected during label printing'
     )
+    boxing_group_id = models.CharField(max_length=100, blank=True, null=True, db_index=True, help_text='Group ID for bills boxed together in multi-boxing')
     created_at = models.DateTimeField(auto_now_add=True)
     
     def __str__(self):

@@ -137,6 +137,7 @@ class InvoiceListSerializer(serializers.ModelSerializer):
                 "consolidation_customer_name": packing_session.consolidation_customer_name,
                 "held_by_email": packing_session.held_by.email if packing_session.held_by else None,
                 "held_by_name": packing_session.held_by.get_full_name() or packing_session.held_by.username if packing_session.held_by else None,
+                "boxing_group_id": packing_session.boxing_group_id,
             }
         except:
             return None
@@ -531,7 +532,7 @@ class PackingSessionReadSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'invoice', 'invoice_no', 'packer', 'packer_name', 'packer_email',
             'start_time', 'end_time', 'packing_status', 'notes',
-            'duration_minutes', 'created_at'
+            'duration_minutes', 'boxing_group_id', 'created_at'
         ]
     
     def get_duration_minutes(self, obj):
@@ -846,7 +847,7 @@ class PackingHistorySerializer(serializers.ModelSerializer):
             'customer_name', 'customer_email', 'customer_phone', 'customer_address','customer_area',
             'salesman_name', 'packer_email', 'packer_name', 'temp_name', 'packing_status',
             'items', 'Total', 'start_time', 'end_time', 'duration', 'notes', 'created_at',
-            'boxes', 'label_count', 'courier_name',
+            'boxes', 'label_count', 'courier_name', 'boxing_group_id',
         ]
     
     # def get_total_amount(self, obj):
