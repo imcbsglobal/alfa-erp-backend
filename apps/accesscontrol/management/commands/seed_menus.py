@@ -164,19 +164,6 @@ class Command(BaseCommand):
             }
         )
 
-        # ── NEW: Boxing List & My Assigned Boxing ──────────────
-        boxing_list, _ = MenuItem.objects.update_or_create(
-            code="boxing_list",
-            defaults={
-                'name': "Boxing List",
-                'icon': "Box",
-                'url': "/packing/boxing",
-                'parent': packing,
-                'order': 3,
-                'is_active': True,
-            }
-        )
-
         # ─────────────────────────────────────────────────────
 
         self.stdout.write("  ✓ Packing menus created")
@@ -524,7 +511,6 @@ class Command(BaseCommand):
         self.stdout.write("   ├─ Packing List → /packing/invoices")
         self.stdout.write("   ├─ My Assigned Packing → /packing/my")
         self.stdout.write("   ├─ Boxing List → /packing/boxing")           # NEW
-        self.stdout.write("   └─ My Assigned Boxing → /packing/my-boxing") # NEW
         self.stdout.write("5. Delivery (dropdown) [SUPERADMIN, ADMIN, DELIVERY]")
         self.stdout.write("   ├─ Dispatch Orders → /delivery/dispatch")
         self.stdout.write("   ├─ Courier List → /delivery/courier-list")
