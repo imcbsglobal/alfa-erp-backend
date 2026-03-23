@@ -177,17 +177,6 @@ class Command(BaseCommand):
             }
         )
 
-        my_assigned_boxing, _ = MenuItem.objects.update_or_create(
-            code="my_assigned_boxing",
-            defaults={
-                'name': "My Assigned Boxing",
-                'icon': "PlusCircle",
-                'url': "/packing/my-boxing",
-                'parent': packing,
-                'order': 4,
-                'is_active': True,
-            }
-        )
         # ─────────────────────────────────────────────────────
 
         self.stdout.write("  ✓ Packing menus created")
@@ -589,7 +578,6 @@ class Command(BaseCommand):
             'packing_list': MenuItem.objects.get(code='packing_list'),
             'my_assigned_packing': MenuItem.objects.get(code='my_assigned_packing'),
             'boxing_list': MenuItem.objects.get(code='boxing_list'),               # NEW
-            'my_assigned_boxing': MenuItem.objects.get(code='my_assigned_boxing'), # NEW
             'delivery': MenuItem.objects.get(code='delivery'),
             'delivery_dispatch': MenuItem.objects.get(code='delivery_dispatch'),
             'delivery_courier_list': MenuItem.objects.get(code='delivery_courier_list'),
@@ -650,7 +638,7 @@ class Command(BaseCommand):
             'PACKER': [
                 menus['dashboard'],
                 menus['packing'], menus['packing_list'], menus['my_assigned_packing'],
-                menus['boxing_list'], menus['my_assigned_boxing'],  # NEW
+                menus['boxing_list'],
             ],
             'BILLING': [
                 menus['dashboard'],
