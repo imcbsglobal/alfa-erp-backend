@@ -7,6 +7,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 from django.core.cache import cache
+from django.core.files.base import ContentFile
 
 from django.http import StreamingHttpResponse
 from rest_framework.views import APIView
@@ -77,11 +78,9 @@ class InvoiceListView(generics.ListAPIView):
     pagination_class = InvoiceListPagination
     
     def get_queryset(self):
-        # ✅ PERFORMANCE FIX: Prefetch all related session data to avoid N+1 queries
-        # Use prefetch_related for OneToOne fields that might not exist
         queryset = Invoice.objects.select_related(
-            'customer', 
-            'salesman', 
+            'customer',
+            'salesman',
             'created_user'
         ).prefetch_related(
             'items',
@@ -89,13 +88,16 @@ class InvoiceListView(generics.ListAPIView):
             'pickingsession__picker',
             'packingsession',
             'packingsession__packer',
+            'packingsession__held_by',
             'deliverysession',
             'deliverysession__assigned_to',
             'deliverysession__delivered_by',
             'invoice_returns',
             'invoice_returns__returned_by',
-            'invoice_returns__resolved_by'
-        ).order_by('created_at')
+            'invoice_returns__resolved_by',
+            'packing_trays',
+            'packing_trays__tray',
+        ).order_by('-created_at')
         
         # 🔴 EXCLUDE CLEARED INVOICES (Developer Settings feature)
         cleared_invoice_ids = cache.get('cleared_invoices', [])
@@ -130,18 +132,29 @@ class InvoiceListView(generics.ListAPIView):
             from django.db.models import Q
             from django.contrib.auth import get_user_model
             User = get_user_model()
-            
-            # Find user by email
             worker = User.objects.filter(email=worker_email).first()
             if worker:
-                # Filter invoices where this user is picker, packer, or delivery person
                 queryset = queryset.filter(
                     Q(pickingsession__picker=worker) |
                     Q(packingsession__packer=worker) |
                     Q(deliverysession__assigned_to=worker) |
                     Q(deliverysession__delivered_by=worker)
                 ).distinct()
-        
+
+        # Filter by delivery_status — OUTSIDE the worker block
+        delivery_status = self.request.query_params.get('delivery_status')
+        if delivery_status:
+            queryset = queryset.filter(
+                deliverysession__delivery_status=delivery_status
+            )
+
+        # Exclude a delivery_status — OUTSIDE the worker block
+        exclude_delivery_status = self.request.query_params.get('exclude_delivery_status')
+        if exclude_delivery_status:
+            queryset = queryset.exclude(
+                deliverysession__delivery_status=exclude_delivery_status
+            )
+
         return queryset
 
 
@@ -742,163 +755,267 @@ class StartPackingView(APIView):
 class StartDeliveryView(APIView):
     """
     POST /api/sales/delivery/start/
-    Start delivery session
-    
-    For Counter Pickup (DIRECT) - Completes immediately:
-    {
-        "invoice_no": "INV-001",
-        "delivery_type": "DIRECT",
-        "counter_sub_mode": "patient" or "company",
-        "pickup_person_username": "scan_or_entered_username",
-        "pickup_person_name": "John Doe",
-        "pickup_person_phone": "1234567890",
-        "pickup_company_name": "ABC Corp",  // only for company mode
-        "pickup_company_id": "COMP123",     // only for company mode
-        "notes": "Optional notes"
-    }
-    
-    For Courier (COURIER) - Moves to consider list:
+
+    Handles both single and group (multi-invoice) dispatch.
+
+    Single invoice:
     {
         "invoice_no": "INV-001",
         "delivery_type": "COURIER",
-        "courier_id": "uuid-of-courier",
-        "notes": "Optional notes"
+        "courier_id": "uuid-of-courier"
     }
-    
-    For Internal Delivery (INTERNAL) - Moves to consider list:
+
+    Group dispatch (all invoices assigned to the same courier/staff at once):
     {
-        "invoice_no": "INV-001",
-        "delivery_type": "INTERNAL",
-        "user_email": "staff@example.com",
-        "user_name": "Staff Name (optional)",
-        "notes": "Optional notes"
+        "invoice_nos": ["INV-001", "INV-002"],
+        "delivery_type": "COURIER",
+        "courier_id": "uuid-of-courier"
     }
+
+    Both keys are supported simultaneously — if invoice_nos is present it takes priority.
     """
     permission_classes = [IsAuthenticated]
-    
+
     def post(self, request):
-        serializer = DeliverySessionCreateSerializer(data=request.data)
-        
+        # ── Resolve invoice list ──────────────────────────────────────────────
+        invoice_nos = request.data.get('invoice_nos')   # group dispatch (list)
+        invoice_no  = request.data.get('invoice_no')    # single dispatch (string)
+
+        if invoice_nos:
+            # Group dispatch — must be a non-empty list
+            if not isinstance(invoice_nos, list) or len(invoice_nos) == 0:
+                return Response({
+                    "success": False,
+                    "message": "invoice_nos must be a non-empty list"
+                }, status=status.HTTP_400_BAD_REQUEST)
+        elif invoice_no:
+            # Wrap single into list so the rest of the code is uniform
+            invoice_nos = [invoice_no]
+        else:
+            return Response({
+                "success": False,
+                "message": "Either invoice_no or invoice_nos is required"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        delivery_type = request.data.get('delivery_type')
+        if not delivery_type:
+            return Response({
+                "success": False,
+                "message": "delivery_type is required"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # ── Validate courier / staff once (shared across all invoices) ────────
+        courier     = None
+        assigned_user = None
+        message     = ""
+
+        if delivery_type == 'COURIER':
+            from apps.accounts.models import Courier as CourierModel
+            courier_id = request.data.get('courier_id')
+            if not courier_id:
+                return Response({
+                    "success": False,
+                    "message": "courier_id is required for COURIER delivery"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                courier = CourierModel.objects.get(courier_id=courier_id)
+            except CourierModel.DoesNotExist:
+                return Response({
+                    "success": False,
+                    "message": "Invalid courier ID"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            message = f"Invoice(s) assigned to {courier.courier_name}. Moved to Courier Delivery list."
+
+        elif delivery_type == 'INTERNAL':
+            from apps.accounts.models import User as UserModel
+            user_email = request.data.get('user_email')
+            if not user_email:
+                return Response({
+                    "success": False,
+                    "message": "user_email is required for INTERNAL delivery"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                assigned_user = UserModel.objects.get(email=user_email)
+            except UserModel.DoesNotExist:
+                return Response({
+                    "success": False,
+                    "message": "User not found with provided email"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            message = (
+                f"Invoice(s) assigned to "
+                f"{assigned_user.get_full_name() or assigned_user.email}. "
+                f"Moved to Company Delivery list."
+            )
+
+        elif delivery_type == 'DIRECT':
+            # DIRECT (counter pickup) — keep original single-invoice behaviour
+            # Wrap into the existing single-invoice serializer path
+            if len(invoice_nos) > 1:
+                return Response({
+                    "success": False,
+                    "message": "Counter pickup (DIRECT) does not support group dispatch"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            # Fall through to single-invoice handling below
+            return self._handle_single_direct(request, invoice_nos[0])
+
+        else:
+            return Response({
+                "success": False,
+                "message": f"Invalid delivery_type '{delivery_type}'"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # ── Process each invoice ──────────────────────────────────────────────
+        notes          = request.data.get('notes', '')
+        created_sessions = []
+        errors         = []
+
+        for inv_no in invoice_nos:
+            # Fetch invoice
+            try:
+                invoice = Invoice.objects.get(invoice_no=inv_no)
+            except Invoice.DoesNotExist:
+                errors.append({"invoice_no": inv_no, "error": "Invoice not found"})
+                continue
+
+            # Status check
+            if invoice.status != 'PACKED':
+                errors.append({
+                    "invoice_no": inv_no,
+                    "error": f"Invoice must be PACKED. Current status: {invoice.status}"
+                })
+                continue
+
+            # Duplicate session check
+            if hasattr(invoice, 'deliverysession'):
+                errors.append({
+                    "invoice_no": inv_no,
+                    "error": "Delivery session already exists for this invoice"
+                })
+                continue
+
+            # Build delivery session data
+            delivery_data = {
+                'invoice':       invoice,
+                'delivery_type': delivery_type,
+                'notes':         notes,
+                'assigned_to':   request.user,
+                'start_time':    timezone.now(),
+            }
+
+            if delivery_type == 'COURIER':
+                delivery_data.update({
+                    'courier':         courier,
+                    'courier_name':    courier.courier_name,
+                    'delivery_status': 'TO_CONSIDER',
+                })
+                invoice.status = 'PACKED'  # stays PACKED, moves to consider list
+
+            elif delivery_type == 'INTERNAL':
+                delivery_data['assigned_to']    = assigned_user
+                delivery_data['delivery_status'] = 'TO_CONSIDER'
+                invoice.status = 'PACKED'
+
+            try:
+                session = DeliverySession.objects.create(**delivery_data)
+                invoice.save(update_fields=['status'])
+                created_sessions.append(session)
+
+                # SSE event per invoice
+                try:
+                    invoice_refreshed = Invoice.objects.select_related(
+                        'customer', 'salesman'
+                    ).prefetch_related('items').get(id=invoice.id)
+                    invoice_data = InvoiceListSerializer(invoice_refreshed).data
+                    django_eventstream.send_event(INVOICE_CHANNEL, 'message', invoice_data)
+                except Exception:
+                    logger.exception("Failed to emit delivery start SSE for %s", inv_no)
+
+            except Exception as e:
+                logger.exception("Failed to create delivery session for %s", inv_no)
+                errors.append({"invoice_no": inv_no, "error": str(e)})
+
+        # ── Build response ────────────────────────────────────────────────────
+        if not created_sessions:
+            return Response({
+                "success": False,
+                "message": "No delivery sessions were created",
+                "errors": errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # For single-invoice dispatch return the original response shape
+        if len(invoice_nos) == 1 and created_sessions:
+            response_serializer = DeliverySessionReadSerializer(created_sessions[0])
+            return Response({
+                "success": True,
+                "message": message,
+                "data": response_serializer.data,
+                "errors": errors if errors else None
+            }, status=status.HTTP_201_CREATED)
+
+        # For group dispatch return a summary
+        return Response({
+            "success": True,
+            "message": message,
+            "data": {
+                "created_count": len(created_sessions),
+                "invoice_nos": [s.invoice.invoice_no for s in created_sessions],
+                "delivery_type": delivery_type,
+                "courier_name": courier.courier_name if courier else None,
+            },
+            "errors": errors if errors else None
+        }, status=status.HTTP_201_CREATED)
+
+    # ── DIRECT (counter pickup) unchanged from original ───────────────────────
+    def _handle_single_direct(self, request, inv_no):
+        """Delegate single DIRECT delivery to the original serializer-based flow."""
+        data = dict(request.data)
+        data['invoice_no'] = inv_no
+
+        serializer = DeliverySessionCreateSerializer(data=data)
         if not serializer.is_valid():
             return Response({
                 "success": False,
                 "message": "Validation failed",
                 "errors": serializer.errors
             }, status=status.HTTP_400_BAD_REQUEST)
-        
+
         validated_data = serializer.validated_data
         invoice = validated_data['invoice']
-        delivery_type = validated_data['delivery_type']
-        
-        # Prepare delivery session data
+
         delivery_data = {
-            'invoice': invoice,
-            'delivery_type': delivery_type,
-            'notes': validated_data.get('notes', ''),
-            'assigned_to': request.user,  # Person who initiated delivery
+            'invoice':             invoice,
+            'delivery_type':       'DIRECT',
+            'notes':               validated_data.get('notes', ''),
+            'assigned_to':         request.user,
+            'counter_sub_mode':    validated_data.get('counter_sub_mode'),
+            'pickup_person_name':  validated_data.get('pickup_person_name', ''),
+            'pickup_person_phone': validated_data.get('pickup_person_phone'),
+            'pickup_company_name': validated_data.get('pickup_company_name', ''),
+            'pickup_company_id':   validated_data.get('pickup_company_id', ''),
+            'start_time':          timezone.now(),
+            'end_time':            timezone.now(),
+            'delivery_status':     'DELIVERED',
+            'delivered_by':        request.user,
         }
-        
-        # For Counter Pickup (DIRECT) - Complete immediately
-        if delivery_type == 'DIRECT':
-            delivery_data.update({
-                'counter_sub_mode': validated_data.get('counter_sub_mode'),
-                'pickup_person_username': validated_data.get('pickup_person_username'),
-                'pickup_person_name': validated_data.get('pickup_person_name'),
-                'pickup_person_phone': validated_data.get('pickup_person_phone'),
-                'pickup_company_name': validated_data.get('pickup_company_name', ''),
-                'pickup_company_id': validated_data.get('pickup_company_id', ''),
-                'start_time': timezone.now(),
-                'end_time': timezone.now(),  # Counter pickup completes immediately
-                'delivery_status': 'DELIVERED',  # Mark as delivered immediately
-                'delivered_by': request.user,  # Same person who processed it
-            })
-            
-            # Update invoice status to DELIVERED for counter pickup
-            invoice.status = "DELIVERED"
-            message = f"Counter pickup completed - {validated_data.get('counter_sub_mode')}"
-            
-        # For Courier Delivery - Assign courier and move to consider list
-        elif delivery_type == 'COURIER':
-            from apps.accounts.models import Courier
-            
-            courier_id = validated_data.get('courier_id')
-            if not courier_id:
-                return Response({
-                    "success": False,
-                    "message": "Courier ID is required for courier delivery"
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            try:
-                courier = Courier.objects.get(courier_id=courier_id)
-            except Courier.DoesNotExist:
-                return Response({
-                    "success": False,
-                    "message": "Invalid courier ID"
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            delivery_data.update({
-                'courier': courier,
-                'courier_name': courier.courier_name,
-                'start_time': timezone.now(),
-                'delivery_status': 'TO_CONSIDER',
-            })
-            
-            invoice.status = "PACKED"
-            message = f"Invoice assigned to {courier.courier_name}. Moved to Courier Delivery list."
-            
-        # For Internal Delivery - Assign user and move to consider list
-        elif delivery_type == 'INTERNAL':
-            from apps.accounts.models import User
-            
-            user_email = validated_data.get('user_email')
-            if not user_email:
-                return Response({
-                    "success": False,
-                    "message": "User email is required for internal delivery"
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            try:
-                assigned_user = User.objects.get(email=user_email)
-            except User.DoesNotExist:
-                return Response({
-                    "success": False,
-                    "message": "User not found with provided email"
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            delivery_data['assigned_to'] = assigned_user
-            delivery_data.update({
-                'start_time': timezone.now(),
-                'delivery_status': 'TO_CONSIDER',
-            })
-            
-            invoice.status = "PACKED"
-            message = f"Invoice assigned to {assigned_user.get_full_name() or assigned_user.email}. Moved to Company Delivery list."
-        
-        # Create delivery session
+
         delivery_session = DeliverySession.objects.create(**delivery_data)
-        
-        # Save invoice status
+
+        invoice.status = 'DELIVERED'
         invoice.save(update_fields=['status'])
-        
-        # Emit SSE event
+
         try:
             invoice_refreshed = Invoice.objects.select_related(
                 'customer', 'salesman'
             ).prefetch_related('items').get(id=invoice.id)
             invoice_data = InvoiceListSerializer(invoice_refreshed).data
-            django_eventstream.send_event(
-                INVOICE_CHANNEL,
-                'message',
-                invoice_data
-            )
+            django_eventstream.send_event(INVOICE_CHANNEL, 'message', invoice_data)
         except Exception:
-            logger.exception("Failed to emit delivery start event")
-        
+            logger.exception("Failed to emit DIRECT delivery SSE")
+
         response_serializer = DeliverySessionReadSerializer(delivery_session)
-        
         return Response({
             "success": True,
-            "message": message,
+            "message": f"Counter pickup completed — {validated_data.get('counter_sub_mode')}",
             "data": response_serializer.data
         }, status=status.HTTP_201_CREATED)
 
@@ -1115,6 +1232,87 @@ class AssignDeliveryStaffView(APIView):
             }
         }, status=status.HTTP_200_OK)
 
+class EligibleDeliveryStaffView(APIView):
+    """
+    GET /api/sales/delivery/eligible-staff/
+
+    Returns active users who have `my_assigned_delivery` menu access.
+    This endpoint is available to authenticated users so non-admin dispatch users
+    can assign company delivery staff.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from django.contrib.auth import get_user_model
+        from apps.accesscontrol.models import MenuItem, UserMenu
+
+        User = get_user_model()
+
+        try:
+            delivery_menu = MenuItem.objects.filter(code='my_assigned_delivery', is_active=True).first()
+            if not delivery_menu:
+                return Response({
+                    "success": True,
+                    "data": {"results": []},
+                    "message": "Delivery menu is not configured"
+                }, status=status.HTTP_200_OK)
+
+            assignments = UserMenu.objects.filter(
+                menu=delivery_menu,
+                is_active=True,
+                user__is_active=True,
+            ).select_related('user')
+
+            excluded_emails = {'delivery@alfa.com'}
+            seen_ids = set()
+            staff_rows = []
+
+            for assignment in assignments:
+                u = assignment.user
+                if not u or u.id in seen_ids:
+                    continue
+
+                email = (u.email or '').strip().lower()
+                if not email or email in excluded_emails:
+                    continue
+
+                role = str(getattr(u, 'role', '') or '').upper()
+                job_title_name = ''
+                if hasattr(u, 'job_title') and getattr(u, 'job_title', None):
+                    job_title_name = str(getattr(u.job_title, 'name', '') or '').upper()
+
+                if 'STORE' in role or 'STORE' in job_title_name:
+                    continue
+
+                full_name = (
+                    (getattr(u, 'name', '') or '').strip()
+                    or f"{(getattr(u, 'first_name', '') or '').strip()} {(getattr(u, 'last_name', '') or '').strip()}".strip()
+                    or u.email
+                )
+
+                staff_rows.append({
+                    "id": str(u.id),
+                    "email": u.email,
+                    "name": full_name,
+                })
+                seen_ids.add(u.id)
+
+            staff_rows.sort(key=lambda x: x['name'].lower())
+
+            return Response({
+                "success": True,
+                "data": {"results": staff_rows},
+                "message": "Eligible delivery staff retrieved successfully"
+            }, status=status.HTTP_200_OK)
+
+        except Exception as exc:
+            logger.exception("Failed to fetch eligible delivery staff: %s", exc)
+            return Response({
+                "success": False,
+                "message": "Failed to fetch eligible delivery staff",
+                "errors": {"detail": str(exc)},
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 class UploadCourierSlipView(APIView):
     """
     POST /api/sales/delivery/upload-slip/
@@ -1123,7 +1321,9 @@ class UploadCourierSlipView(APIView):
     This moves the delivery directly to DELIVERED status and history
     
     Body (FormData):
-    - invoice_no: Invoice number
+    - invoice_no: Invoice number (single)
+    - invoice_nos: JSON array or repeated key (group)
+    - boxing_group_id: Optional group id to resolve grouped invoices
     - courier_slip: File (image or PDF)
     - tracking_no: Tracking number (optional)
     """
@@ -1131,84 +1331,143 @@ class UploadCourierSlipView(APIView):
 
     def post(self, request):
         invoice_no = request.data.get("invoice_no")
+        boxing_group_id = request.data.get("boxing_group_id")
+        invoice_nos = []
+
+        # Supports multipart form payload as repeated keys or JSON string.
+        if hasattr(request.data, "getlist"):
+            invoice_nos = [x for x in request.data.getlist("invoice_nos") if x]
+
+        if not invoice_nos:
+            raw_invoice_nos = request.data.get("invoice_nos")
+            if raw_invoice_nos:
+                if isinstance(raw_invoice_nos, list):
+                    invoice_nos = [str(x).strip() for x in raw_invoice_nos if str(x).strip()]
+                elif isinstance(raw_invoice_nos, str):
+                    parsed = None
+                    try:
+                        parsed = json.loads(raw_invoice_nos)
+                    except Exception:
+                        parsed = None
+
+                    if isinstance(parsed, list):
+                        invoice_nos = [str(x).strip() for x in parsed if str(x).strip()]
+                    elif raw_invoice_nos.strip():
+                        invoice_nos = [raw_invoice_nos.strip()]
+
+        # Handle getlist(['["INV1","INV2"]']) from multipart payloads.
+        if len(invoice_nos) == 1 and isinstance(invoice_nos[0], str) and invoice_nos[0].strip().startswith("["):
+            try:
+                parsed = json.loads(invoice_nos[0])
+                if isinstance(parsed, list):
+                    invoice_nos = [str(x).strip() for x in parsed if str(x).strip()]
+            except Exception:
+                pass
+
+        if not invoice_nos and boxing_group_id:
+            invoice_nos = list(
+                Invoice.objects.filter(packingsession__boxing_group_id=boxing_group_id)
+                .values_list("invoice_no", flat=True)
+            )
+
+        if not invoice_nos and invoice_no:
+            invoice_nos = [invoice_no]
+
         slip = request.FILES.get("courier_slip")
         tracking_no = request.data.get("tracking_no", "")
 
-        if not invoice_no or not slip:
+        if not invoice_nos or not slip:
             return Response({
                 "success": False,
-                "message": "invoice_no and courier_slip are required"
+                "message": "courier_slip and at least one of invoice_no, invoice_nos, or boxing_group_id are required"
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            invoice = Invoice.objects.get(invoice_no=invoice_no)
-        except Invoice.DoesNotExist:
+        # Deduplicate while keeping first occurrence order.
+        invoice_nos = list(dict.fromkeys([str(inv).strip() for inv in invoice_nos if str(inv).strip()]))
+
+        invoices = list(Invoice.objects.filter(invoice_no__in=invoice_nos))
+        invoice_map = {inv.invoice_no: inv for inv in invoices}
+        missing_invoice_nos = [inv_no for inv_no in invoice_nos if inv_no not in invoice_map]
+        if missing_invoice_nos:
             return Response({
                 "success": False,
-                "message": "Invoice not found"
+                "message": "Some invoices were not found",
+                "errors": [{"invoice_no": inv_no, "error": "Invoice not found"} for inv_no in missing_invoice_nos],
             }, status=status.HTTP_404_NOT_FOUND)
 
-        try:
-            delivery = DeliverySession.objects.get(invoice=invoice)
-        except DeliverySession.DoesNotExist:
-            return Response({
-                "success": False,
-                "message": "Delivery session not found"
-            }, status=status.HTTP_404_NOT_FOUND)
+        deliveries = list(
+            DeliverySession.objects.select_related("invoice")
+            .filter(invoice__invoice_no__in=invoice_nos)
+        )
+        delivery_map = {d.invoice.invoice_no: d for d in deliveries}
 
-        # ✅ Validate this is a COURIER delivery
-        if delivery.delivery_type != 'COURIER':
+        validation_errors = []
+        target_deliveries = []
+        for inv_no in invoice_nos:
+            delivery = delivery_map.get(inv_no)
+            if not delivery:
+                validation_errors.append({"invoice_no": inv_no, "error": "Delivery session not found"})
+                continue
+            if delivery.delivery_type != 'COURIER':
+                validation_errors.append({"invoice_no": inv_no, "error": "Not a courier delivery session"})
+                continue
+            if not delivery.courier_name:
+                validation_errors.append({"invoice_no": inv_no, "error": "Courier is not assigned"})
+                continue
+            target_deliveries.append(delivery)
+
+        if validation_errors:
             return Response({
                 "success": False,
-                "message": "This endpoint is only for courier deliveries"
+                "message": "Cannot upload slip for one or more invoices",
+                "errors": validation_errors,
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # ✅ Check if courier was assigned
-        if not delivery.courier_name:
-            return Response({
-                "success": False,
-                "message": "Please assign a courier first before uploading slip"
-            }, status=status.HTTP_400_BAD_REQUEST)
+        slip_bytes = slip.read()
+        now = timezone.now()
 
-        # ✅ Complete the courier delivery
-        delivery.courier_slip = slip
-        if tracking_no:
-            delivery.tracking_no = tracking_no
-        
-        # ✅ Mark as DELIVERED - goes directly to history
-        delivery.delivery_status = "DELIVERED"
-        delivery.start_time = delivery.start_time or timezone.now()
-        delivery.end_time = timezone.now()
-        delivery.delivered_by = request.user
-        delivery.save()
+        with transaction.atomic():
+            for delivery in target_deliveries:
+                delivery.courier_slip = ContentFile(slip_bytes, name=slip.name)
+                if tracking_no:
+                    delivery.tracking_no = tracking_no
 
-        # ✅ Update invoice to DELIVERED
-        invoice.status = "DELIVERED"
-        invoice.save(update_fields=["status"])
+                delivery.delivery_status = "DELIVERED"
+                delivery.start_time = delivery.start_time or now
+                delivery.end_time = now
+                delivery.delivered_by = request.user
+                delivery.save()
 
-        # Send SSE event
-        try:
-            invoice_refreshed = Invoice.objects.select_related(
-                'customer', 'salesman'
-            ).prefetch_related('items').get(id=invoice.id)
-            invoice_data = InvoiceListSerializer(invoice_refreshed).data
-            django_eventstream.send_event(
-                INVOICE_CHANNEL,
-                'message',
-                invoice_data
-            )
-        except Exception:
-            logger.exception("Failed to emit courier delivery complete event")
+                invoice = delivery.invoice
+                invoice.status = "DELIVERED"
+                invoice.save(update_fields=["status"])
 
+        # Send SSE event per invoice so all UI lists refresh consistently.
+        for delivery in target_deliveries:
+            try:
+                invoice_refreshed = Invoice.objects.select_related(
+                    'customer', 'salesman'
+                ).prefetch_related('items').get(id=delivery.invoice_id)
+                invoice_data = InvoiceListSerializer(invoice_refreshed).data
+                django_eventstream.send_event(
+                    INVOICE_CHANNEL,
+                    'message',
+                    invoice_data
+                )
+            except Exception:
+                logger.exception("Failed to emit courier delivery complete event for %s", delivery.invoice.invoice_no)
+
+        updated_invoice_nos = [d.invoice.invoice_no for d in target_deliveries]
         return Response({
             "success": True,
             "message": "Courier slip uploaded. Delivery completed and moved to history.",
             "data": {
-                "invoice_no": invoice.invoice_no,
-                "invoice_status": invoice.status,
-                "delivery_status": delivery.delivery_status,
-                "courier_name": delivery.courier_name,
-                "tracking_no": delivery.tracking_no
+                "invoice_no": updated_invoice_nos[0] if len(updated_invoice_nos) == 1 else None,
+                "invoice_nos": updated_invoice_nos,
+                "updated_count": len(updated_invoice_nos),
+                "delivery_status": "DELIVERED",
+                "tracking_no": tracking_no or None,
+                "boxing_group_id": boxing_group_id or None,
             }
         }, status=status.HTTP_200_OK)
         

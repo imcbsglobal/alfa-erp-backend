@@ -25,6 +25,7 @@ from .views import (
     CourierViewSet,
     DeliveryConsiderListView,
     AssignDeliveryStaffView,
+    EligibleDeliveryStaffView,
     UploadCourierSlipView,
     CancelSessionView,
     MissingInvoiceFinderView,
@@ -94,6 +95,7 @@ urlpatterns = [
     path('cancel-session/', CancelSessionView.as_view(), name='cancel-session'),
     
     path("delivery/consider-list/", DeliveryConsiderListView.as_view(), name="delivery-consider-list"),
+    path("delivery/eligible-staff/", EligibleDeliveryStaffView.as_view(), name="delivery-eligible-staff"),
     path("delivery/assign/", AssignDeliveryStaffView.as_view(), name="delivery-assign-staff"),
     path("delivery/upload-slip/", UploadCourierSlipView.as_view()),
 

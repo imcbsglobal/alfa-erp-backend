@@ -366,6 +366,12 @@ class DeliverySession(models.Model):
     )
     notes = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['delivery_status']),
+            models.Index(fields=['invoice', 'delivery_status']),
+        ]
     
     # ✅ NEW FIELDS FOR COUNTER PICKUP
     counter_sub_mode = models.CharField(

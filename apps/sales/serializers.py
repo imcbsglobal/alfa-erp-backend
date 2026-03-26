@@ -202,45 +202,16 @@ class InvoiceListSerializer(serializers.ModelSerializer):
             return None
     
     def get_current_handler(self, obj):
-        """Get current handler based on invoice status"""
+        """Get current handler based on invoice status — reuses already-prefetched data"""
         if obj.status in ['PICKING', 'PICKED']:
             return self.get_picker_info(obj)
-        
-        elif obj.status in ['PACKING', 'PACKED']:
+
+        elif obj.status in ['PACKING', 'PACKED', 'BOXING']:
             return self.get_packer_info(obj)
-        
-        elif obj.status == 'DISPATCHED':
-            try:
-                delivery = obj.deliverysession
-                return {
-                    "name": delivery.assigned_to.name if delivery.assigned_to else None,
-                    "email": delivery.assigned_to.email if delivery.assigned_to else None,
-                    "status": "DISPATCHED",
-                    "mode": delivery.delivery_type,
-                    "courier_name": delivery.courier_name,
-                    "tracking_no": delivery.tracking_no,
-                    "start_time": delivery.start_time,
-                    "end_time": None,
-                }
-            except:
-                return None
-        
-        elif obj.status == 'DELIVERED':
-            try:
-                delivery = obj.deliverysession
-                return {
-                    "name": delivery.delivered_by.name if delivery.delivered_by else None,
-                    "email": delivery.delivered_by.email if delivery.delivered_by else None,
-                    "status": "DELIVERED",
-                    "mode": delivery.delivery_type,
-                    "courier_name": delivery.courier_name,
-                    "tracking_no": delivery.tracking_no,
-                    "start_time": delivery.start_time,
-                    "end_time": delivery.end_time,
-                }
-            except:
-                return None
-        
+
+        elif obj.status in ['DISPATCHED', 'DELIVERED']:
+            return self.get_delivery_info(obj)
+
         elif obj.status == 'REVIEW':
             return_info = self.get_return_info(obj)
             if return_info:
@@ -251,7 +222,7 @@ class InvoiceListSerializer(serializers.ModelSerializer):
                     "returned_at": return_info.get('returned_at'),
                     "returned_from": return_info.get('returned_from_section')
                 }
-        
+
         return None
 
 
@@ -645,23 +616,28 @@ class DeliverySessionCreateSerializer(serializers.Serializer):
                 raise serializers.ValidationError({
                     "counter_sub_mode": "Counter sub-mode (patient/company) is required for counter pickup."
                 })
-            
-            # Validate required fields for counter pickup
-            if not data.get('pickup_person_username'):
-                raise serializers.ValidationError({
-                    "pickup_person_username": "Username is required for counter pickup."
-                })
-            if not data.get('pickup_person_name'):
-                raise serializers.ValidationError({
-                    "pickup_person_name": "Person name is required for counter pickup."
-                })
-            if not data.get('pickup_person_phone'):
-                raise serializers.ValidationError({
-                    "pickup_person_phone": "Phone number is required for counter pickup."
-                })
-            
-            # For company pickup, validate company details
-            if counter_sub_mode == 'company':
+
+            # PATIENT: name + phone required
+            if counter_sub_mode == 'patient':
+                if not data.get('pickup_person_name'):
+                    raise serializers.ValidationError({
+                        "pickup_person_name": "Person name is required for patient pickup."
+                    })
+                if not data.get('pickup_person_phone'):
+                    raise serializers.ValidationError({
+                        "pickup_person_phone": "Phone number is required for patient pickup."
+                    })
+
+            # COMPANY: name + phone + company name + company ID required
+            elif counter_sub_mode == 'company':
+                if not data.get('pickup_person_name'):
+                    raise serializers.ValidationError({
+                        "pickup_person_name": "Person name is required for company pickup."
+                    })
+                if not data.get('pickup_person_phone'):
+                    raise serializers.ValidationError({
+                        "pickup_person_phone": "Phone number is required for company pickup."
+                    })
                 if not data.get('pickup_company_name'):
                     raise serializers.ValidationError({
                         "pickup_company_name": "Company name is required for company pickup."
@@ -885,15 +861,15 @@ class DeliveryHistorySerializer(serializers.ModelSerializer):
     invoice_date = serializers.DateField(source='invoice.invoice_date', read_only=True)
     invoice_status = serializers.CharField(source='invoice.status', read_only=True)
     invoice_remarks = serializers.CharField(source='invoice.remarks', read_only=True)
-    customer_name = serializers.CharField(source='invoice.customer.name', read_only=True)
-    customer_email = serializers.CharField(source='invoice.customer.email', read_only=True)
-    customer_phone = serializers.CharField(source='invoice.customer.phone1', read_only=True)
-    temp_name = serializers.CharField(source='invoice.temp_name', read_only=True)
-    customer_area = serializers.CharField(source='invoice.customer.area', read_only=True)
-    customer_address = serializers.CharField(source='invoice.customer.address1', read_only=True)
-    salesman_name = serializers.CharField(source='invoice.salesman.name', read_only=True)
-    delivery_user_email = serializers.CharField(source='assigned_to.email', read_only=True)
-    delivery_user_name = serializers.CharField(source='assigned_to.name', read_only=True)
+    customer_name    = serializers.SerializerMethodField()
+    customer_email   = serializers.SerializerMethodField()
+    customer_phone   = serializers.SerializerMethodField()
+    customer_area    = serializers.SerializerMethodField()
+    customer_address = serializers.SerializerMethodField()
+    temp_name        = serializers.SerializerMethodField()
+    salesman_name    = serializers.SerializerMethodField()
+    delivery_user_email = serializers.SerializerMethodField()
+    delivery_user_name  = serializers.SerializerMethodField()
     items = InvoiceItemSerializer(source='invoice.items', many=True, read_only=True)
     Total = serializers.DecimalField(
         source='invoice.Total',
@@ -902,19 +878,59 @@ class DeliveryHistorySerializer(serializers.ModelSerializer):
         read_only=True
     )
     duration = serializers.SerializerMethodField()
+    boxing_group_id = serializers.SerializerMethodField()
     courier_slip_url = serializers.SerializerMethodField()  # ✅ NEW FIELD
     
     class Meta:
         model = DeliverySession
         fields = [
             'id', 'invoice_no', 'invoice_date', 'invoice_status', 'invoice_remarks',
-            'customer_name', 'customer_email', 'customer_phone', 'customer_address',
+            'customer_name', 'customer_email', 'customer_phone', 'customer_address','customer_area',
             'salesman_name', 'temp_name', 'delivery_type', 'delivery_user_email', 'delivery_user_name',
+            'counter_sub_mode', 'pickup_person_name', 'pickup_person_phone',
+            'pickup_company_name', 'pickup_company_id',
             'courier_name', 'tracking_no', 'delivery_status', 'items', 'Total',
             'start_time', 'end_time', 'duration', 'notes', 'created_at',
-            'courier_slip_url','delivery_latitude', 'delivery_longitude', 
+            'boxing_group_id', 'courier_slip_url','delivery_latitude', 'delivery_longitude', 
             'delivery_location_address', 'delivery_location_accuracy'
         ]
+
+    def get_customer_name(self, obj):
+        if obj.invoice.customer:
+            return obj.invoice.customer.name
+        return getattr(obj.invoice, 'temp_name', None)
+
+    def get_customer_email(self, obj):
+        return obj.invoice.customer.email if obj.invoice.customer else None
+
+    def get_customer_phone(self, obj):
+        return obj.invoice.customer.phone1 if obj.invoice.customer else None
+
+    def get_customer_area(self, obj):
+        return obj.invoice.customer.area if obj.invoice.customer else None
+
+    def get_customer_address(self, obj):
+        return obj.invoice.customer.address1 if obj.invoice.customer else None
+
+    def get_temp_name(self, obj):
+        return getattr(obj.invoice, 'temp_name', None)
+
+    def get_salesman_name(self, obj):
+        return obj.invoice.salesman.name if obj.invoice.salesman else None
+
+    def get_delivery_user_email(self, obj):
+        if obj.assigned_to and obj.assigned_to.email:
+            return obj.assigned_to.email
+        if obj.delivered_by and obj.delivered_by.email:
+            return obj.delivered_by.email
+        return None
+
+    def get_delivery_user_name(self, obj):
+        if obj.assigned_to and obj.assigned_to.name:
+            return obj.assigned_to.name
+        if obj.delivered_by and obj.delivered_by.name:
+            return obj.delivered_by.name
+        return None    
     
     # def get_total_amount(self, obj):
     #     """Calculate total amount from invoice items"""
@@ -925,6 +941,12 @@ class DeliveryHistorySerializer(serializers.ModelSerializer):
             delta = obj.end_time - obj.start_time
             return int(delta.total_seconds() // 60)  # duration in minutes
         return None
+
+    def get_boxing_group_id(self, obj):
+        try:
+            return obj.invoice.packingsession.boxing_group_id
+        except Exception:
+            return None
     
     def get_courier_slip_url(self, obj):
         """Return the full URL of the courier slip if it exists"""
