@@ -164,6 +164,18 @@ class Command(BaseCommand):
             }
         )
 
+        boxing_list, _ = MenuItem.objects.update_or_create(
+            code="boxing_list",
+            defaults={
+                'name': "Boxing List",
+                'icon': "Box",
+                'url': "/packing/boxing",
+                'parent': packing,
+                'order': 3,
+                'is_active': True,
+            }
+        )
+
         # ─────────────────────────────────────────────────────
 
         self.stdout.write("  ✓ Packing menus created")
@@ -307,6 +319,30 @@ class Command(BaseCommand):
             }
         )
 
+        delivery_reports, _ = MenuItem.objects.update_or_create(
+            code="delivery_reports",
+            defaults={
+                'name': "Delivery Reports",
+                'icon': "Truck",
+                'url': "/history/delivery-report",
+                'parent': history,
+                'order': 6,
+                'is_active': True,
+            }
+        )
+
+        user_summary, _ = MenuItem.objects.update_or_create(
+            code="user_summary",
+            defaults={
+                'name': "User Summary",
+                'icon': "Users",
+                'url': "/history/billing-user-summary",
+                'parent': history,
+                'order': 7,
+                'is_active': True,
+            }
+        )
+
         # ── User Summary nested dropdown items ──────────────
         billing_user_summary, _ = MenuItem.objects.update_or_create(
             code="billing_user_summary",
@@ -314,8 +350,8 @@ class Command(BaseCommand):
                 'name': "User Summary - Billing",
                 'icon': "FileText",
                 'url': "/history/billing-user-summary",
-                'parent': history,
-                'order': 6,
+                'parent': user_summary,
+                'order': 1,
                 'is_active': True,
             }
         )
@@ -326,8 +362,8 @@ class Command(BaseCommand):
                 'name': "User Summary - Picking",
                 'icon': "ClipboardCheck",
                 'url': "/history/picking-user-summary",
-                'parent': history,
-                'order': 7,
+                'parent': user_summary,
+                'order': 2,
                 'is_active': True,
             }
         )
@@ -338,8 +374,20 @@ class Command(BaseCommand):
                 'name': "User Summary - Packing",
                 'icon': "Box",
                 'url': "/history/packing-user-summary",
-                'parent': history,
-                'order': 8,
+                'parent': user_summary,
+                'order': 3,
+                'is_active': True,
+            }
+        )
+
+        user_summary_delivery, _ = MenuItem.objects.update_or_create(
+            code="user_summary_delivery",
+            defaults={
+                'name': "User Summary - Delivery",
+                'icon': "Truck",
+                'url': "/history/delivery-user-summary",
+                'parent': user_summary,
+                'order': 4,
                 'is_active': True,
             }
         )
@@ -522,9 +570,12 @@ class Command(BaseCommand):
         self.stdout.write("   ├─ Invoice Reports → /history/invoice-report")
         self.stdout.write("   ├─ Picking Reports → /history/picking-report")
         self.stdout.write("   ├─ Packing Reports → /history/packing-report")
-        self.stdout.write("   ├─ User Summary - Billing → /history/billing-user-summary")
-        self.stdout.write("   ├─ User Summary - Picking → /history/picking-user-summary")
-        self.stdout.write("   └─ User Summary - Packing → /history/packing-user-summary")
+        self.stdout.write("   ├─ Delivery Reports → /history/delivery-report")
+        self.stdout.write("   └─ User Summary (nested)")
+        self.stdout.write("      ├─ Billing → /history/billing-user-summary")
+        self.stdout.write("      ├─ Picking → /history/picking-user-summary")
+        self.stdout.write("      ├─ Packing → /history/packing-user-summary")
+        self.stdout.write("      └─ Delivery → /history/delivery-user-summary")
         self.stdout.write("7. User Management (dropdown) [SUPERADMIN, ADMIN]")
         self.stdout.write("   ├─ User List → /user-management")
         self.stdout.write("   └─ User Control → /user-control")
@@ -575,9 +626,12 @@ class Command(BaseCommand):
             'invoice_reports': MenuItem.objects.get(code='invoice_reports'),
             'picking_reports': MenuItem.objects.get(code='picking_reports'),
             'packing_reports': MenuItem.objects.get(code='packing_reports'),
+            'delivery_reports': MenuItem.objects.get(code='delivery_reports'),
+            'user_summary': MenuItem.objects.get(code='user_summary'),
             'billing_user_summary': MenuItem.objects.get(code='billing_user_summary'),
             'user_summary_picking': MenuItem.objects.get(code='user_summary_picking'),
             'user_summary_packing': MenuItem.objects.get(code='user_summary_packing'),
+            'user_summary_delivery': MenuItem.objects.get(code='user_summary_delivery'),
             'user_mgmt': MenuItem.objects.get(code='user-management'),
             'user_list': MenuItem.objects.get(code='user_list'),
             'user_control': MenuItem.objects.get(code='user_control'),
@@ -593,12 +647,14 @@ class Command(BaseCommand):
             'SUPERADMIN': [],  # SUPERADMIN gets empty array (uses menuConfig.js)
             'ADMIN': [
                 menus['dashboard'],
+                menus['billing'], menus['billing_invoice_list'], menus['billing_reviewed'],
                 menus['invoices'], menus['picking_list'], menus['my_assigned_picking'],
+                menus['packing'], menus['packing_list'], menus['my_assigned_packing'], menus['boxing_list'],
                 menus['delivery'], menus['delivery_dispatch'], menus['delivery_courier_list'],
                 menus['delivery_company_list'], menus['my_assigned_delivery'],
                 menus['history'], menus['history_consolidate'], menus['history_invoice_workflow'],
-                menus['invoice_reports'], menus['picking_reports'], menus['packing_reports'],
-                menus['billing_user_summary'], menus['user_summary_picking'], menus['user_summary_packing'],
+                menus['invoice_reports'], menus['picking_reports'], menus['packing_reports'], menus['delivery_reports'],
+                menus['user_summary'], menus['billing_user_summary'], menus['user_summary_picking'], menus['user_summary_packing'], menus['user_summary_delivery'],
                 menus['user_mgmt'], menus['user_list'], menus['user_control'],
                 menus['master'], menus['job_title'], menus['department'], menus['courier'], menus['tray'],
                 menus['advanced_control'],
@@ -606,16 +662,17 @@ class Command(BaseCommand):
             'USER': [
                 menus['dashboard'],
                 menus['invoices'], menus['picking_list'], menus['my_assigned_picking'],
+                menus['packing'], menus['packing_list'], menus['my_assigned_packing'], menus['boxing_list'],
                 menus['history'], menus['history_consolidate'], menus['history_invoice_workflow'],
-                menus['invoice_reports'], menus['picking_reports'], menus['packing_reports'],
-                menus['billing_user_summary'], menus['user_summary_picking'], menus['user_summary_packing'],
+                menus['invoice_reports'], menus['picking_reports'], menus['packing_reports'], menus['delivery_reports'],
+                menus['user_summary'], menus['billing_user_summary'], menus['user_summary_picking'], menus['user_summary_packing'], menus['user_summary_delivery'],
             ],
             'STORE': [
                 menus['dashboard'],
                 menus['invoices'], menus['picking_list'], menus['my_assigned_picking'],
                 menus['history'], menus['history_consolidate'], menus['history_invoice_workflow'],
-                menus['invoice_reports'], menus['picking_reports'], menus['packing_reports'],
-                menus['billing_user_summary'], menus['user_summary_picking'], menus['user_summary_packing'],
+                menus['invoice_reports'], menus['picking_reports'], menus['packing_reports'], menus['delivery_reports'],
+                menus['user_summary'], menus['billing_user_summary'], menus['user_summary_picking'], menus['user_summary_packing'], menus['user_summary_delivery'],
             ],
             'PICKER': [
                 menus['dashboard'],
