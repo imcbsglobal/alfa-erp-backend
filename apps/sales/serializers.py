@@ -880,6 +880,7 @@ class DeliveryHistorySerializer(serializers.ModelSerializer):
     duration = serializers.SerializerMethodField()
     boxing_group_id = serializers.SerializerMethodField()
     courier_slip_url = serializers.SerializerMethodField()  # ✅ NEW FIELD
+    attachment_url = serializers.SerializerMethodField()
     
     class Meta:
         model = DeliverySession
@@ -891,7 +892,7 @@ class DeliveryHistorySerializer(serializers.ModelSerializer):
             'pickup_company_name', 'pickup_company_id',
             'courier_name', 'tracking_no', 'delivery_status', 'items', 'Total',
             'start_time', 'end_time', 'duration', 'notes', 'created_at',
-            'boxing_group_id', 'courier_slip_url','delivery_latitude', 'delivery_longitude', 
+            'boxing_group_id', 'courier_slip_url', 'attachment_url' , 'delivery_latitude', 'delivery_longitude', 
             'delivery_location_address', 'delivery_location_accuracy'
         ]
 
@@ -955,6 +956,15 @@ class DeliveryHistorySerializer(serializers.ModelSerializer):
             if request:
                 return request.build_absolute_uri(obj.courier_slip.url)
             return obj.courier_slip.url
+        return None
+    
+    def get_attachment_url(self, obj):
+        """Return the full URL of the delivery attachment if it exists"""
+        if obj.attachment:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.attachment.url)
+            return obj.attachment.url
         return None
 
 # ===== Billing Serializers =====
@@ -1041,6 +1051,8 @@ class ReturnToBillingSerializer(serializers.Serializer):
 
 class CourierSerializer(serializers.ModelSerializer):
     """Serializer for Courier model"""
+    courier_logo_url = serializers.SerializerMethodField(read_only=True)
+    remove_courier_logo = serializers.BooleanField(write_only=True, required=False, default=False)
     
     class Meta:
         from apps.accounts.models import Courier
@@ -1049,17 +1061,15 @@ class CourierSerializer(serializers.ModelSerializer):
             'courier_id',
             'courier_code',
             'courier_name',
+            'courier_logo',
+            'courier_logo_url',
+            'remove_courier_logo',
             'type',
             'contact_person',
             'phone',
             'alt_phone',
             'email',
             'address',
-            'service_area',
-            'rate_type',
-            'base_rate',
-            'vehicle_type',
-            'max_weight',
             'cod_supported',
             'status',
             'remarks',
@@ -1067,6 +1077,25 @@ class CourierSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
         read_only_fields = ['courier_id', 'created_at', 'updated_at']
+
+    def get_courier_logo_url(self, obj):
+        if not obj.courier_logo:
+            return None
+        request = self.context.get('request')
+        if request:
+            return request.build_absolute_uri(obj.courier_logo.url)
+        return obj.courier_logo.url
+
+    def update(self, instance, validated_data):
+        remove_courier_logo = validated_data.pop('remove_courier_logo', False)
+
+        # Clear existing logo only when explicitly requested and no replacement logo is provided.
+        if remove_courier_logo and 'courier_logo' not in validated_data:
+            if instance.courier_logo:
+                instance.courier_logo.delete(save=False)
+            validated_data['courier_logo'] = None
+
+        return super().update(instance, validated_data)
     
     def validate_courier_code(self, value):
         """Validate courier code is unique on create"""
@@ -1091,18 +1120,6 @@ class CourierSerializer(serializers.ModelSerializer):
         if not value or not value.strip():
             raise serializers.ValidationError("Phone number is required.")
         return value.strip()
-    
-    def validate_base_rate(self, value):
-        """Validate base rate is non-negative"""
-        if value < 0:
-            raise serializers.ValidationError("Base rate cannot be negative.")
-        return value
-    
-    def validate_max_weight(self, value):
-        """Validate max weight is non-negative if provided"""
-        if value is not None and value < 0:
-            raise serializers.ValidationError("Max weight cannot be negative.")
-        return value
 
 
 # ===== BOX-BASED PACKING WORKFLOW SERIALIZERS =====

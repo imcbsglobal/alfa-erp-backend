@@ -68,7 +68,7 @@ class CourierAdmin(admin.ModelAdmin):
         'cod_supported',
         'created_at'
     ]
-    list_filter = ['type', 'status', 'cod_supported', 'rate_type', 'created_at']
+    list_filter = ['type', 'status', 'cod_supported', 'created_at']
     search_fields = ['courier_code', 'courier_name', 'contact_person', 'phone', 'email']
     readonly_fields = ['courier_id', 'created_at', 'updated_at']
     
@@ -79,11 +79,8 @@ class CourierAdmin(admin.ModelAdmin):
         ('Contact Information', {
             'fields': ('contact_person', 'phone', 'alt_phone', 'email', 'address')
         }),
-        ('Service Details', {
-            'fields': ('service_area', 'vehicle_type', 'max_weight', 'cod_supported')
-        }),
-        ('Pricing', {
-            'fields': ('rate_type', 'base_rate')
+        ('Additional Options', {
+            'fields': ('cod_supported',)
         }),
         ('Additional Information', {
             'fields': ('remarks', 'created_at', 'updated_at')

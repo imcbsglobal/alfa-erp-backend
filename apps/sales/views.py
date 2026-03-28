@@ -41,6 +41,7 @@ from .models import Invoice, PickingSession, PackingSession, DeliverySession, Bo
 from rest_framework import generics
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 
 logger = logging.getLogger(__name__)
@@ -1485,6 +1486,9 @@ class CompleteDeliveryView(APIView):
     }
     """
     permission_classes = [IsAuthenticated]
+
+    from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
     
     def post(self, request):
         serializer = CompleteDeliverySerializer(data=request.data)
@@ -1517,6 +1521,11 @@ class CompleteDeliveryView(APIView):
             delivery_session.delivery_longitude = validated_data.get('delivery_longitude')
             delivery_session.delivery_location_address = validated_data.get('delivery_location_address', '')
             delivery_session.delivery_location_accuracy = validated_data.get('delivery_location_accuracy')
+
+        # Handle attachment for ALL delivery types
+        attachment = request.FILES.get('attachment')
+        if attachment:
+            delivery_session.attachment = attachment
         # Set delivered_by to the user who completed delivery
         delivery_session.delivered_by = request.user
         delivery_session.end_time = timezone.now()
@@ -2336,6 +2345,7 @@ class CourierViewSet(BaseModelViewSet):
     queryset = Courier.objects.all()
     serializer_class = CourierSerializer
     permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
     lookup_field = 'courier_id'
     
     def get_queryset(self):

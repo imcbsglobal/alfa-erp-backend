@@ -409,12 +409,19 @@ class DeliverySession(models.Model):
         help_text="GPS accuracy in meters"
     )
     courier_slip = models.FileField(upload_to='courier_slips/', blank=True, null=True)
+    attachment = models.FileField(upload_to='delivery_attachments/', blank=True, null=True)
     pickup_person_username = models.CharField(max_length=150, blank=True, null=True)
     pickup_person_name = models.CharField(max_length=150, blank=True, null=True)
     pickup_person_phone = models.CharField(max_length=20, blank=True, null=True)
     pickup_company_name = models.CharField(max_length=255, blank=True, null=True)
     pickup_company_id = models.CharField(max_length=100, blank=True, null=True)
     
+    @property
+    def attachment_url(self):
+        if self.attachment:
+            return self.attachment.url
+        return None
+
     def __str__(self):
         return f"Delivery - {self.invoice.invoice_no}"
 
