@@ -1291,10 +1291,18 @@ class EligibleDeliveryStaffView(APIView):
                     or u.email
                 )
 
+                avatar_url = None
+                if hasattr(u, 'avatar') and u.avatar:
+                    try:
+                        avatar_url = request.build_absolute_uri(u.avatar.url)
+                    except Exception:
+                        avatar_url = None
+
                 staff_rows.append({
                     "id": str(u.id),
                     "email": u.email,
                     "name": full_name,
+                    "avatar": avatar_url,
                 })
                 seen_ids.add(u.id)
 
