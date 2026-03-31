@@ -244,20 +244,16 @@ class StatusBreakdownView(APIView):
                 delivery_status='DELIVERED',
             ).count()
 
-            # Delivery sessions in TO_CONSIDER and IN_TRANSIT should be treated as pending.
-            # Keep preparing at zero for delivery so dashboard reflects requested workflow.
-            delivery_preparing = 0
+            # Preparing: Delivery sessions with TO_CONSIDER and IN_TRANSIT status together
+            delivery_preparing = DeliverySession.objects.filter(
+                delivery_status__in=['TO_CONSIDER', 'IN_TRANSIT'],
+            ).count()
 
-            delivery_pending = (
-                Invoice.objects.filter(
-                    status='PACKED',
-                    deliverysession__isnull=True,
-                ).count()
-                +
-                DeliverySession.objects.filter(
-                    delivery_status__in=['IN_TRANSIT', 'TO_CONSIDER'],
-                ).count()
-            )
+            # Pending: Invoices with PACKED status but no delivery session yet
+            delivery_pending = Invoice.objects.filter(
+                status='PACKED',
+                deliverysession__isnull=True,
+            ).count()
 
             return Response({
                 'success': True,
