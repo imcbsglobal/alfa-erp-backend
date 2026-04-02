@@ -8,3 +8,11 @@ class DeveloperSettingsSerializer(serializers.ModelSerializer):
         model = DeveloperSettings
         fields = ['enable_manual_picking_completion', 'enable_bulk_picking', 'updated_at', 'updated_by']
         read_only_fields = ['updated_at']
+
+from apps.accounts.models import Tray
+
+class TraySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tray
+        fields = ['tray_id', 'tray_code', 'status', 'remarks', 'created_at', 'updated_at']
+        read_only_fields = ['tray_id', 'created_at', 'updated_at']        

@@ -1,10 +1,12 @@
 # apps/common/views.py
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticated
 from .models import DeveloperSettings
 from .serializers import DeveloperSettingsSerializer
+from apps.accounts.models import Tray
+from .serializers import TraySerializer
 
 
 class DeveloperSettingsView(APIView):
@@ -72,3 +74,51 @@ class DeveloperSettingsView(APIView):
             'message': 'Invalid data',
             'errors': serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
+
+class TrayViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    lookup_field = 'tray_id'
+
+    def get_queryset(self):
+        qs = Tray.objects.all().order_by('-created_at')
+        status_param = self.request.query_params.get('status')
+        if status_param:
+            qs = qs.filter(status=status_param.upper())
+        search = self.request.query_params.get('search')
+        if search:
+            qs = qs.filter(tray_code__icontains=search)
+        return qs
+
+    def get_serializer_class(self):
+        return TraySerializer
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({'success': True, 'data': {'results': serializer.data}})
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({'success': True, 'data': serializer.data},
+                            status=status.HTTP_201_CREATED)
+        return Response({'success': False, 'errors': serializer.errors},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({'success': True, 'data': serializer.data})
+        return Response({'success': False, 'errors': serializer.errors},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.delete()
+        return Response({'success': True, 'message': 'Tray deleted successfully'})
+
+

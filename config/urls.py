@@ -21,7 +21,7 @@ urlpatterns = [
     path('api/analytics/', include('apps.analytics.urls')),
     
     # Common/Developer endpoints
-    path('api/', include('apps.common.urls'))
+    path('api/common/', include('apps.common.urls'))
 ]
 
 # Serve media files in development
