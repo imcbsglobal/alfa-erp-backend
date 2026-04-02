@@ -43,6 +43,7 @@ from .views import (
     GetBoxingDataView,
     CompleteBoxingView,
     InvoicePublicDetailView,
+    BatchPickingHistoryView,
 )
 from .admin_views import AdminCompleteWorkflowView, AdminBulkStatusUpdateView, AdminBulkStatusHistoryView
 
@@ -112,6 +113,7 @@ urlpatterns = [
     
     # Missing Invoice Finder
     path("missing-invoices/", MissingInvoiceFinderView.as_view(), name="missing-invoices"),
+    path('picking/batch-history/', BatchPickingHistoryView.as_view(), name='picking-batch-history'),
     
     # Invoice Report
     path("invoice-report/", InvoiceReportView.as_view(), name="invoice-report"),
