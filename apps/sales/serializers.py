@@ -628,7 +628,7 @@ class DeliverySessionCreateSerializer(serializers.Serializer):
                         "pickup_person_phone": "Phone number is required for patient pickup."
                     })
 
-            # COMPANY: name + phone + company name + company ID required
+            # COMPANY: name + phone + company name required (company ID is optional)
             elif counter_sub_mode == 'company':
                 if not data.get('pickup_person_name'):
                     raise serializers.ValidationError({
@@ -641,10 +641,6 @@ class DeliverySessionCreateSerializer(serializers.Serializer):
                 if not data.get('pickup_company_name'):
                     raise serializers.ValidationError({
                         "pickup_company_name": "Company name is required for company pickup."
-                    })
-                if not data.get('pickup_company_id'):
-                    raise serializers.ValidationError({
-                        "pickup_company_id": "Company ID is required for company pickup."
                     })
         
         # For COURIER, courier_name is optional (will be added when staff completes delivery)

@@ -849,15 +849,9 @@ class StartDeliveryView(APIView):
             )
 
         elif delivery_type == 'DIRECT':
-            # DIRECT (counter pickup) — keep original single-invoice behaviour
-            # Wrap into the existing single-invoice serializer path
-            if len(invoice_nos) > 1:
-                return Response({
-                    "success": False,
-                    "message": "Counter pickup (DIRECT) does not support group dispatch"
-                }, status=status.HTTP_400_BAD_REQUEST)
-            # Fall through to single-invoice handling below
-            return self._handle_single_direct(request, invoice_nos[0])
+            # DIRECT (counter pickup) now supports both single and group dispatch
+            # Extract pickup information for all invoices
+            pass
 
         else:
             return Response({
@@ -915,6 +909,20 @@ class StartDeliveryView(APIView):
                 delivery_data['assigned_to']    = assigned_user
                 delivery_data['delivery_status'] = 'TO_CONSIDER'
                 invoice.status = 'PACKED'
+
+            elif delivery_type == 'DIRECT':
+                # Counter pickup — mark as DELIVERED immediately
+                delivery_data.update({
+                    'counter_sub_mode':    request.data.get('counter_sub_mode'),
+                    'pickup_person_name':  request.data.get('pickup_person_name', ''),
+                    'pickup_person_phone': request.data.get('pickup_person_phone'),
+                    'pickup_company_name': request.data.get('pickup_company_name', ''),
+                    'pickup_company_id':   request.data.get('pickup_company_id', ''),
+                    'end_time':            timezone.now(),
+                    'delivery_status':     'DELIVERED',
+                    'delivered_by':        request.user,
+                })
+                invoice.status = 'DELIVERED'
 
             try:
                 session = DeliverySession.objects.create(**delivery_data)
