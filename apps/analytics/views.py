@@ -33,19 +33,23 @@ def compute_today_stats(today):
     Compute dashboard stats for today.
     
     KEY DEFINITIONS:
-    - holdInvoices: Invoices created YESTERDAY and BEFORE with status='INVOICED' (awaiting picking)
+    - holdInvoices: All invoices created YESTERDAY+ in hold workflow (INVOICED + PICKING + PICKED)
+      = invoices not yet picked (INVOICED) + ones picked today (PICKING/PICKED)
+    - completedHoldInvoices: Picking sessions TODAY for invoices created BEFORE today
+      = how many of the hold invoices were picked/processed today
+    - Display format: "completed / total" e.g., "48 / 58" (48 picked today, 58 total pending)
     - totalInvoices: Invoices created TODAY only
     - completedPicking: Picking sessions completed TODAY (any invoice date)
-    - completedHoldInvoices: Picking sessions TODAY for invoices created BEFORE today
     - completedPacking: Packing sessions completed TODAY
     - completedDelivery: Delivery sessions completed TODAY
     """
     
-    # ── 1. HOLD INVOICES: Invoices created BEFORE today with status='INVOICED'
-    # These will move to "Today's Invoices" tomorrow - shows yesterday's pending + older
+    # ── 1. HOLD INVOICES: Invoices created BEFORE today in hold workflow statuses
+    # Includes: INVOICED (not yet picked) + PICKING/PICKED (in progress/picked today)
+    # Shows yesterday's pending (not picked) + ones picked today = total hold count
     hold_invoices = Invoice.objects.filter(
         created_at__date__lt=today,  # Created BEFORE today (yesterday, day before, etc)
-        status='INVOICED'  # Not yet picked
+        status__in=['INVOICED', 'PICKING', 'PICKED']  # In hold workflow (not yet packed/dispatched)
     ).count()
 
     # ── 2. TODAY'S INVOICES: Total invoices created TODAY
@@ -161,11 +165,11 @@ class DashboardStatsSSEView(View):
                 try:
                     today = timezone.localdate()
                     
-                    # ── Hold invoices count: created BEFORE today with status INVOICED (yesterday + older)
+                    # ── Hold invoices count: created BEFORE today in hold workflow (INVOICED + PICKING + PICKED)
                     hold_invoices = await asyncio.to_thread(
                         lambda: Invoice.objects.filter(
                             created_at__date__lt=today,
-                            status='INVOICED'
+                            status__in=['INVOICED', 'PICKING', 'PICKED']
                         ).count()
                     )
 
