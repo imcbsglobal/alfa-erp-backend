@@ -1755,8 +1755,12 @@ class PickingHistoryView(generics.ListAPIView):
     Query Parameters:
     - search: Search by invoice number or customer details
     - status: Filter by picking_status (PREPARING, PICKED, VERIFIED, CANCELLED, REVIEW)
-    - start_date: Filter by date (YYYY-MM-DD) - sessions created on or after
-    - end_date: Filter by date (YYYY-MM-DD) - sessions created on or before
+    - invoice_start_date: Filter by invoice creation date (YYYY-MM-DD) - invoices created on or after
+    - invoice_end_date: Filter by invoice creation date (YYYY-MM-DD) - invoices created on or before
+    - picking_start_date: Filter by picking session date (YYYY-MM-DD) - sessions created on or after
+    - picking_end_date: Filter by picking session date (YYYY-MM-DD) - sessions created on or before
+    - start_date: (deprecated) Use picking_start_date instead
+    - end_date: (deprecated) Use picking_end_date instead
     - page: Page number for pagination
     - page_size: Number of results per page (default: 10, max: 100)
     
@@ -1809,31 +1813,45 @@ class PickingHistoryView(generics.ListAPIView):
                 Q(picker__email__icontains=search)
             )
         
-        # Status filter
-        status_filter = self.request.query_params.get('status', '').strip().upper()
-        if status_filter and status_filter in ['PREPARING', 'PICKED', 'VERIFIED', 'CANCELLED', 'REVIEW']:
-            queryset = queryset.filter(picking_status=status_filter)
-            # Debug logging
-            count = queryset.count()
-            print(f"PickingHistoryView: Filtering by status={status_filter}, found {count} records")
         
         # Date filters
-        start_date = self.request.query_params.get('start_date')
-        end_date = self.request.query_params.get('end_date')
+        # ── PICKING SESSION DATE: When the picking happened (picking session created_at)
+        picking_start_date = self.request.query_params.get('picking_start_date') or self.request.query_params.get('start_date')
+        picking_end_date = self.request.query_params.get('picking_end_date') or self.request.query_params.get('end_date')
         
-        if start_date:
+        if picking_start_date:
             from datetime import datetime
             try:
-                start_dt = datetime.strptime(start_date, '%Y-%m-%d').date()
+                start_dt = datetime.strptime(picking_start_date, '%Y-%m-%d').date()
                 queryset = queryset.filter(created_at__date__gte=start_dt)
             except ValueError:
                 pass  # Invalid date format, skip filter
         
-        if end_date:
+        if picking_end_date:
             from datetime import datetime
             try:
-                end_dt = datetime.strptime(end_date, '%Y-%m-%d').date()
+                end_dt = datetime.strptime(picking_end_date, '%Y-%m-%d').date()
                 queryset = queryset.filter(created_at__date__lte=end_dt)
+            except ValueError:
+                pass  # Invalid date format, skip filter
+        
+        # ── INVOICE DATE: When the invoice was created (invoice created_at)
+        invoice_start_date = self.request.query_params.get('invoice_start_date')
+        invoice_end_date = self.request.query_params.get('invoice_end_date')
+        
+        if invoice_start_date:
+            from datetime import datetime
+            try:
+                start_dt = datetime.strptime(invoice_start_date, '%Y-%m-%d').date()
+                queryset = queryset.filter(invoice__created_at__date__gte=start_dt)
+            except ValueError:
+                pass  # Invalid date format, skip filter
+        
+        if invoice_end_date:
+            from datetime import datetime
+            try:
+                end_dt = datetime.strptime(invoice_end_date, '%Y-%m-%d').date()
+                queryset = queryset.filter(invoice__created_at__date__lte=end_dt)
             except ValueError:
                 pass  # Invalid date format, skip filter
         
