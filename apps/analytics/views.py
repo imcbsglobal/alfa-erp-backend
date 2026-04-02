@@ -33,17 +33,18 @@ def compute_today_stats(today):
     Compute dashboard stats for today.
     
     KEY DEFINITIONS:
-    - holdInvoices: All invoices with status='INVOICED' (awaiting picking) - includes old + new
+    - holdInvoices: Invoices created YESTERDAY and BEFORE with status='INVOICED' (awaiting picking)
     - totalInvoices: Invoices created TODAY only
     - completedPicking: Picking sessions completed TODAY (any invoice date)
-    - completedHoldInvoices: Picking sessions TODAY that picked invoices (now not INVOICED)
+    - completedHoldInvoices: Picking sessions TODAY for invoices created BEFORE today
     - completedPacking: Packing sessions completed TODAY
     - completedDelivery: Delivery sessions completed TODAY
     """
     
-    # ── 1. HOLD INVOICES: All invoices still awaiting picking (TODAY + YESTERDAY + BEFORE)
-    # Dynamic count, not from snapshot - ensures completedHoldInvoices never exceeds this
+    # ── 1. HOLD INVOICES: Invoices created BEFORE today with status='INVOICED'
+    # These will move to "Today's Invoices" tomorrow - shows yesterday's pending + older
     hold_invoices = Invoice.objects.filter(
+        created_at__date__lt=today,  # Created BEFORE today (yesterday, day before, etc)
         status='INVOICED'  # Not yet picked
     ).count()
 
@@ -70,15 +71,15 @@ def compute_today_stats(today):
         delivery_status='DELIVERED'
     ).count()
 
-    # ── 6. COMPLETED HOLD INVOICES: Picking sessions TODAY for originally-hold invoices
-    # Count picking sessions that completed today where the invoice is no longer in INVOICED state
+    # ── 6. COMPLETED HOLD INVOICES: Picking sessions TODAY for invoices created BEFORE today
+    # Only counts picking of YESTERDAY's (and older) invoices that happened today
     completed_hold_invoices = PickingSession.objects.filter(
         end_time__date=today,
         picking_status='PICKED',
-        invoice__status__in=['PICKED', 'PACKING', 'PACKED', 'DELIVERED']  # Status changed from INVOICED
+        invoice__created_at__date__lt=today  # Invoice created BEFORE today
     ).count()
     
-    # Cap it at hold_invoices to prevent inconsistency
+    # Safety cap to prevent inconsistency
     completed_hold_invoices = min(completed_hold_invoices, hold_invoices)
 
     # ── 7. PENDING INVOICES: How many of the hold invoices are still not picked
@@ -160,9 +161,12 @@ class DashboardStatsSSEView(View):
                 try:
                     today = timezone.localdate()
                     
-                    # ── Dynamic hold invoices count (not from snapshot)
+                    # ── Hold invoices count: created BEFORE today with status INVOICED (yesterday + older)
                     hold_invoices = await asyncio.to_thread(
-                        lambda: Invoice.objects.filter(status='INVOICED').count()
+                        lambda: Invoice.objects.filter(
+                            created_at__date__lt=today,
+                            status='INVOICED'
+                        ).count()
                     )
 
                     total_invoices_today = await asyncio.to_thread(
@@ -178,12 +182,12 @@ class DashboardStatsSSEView(View):
                         lambda: DeliverySession.objects.filter(end_time__date=today, delivery_status='DELIVERED').count()
                     )
                     
-                    # ── Completed hold invoices: picking sessions today for invoice status changed from INVOICED
+                    # ── Completed hold invoices: picking sessions today for invoices created BEFORE today
                     completed_hold_invoices = await asyncio.to_thread(
                         lambda: PickingSession.objects.filter(
                             end_time__date=today,
                             picking_status='PICKED',
-                            invoice__status__in=['PICKED', 'PACKING', 'PACKED', 'DELIVERED']
+                            invoice__created_at__date__lt=today
                         ).count()
                     )
                     # Cap at hold_invoices to prevent inconsistency
