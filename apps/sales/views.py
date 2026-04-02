@@ -3743,48 +3743,5 @@ class CompleteBoxingView(APIView):
             }
         }, status=200)
 
-class BatchPickingHistoryView(APIView):
-    """
-    POST /api/sales/picking/batch-history/
-    Fetch picking session data for multiple invoices in a single request.
-    Eliminates N+1 queries from the packing report page.
-    
-    Body: { "invoice_nos": ["INV-001", "INV-002", ...] }
-    Returns: { "INV-001": { picking data }, "INV-002": { ... } }
-    """
-    permission_classes = [IsAuthenticated]
 
-    def post(self, request):
-        invoice_nos = request.data.get("invoice_nos", [])
-        if not invoice_nos or not isinstance(invoice_nos, list):
-            return Response({"success": False, "message": "invoice_nos list is required"}, status=400)
-
-        # Limit to prevent abuse
-        invoice_nos = invoice_nos[:500]
-
-        sessions = PickingSession.objects.filter(
-            invoice__invoice_no__in=invoice_nos
-        ).select_related(
-            "invoice",
-            "picker"
-        ).only(
-            "invoice__invoice_no",
-            "start_time",
-            "end_time",
-            "created_at",
-            "picker__email",
-            "picker__name",
-        )
-
-        result = {}
-        for session in sessions:
-            inv_no = session.invoice.invoice_no
-            result[inv_no] = {
-                "invoice_no": inv_no,
-                "start_time": session.start_time,
-                "end_time": session.end_time,
-                "created_at": session.created_at,
-            }
-
-        return Response({"success": True, "data": result})
 
