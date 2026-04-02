@@ -29,33 +29,60 @@ def get_or_create_today_snapshot(today):
 
 
 def compute_today_stats(today):
-    snapshot = get_or_create_today_snapshot(today)
-    hold_invoices = snapshot.hold_count
+    """
+    Compute dashboard stats for today.
+    
+    KEY DEFINITIONS:
+    - holdInvoices: All invoices with status='INVOICED' (awaiting picking) - includes old + new
+    - totalInvoices: Invoices created TODAY only
+    - completedPicking: Picking sessions completed TODAY (any invoice date)
+    - completedHoldInvoices: Picking sessions TODAY that picked invoices (now not INVOICED)
+    - completedPacking: Packing sessions completed TODAY
+    - completedDelivery: Delivery sessions completed TODAY
+    """
+    
+    # ── 1. HOLD INVOICES: All invoices still awaiting picking (TODAY + YESTERDAY + BEFORE)
+    # Dynamic count, not from snapshot - ensures completedHoldInvoices never exceeds this
+    hold_invoices = Invoice.objects.filter(
+        status='INVOICED'  # Not yet picked
+    ).count()
 
-    total_invoices_today = Invoice.objects.filter(created_at__date=today).count()
+    # ── 2. TODAY'S INVOICES: Total invoices created TODAY
+    total_invoices_today = Invoice.objects.filter(
+        created_at__date=today
+    ).count()
 
+    # ── 3. COMPLETED PICKING: All picking sessions completed TODAY (any invoice date)
     completed_picking = PickingSession.objects.filter(
         end_time__date=today,
         picking_status='PICKED'
     ).count()
 
+    # ── 4. COMPLETED PACKING: All packing sessions completed TODAY
     completed_packing = PackingSession.objects.filter(
         end_time__date=today,
         packing_status='PACKED'
     ).count()
 
+    # ── 5. COMPLETED DELIVERY: All delivery sessions completed TODAY
     completed_delivery = DeliverySession.objects.filter(
         end_time__date=today,
         delivery_status='DELIVERED'
     ).count()
 
-    pending_invoices = max((hold_invoices + total_invoices_today) - completed_picking, 0)
-
+    # ── 6. COMPLETED HOLD INVOICES: Picking sessions TODAY for originally-hold invoices
+    # Count picking sessions that completed today where the invoice is no longer in INVOICED state
     completed_hold_invoices = PickingSession.objects.filter(
         end_time__date=today,
         picking_status='PICKED',
-        invoice__created_at__date__lt=today,
+        invoice__status__in=['PICKED', 'PACKING', 'PACKED', 'DELIVERED']  # Status changed from INVOICED
     ).count()
+    
+    # Cap it at hold_invoices to prevent inconsistency
+    completed_hold_invoices = min(completed_hold_invoices, hold_invoices)
+
+    # ── 7. PENDING INVOICES: How many of the hold invoices are still not picked
+    pending_invoices = max(hold_invoices - completed_picking, 0)
 
     return {
         'holdInvoices': hold_invoices,
@@ -132,8 +159,11 @@ class DashboardStatsSSEView(View):
             while True:
                 try:
                     today = timezone.localdate()
-                    snapshot = await asyncio.to_thread(lambda: get_or_create_today_snapshot(today))
-                    hold_invoices = snapshot.hold_count
+                    
+                    # ── Dynamic hold invoices count (not from snapshot)
+                    hold_invoices = await asyncio.to_thread(
+                        lambda: Invoice.objects.filter(status='INVOICED').count()
+                    )
 
                     total_invoices_today = await asyncio.to_thread(
                         lambda: Invoice.objects.filter(created_at__date=today).count()
@@ -147,14 +177,19 @@ class DashboardStatsSSEView(View):
                     completed_delivery = await asyncio.to_thread(
                         lambda: DeliverySession.objects.filter(end_time__date=today, delivery_status='DELIVERED').count()
                     )
+                    
+                    # ── Completed hold invoices: picking sessions today for invoice status changed from INVOICED
                     completed_hold_invoices = await asyncio.to_thread(
                         lambda: PickingSession.objects.filter(
                             end_time__date=today,
                             picking_status='PICKED',
-                            invoice__created_at__date__lt=today,
+                            invoice__status__in=['PICKED', 'PACKING', 'PACKED', 'DELIVERED']
                         ).count()
                     )
-                    pending_invoices = max((hold_invoices + total_invoices_today) - completed_picking, 0)
+                    # Cap at hold_invoices to prevent inconsistency
+                    completed_hold_invoices = min(completed_hold_invoices, hold_invoices)
+                    
+                    pending_invoices = max(hold_invoices - completed_picking, 0)
 
                     data = {
                         'date': today.isoformat(),
