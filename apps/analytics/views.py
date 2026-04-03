@@ -29,74 +29,54 @@ def get_or_create_today_snapshot(today):
 
 
 def compute_today_stats(today):
-    """
-    Compute dashboard stats for today.
-    
-    KEY DEFINITIONS:
-    - holdInvoices: All invoices created YESTERDAY+ in hold workflow (INVOICED + PICKING + PICKED)
-      = invoices not yet picked (INVOICED) + ones picked today (PICKING/PICKED)
-    - completedHoldInvoices: Picking sessions TODAY for invoices created BEFORE today
-      = how many of the hold invoices were picked/processed today
-    - Display format: "completed / total" e.g., "48 / 58" (48 picked today, 58 total pending)
-    - totalInvoices: Invoices created TODAY only
-    - completedPicking: Picking sessions completed TODAY (any invoice date)
-    - completedPacking: Packing sessions completed TODAY
-    - completedDelivery: Delivery sessions completed TODAY
-    """
-    
-    # ── 1. HOLD INVOICES: Invoices created BEFORE today in hold workflow statuses
-    # Includes: INVOICED (not yet picked) + PICKING/PICKED (in progress/picked today)
-    # Shows yesterday's pending (not picked) + ones picked today = total hold count
-    hold_invoices = Invoice.objects.filter(
-        created_at__date__lt=today,
-        status='INVOICED'
-    ).count()
+    # ── 1. HOLD INVOICES: Use frozen daily snapshot
+    snapshot = get_or_create_today_snapshot(today)
+    hold_invoices = snapshot.hold_count  # frozen all day
 
-    # ── 2. TODAY'S INVOICES: Total invoices created TODAY
+    # ── 2. TODAY'S INVOICES
     total_invoices_today = Invoice.objects.filter(
         created_at__date=today
     ).count()
 
-    # ── 3. COMPLETED PICKING: All picking sessions completed TODAY (any invoice date)
+    # ── 3. COMPLETED PICKING
     completed_picking = PickingSession.objects.filter(
         end_time__date=today,
         picking_status='PICKED'
     ).count()
 
-    # ── 4. COMPLETED PACKING: All packing sessions completed TODAY
+    # ── 4. COMPLETED PACKING
     completed_packing = PackingSession.objects.filter(
         end_time__date=today,
         packing_status='PACKED'
     ).count()
 
-    # ── 5. COMPLETED DELIVERY: All delivery sessions completed TODAY
+    # ── 5. COMPLETED DELIVERY
     completed_delivery = DeliverySession.objects.filter(
         end_time__date=today,
         delivery_status='DELIVERED'
     ).count()
 
-    # ── 6. COMPLETED HOLD INVOICES: Picking sessions TODAY for invoices created BEFORE today
-    # Only counts picking of YESTERDAY's (and older) invoices that happened today
+    # ── 6. COMPLETED HOLD INVOICES: live count of how many hold invoices picked today
     completed_hold_invoices = PickingSession.objects.filter(
         end_time__date=today,
         picking_status='PICKED',
-        invoice__created_at__date__lt=today  # Invoice created BEFORE today
+        invoice__created_at__date__lt=today
     ).count()
-    
-    # Safety cap to prevent inconsistency
+
+    # Safety cap — completed can never exceed total
     completed_hold_invoices = min(completed_hold_invoices, hold_invoices)
 
-    # ── 7. PENDING INVOICES: How many of the hold invoices are still not picked
-    pending_invoices = max(hold_invoices - completed_picking, 0)
+    # ── 7. PENDING
+    pending_invoices = max(hold_invoices - completed_hold_invoices, 0)
 
     return {
-        'holdInvoices': hold_invoices,
+        'holdInvoices': hold_invoices,           # frozen
         'totalInvoices': total_invoices_today,
         'completedPicking': completed_picking,
         'completedPacking': completed_packing,
         'completedDelivery': completed_delivery,
         'pendingInvoices': pending_invoices,
-        'completedHoldInvoices': completed_hold_invoices,
+        'completedHoldInvoices': completed_hold_invoices,  # live
     }
 
 
@@ -166,12 +146,10 @@ class DashboardStatsSSEView(View):
                     today = timezone.localdate()
                     
                     # ── Hold invoices count: created BEFORE today in hold workflow (INVOICED + PICKING + PICKED)
-                    hold_invoices = await asyncio.to_thread(
-                        lambda: Invoice.objects.filter(
-                            created_at__date__lt=today,
-                            status='INVOICED'
-                        ).count()
+                    snapshot = await asyncio.to_thread(
+                        lambda: get_or_create_today_snapshot(today)
                     )
+                    hold_invoices = snapshot.hold_count  # frozen
 
                     total_invoices_today = await asyncio.to_thread(
                         lambda: Invoice.objects.filter(created_at__date=today).count()
