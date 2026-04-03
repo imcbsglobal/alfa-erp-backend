@@ -1845,16 +1845,21 @@ class PickingHistoryView(generics.ListAPIView):
                 start_dt = datetime.strptime(invoice_start_date, '%Y-%m-%d').date()
                 queryset = queryset.filter(invoice__created_at__date__gte=start_dt)
             except ValueError:
-                pass  # Invalid date format, skip filter
-        
+                pass
+
         if invoice_end_date:
             from datetime import datetime
             try:
                 end_dt = datetime.strptime(invoice_end_date, '%Y-%m-%d').date()
                 queryset = queryset.filter(invoice__created_at__date__lte=end_dt)
             except ValueError:
-                pass  # Invalid date format, skip filter
-        
+                pass
+
+        # ── STATUS FILTER: Filter by picking_status ──────────────────────────
+        status_filter = self.request.query_params.get('status', '').strip().upper()
+        if status_filter and status_filter in ['PREPARING', 'PICKED', 'VERIFIED', 'CANCELLED', 'REVIEW']:
+            queryset = queryset.filter(picking_status=status_filter)
+
         return queryset
 
 
