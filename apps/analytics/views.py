@@ -48,8 +48,8 @@ def compute_today_stats(today):
     # Includes: INVOICED (not yet picked) + PICKING/PICKED (in progress/picked today)
     # Shows yesterday's pending (not picked) + ones picked today = total hold count
     hold_invoices = Invoice.objects.filter(
-        created_at__date__lt=today,  # Created BEFORE today (yesterday, day before, etc)
-        status__in=['INVOICED', 'PICKING', 'PICKED']  # In hold workflow (not yet packed/dispatched)
+        created_at__date__lt=today,
+        status='INVOICED'
     ).count()
 
     # ── 2. TODAY'S INVOICES: Total invoices created TODAY
@@ -169,7 +169,7 @@ class DashboardStatsSSEView(View):
                     hold_invoices = await asyncio.to_thread(
                         lambda: Invoice.objects.filter(
                             created_at__date__lt=today,
-                            status__in=['INVOICED', 'PICKING', 'PICKED']
+                            status='INVOICED'
                         ).count()
                     )
 
