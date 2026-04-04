@@ -1082,6 +1082,10 @@ class CourierSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(obj.courier_logo.url)
         return obj.courier_logo.url
 
+    def create(self, validated_data):
+        validated_data.pop('remove_courier_logo', None)
+        return super().create(validated_data)
+
     def update(self, instance, validated_data):
         remove_courier_logo = validated_data.pop('remove_courier_logo', False)
 
