@@ -175,7 +175,7 @@ class DashboardStatsSSEView(View):
                     # Cap at hold_invoices to prevent inconsistency
                     completed_hold_invoices = min(completed_hold_invoices, hold_invoices)
                     
-                    pending_invoices = max(hold_invoices - completed_picking, 0)
+                    pending_invoices = max(hold_invoices - completed_hold_invoices, 0)
 
                     data = {
                         'date': today.isoformat(),
@@ -265,9 +265,11 @@ class StatusBreakdownView(APIView):
                 delivery_status='DELIVERED',
             ).count()
 
-            # Preparing: Delivery sessions with TO_CONSIDER and IN_TRANSIT status together
+            # Preparing: only sessions where the invoice is NOT yet DELIVERED
             delivery_preparing = DeliverySession.objects.filter(
                 delivery_status__in=['TO_CONSIDER', 'IN_TRANSIT'],
+            ).exclude(
+                invoice__status='DELIVERED'
             ).count()
 
             # Pending: Invoices with PACKED status but no delivery session yet
