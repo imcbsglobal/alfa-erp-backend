@@ -1393,10 +1393,10 @@ class UploadCourierSlipView(APIView):
         slip = request.FILES.get("courier_slip")
         tracking_no = request.data.get("tracking_no", "")
 
-        if not invoice_nos or not slip:
+        if not invoice_nos:
             return Response({
                 "success": False,
-                "message": "courier_slip and at least one of invoice_no, invoice_nos, or boxing_group_id are required"
+                "message": "At least one of invoice_no, invoice_nos, or boxing_group_id is required"
             }, status=status.HTTP_400_BAD_REQUEST)
 
         # Deduplicate while keeping first occurrence order.
@@ -1440,12 +1440,13 @@ class UploadCourierSlipView(APIView):
                 "errors": validation_errors,
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        slip_bytes = slip.read()
+        slip_bytes = slip.read() if slip else None
         now = timezone.now()
 
         with transaction.atomic():
             for delivery in target_deliveries:
-                delivery.courier_slip = ContentFile(slip_bytes, name=slip.name)
+                if slip:
+                    delivery.courier_slip = ContentFile(slip_bytes, name=slip.name)
                 if tracking_no:
                     delivery.tracking_no = tracking_no
 

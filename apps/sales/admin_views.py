@@ -291,6 +291,37 @@ class AdminBulkStatusUpdateView(APIView):
 
         qs.update(status=to_status)
 
+        # ── Also update the corresponding session records ──────────────────
+        now = timezone.now()
+        invoice_nos = [inv['invoice_no'] for inv in affected]
+
+        if from_status == 'INVOICED' and to_status == 'PICKED':
+            PickingSession.objects.filter(
+                invoice__invoice_no__in=invoice_nos,
+                picking_status='PREPARING'
+            ).update(
+                picking_status='PICKED',
+                end_time=now
+            )
+
+        elif from_status == 'PICKED' and to_status == 'PACKED':
+            PackingSession.objects.filter(
+                invoice__invoice_no__in=invoice_nos,
+                packing_status__in=['IN_PROGRESS', 'CHECKING', 'PENDING']
+            ).update(
+                packing_status='PACKED',
+                end_time=now
+            )
+
+        elif from_status == 'PACKED' and to_status == 'DELIVERED':
+            DeliverySession.objects.filter(
+                invoice__invoice_no__in=invoice_nos,
+                delivery_status__in=['TO_CONSIDER', 'IN_TRANSIT']
+            ).update(
+                delivery_status='DELIVERED',
+                end_time=now
+            )
+
         # Persist audit log to DB
         snapshot = [
             {
