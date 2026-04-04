@@ -7,10 +7,10 @@ router = DefaultRouter()
 router.register(r'trays', TrayViewSet, basename='tray')
 
 urlpatterns = [
-    path('/table-stats/', TableStatsView.as_view(), name='developer-table-stats'),
-    path('/clear-data/', ClearDataView.as_view(), name='developer-clear-data'),
-    path('/reset-sequences/', ResetSequencesView.as_view(), name='developer-reset-sequences'),
-    path('/truncate-table/', TruncateTableView.as_view(), name='developer-truncate-table'),
-    path('/developer-settings/', DeveloperSettingsView.as_view(), name='developer-settings'),
+    path('table-stats/', TableStatsView.as_view(), name='developer-table-stats'),
+    path('clear-data/', ClearDataView.as_view(), name='developer-clear-data'),
+    path('reset-sequences/', ResetSequencesView.as_view(), name='developer-reset-sequences'),
+    path('truncate-table/', TruncateTableView.as_view(), name='developer-truncate-table'),
+    path('developer-settings/', DeveloperSettingsView.as_view(), name='developer-settings'),
     path('', include(router.urls)),
 ]
