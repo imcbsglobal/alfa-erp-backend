@@ -1,7 +1,7 @@
 # apps/sales/serializers.py
 
 from rest_framework import serializers
-from .models import Invoice, InvoiceItem, InvoiceReturn, Customer, Salesman, PickingSession, PackingSession, DeliverySession, Box, BoxItem
+from .models import Invoice, InvoiceItem, InvoiceReturn, Customer, Salesman, PickingSession, PackingSession, DeliverySession, Box, BoxItem, DeliveryCourierAuditLog
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 
@@ -138,6 +138,7 @@ class InvoiceListSerializer(serializers.ModelSerializer):
                 "held_by_email": packing_session.held_by.email if packing_session.held_by else None,
                 "held_by_name": packing_session.held_by.get_full_name() or packing_session.held_by.username if packing_session.held_by else None,
                 "boxing_group_id": packing_session.boxing_group_id,
+                "label_count": packing_session.label_count,
             }
         except:
             return None
@@ -158,6 +159,7 @@ class InvoiceListSerializer(serializers.ModelSerializer):
                 "tracking_no": delivery.tracking_no,
                 "start_time": delivery.start_time,
                 "end_time": delivery.end_time,
+                "box_weights": delivery.box_weights,
             }
             
             # Add counter pickup specific info
@@ -665,7 +667,7 @@ class DeliverySessionReadSerializer(serializers.ModelSerializer):
             'id', 'invoice', 'invoice_no', 'delivery_type', 
             'assigned_to', 'assigned_to_name', 'assigned_to_email',
             'delivered_by', 'delivered_by_name', 'delivered_by_email',
-            'courier_name', 'tracking_no',
+            'courier_name', 'tracking_no', 'box_weights',
             'start_time', 'end_time', 'delivery_status', 'notes',
             'duration_minutes', 'created_at',
             # Counter pickup fields
@@ -875,6 +877,8 @@ class DeliveryHistorySerializer(serializers.ModelSerializer):
     )
     duration = serializers.SerializerMethodField()
     boxing_group_id = serializers.SerializerMethodField()
+    label_count = serializers.SerializerMethodField()  # ✅ NUMBER OF BOXES
+    invoice_box_weights = serializers.SerializerMethodField()  # ✅ INDIVIDUAL INVOICE WEIGHTS
     courier_slip_url = serializers.SerializerMethodField()  # ✅ NEW FIELD
     attachment_url = serializers.SerializerMethodField()
     
@@ -886,9 +890,9 @@ class DeliveryHistorySerializer(serializers.ModelSerializer):
             'salesman_name', 'temp_name', 'delivery_type', 'delivery_user_email', 'delivery_user_name',
             'counter_sub_mode', 'pickup_person_name', 'pickup_person_phone',
             'pickup_company_name', 'pickup_company_id',
-            'courier_name', 'tracking_no', 'delivery_status', 'items', 'Total',
+            'courier_name', 'tracking_no', 'box_weights', 'invoice_box_weights', 'delivery_status', 'items', 'Total',
             'start_time', 'end_time', 'duration', 'notes', 'created_at',
-            'boxing_group_id', 'courier_slip_url', 'attachment_url' , 'delivery_latitude', 'delivery_longitude', 
+            'boxing_group_id', 'label_count', 'courier_slip_url', 'attachment_url' , 'delivery_latitude', 'delivery_longitude', 
             'delivery_location_address', 'delivery_location_accuracy'
         ]
 
@@ -944,6 +948,65 @@ class DeliveryHistorySerializer(serializers.ModelSerializer):
             return obj.invoice.packingsession.boxing_group_id
         except Exception:
             return None
+    
+    def get_label_count(self, obj):
+        """Return the actual number of boxes for this specific invoice"""
+        try:
+            # Count actual boxes created for this invoice
+            from .models import Box
+            box_count = Box.objects.filter(invoice=obj.invoice).count()
+            if box_count > 0:
+                return box_count
+            # Fallback: use packing session label_count if no boxes found
+            return obj.invoice.packingsession.label_count or 0
+        except Exception:
+            return 0
+
+    def get_invoice_box_weights(self, obj):
+        """Return box weights specific to this invoice based on its box count"""
+        try:
+            from .models import Box
+            
+            # Get this invoice's box count
+            invoice_box_count = Box.objects.filter(invoice=obj.invoice).count()
+            if invoice_box_count == 0:
+                invoice_box_count = obj.invoice.packingsession.label_count or 0
+            
+            # Get the delivery session's box_weights (group weights)
+            group_weights = obj.box_weights
+            if not group_weights or not isinstance(group_weights, list):
+                return None
+            
+            # If weights array is empty, return None
+            if len(group_weights) == 0:
+                return None
+            
+            # Get total box count for the delivery group
+            from django.db.models import Count
+            from .models import DeliverySession
+            
+            total_group_boxes = DeliverySession.objects.filter(
+                id=obj.id
+            ).aggregate(
+                total=Count('invoice__boxes', distinct=True)
+            )['total'] or len(group_weights)
+            
+            # If this invoice has all boxes, return all weights
+            if invoice_box_count >= total_group_boxes:
+                return group_weights
+            
+            # Calculate average weight per box and multiply by this invoice's boxes
+            if total_group_boxes > 0:
+                total_weight = sum(group_weights)
+                avg_weight = total_weight / total_group_boxes
+                # Return array of weights for this invoice's boxes
+                invoice_weights = [avg_weight] * invoice_box_count
+                return invoice_weights
+            
+            return None
+        except Exception:
+            return None
+    
     
     def get_courier_slip_url(self, obj):
         """Return the full URL of the courier slip if it exists"""
@@ -1217,6 +1280,22 @@ class BoxInputSerializer(serializers.Serializer):
         return items
 
 
+# ===== Items Billed Today Serializers =====
+
+class ItemBilledTodaySerializer(serializers.Serializer):
+    """Serializer for items billed today with aggregated sales data"""
+    item_code = serializers.CharField(read_only=True)
+    item_name = serializers.CharField(read_only=True)
+    company_name = serializers.CharField(read_only=True)
+    total_quantity = serializers.IntegerField(read_only=True)
+    unit_price = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    total_revenue = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    number_of_bills = serializers.IntegerField(read_only=True)
+    packing = serializers.CharField(read_only=True, allow_null=True)
+    barcode = serializers.CharField(read_only=True, allow_null=True)
+    shelf_location = serializers.CharField(read_only=True, allow_null=True)
+
+
 
 class CompletePackingWithBoxesSerializer(serializers.Serializer):
     """Complete packing with box assignments"""
@@ -1370,3 +1449,21 @@ class CompletedPackingDataSerializer(serializers.Serializer):
     delivery_address = serializers.CharField(allow_blank=True)
     related_bills = serializers.ListField(child=serializers.CharField())
     boxes = BoxReadSerializer(many=True)
+
+
+# ===== DELIVERY COURIER AUDIT LOG SERIALIZERS =====
+
+class DeliveryCourierAuditLogSerializer(serializers.ModelSerializer):
+    """Serializer for courier change audit logs"""
+    changed_by_name_display = serializers.CharField(source='changed_by.name', read_only=True, allow_null=True)
+    changed_by_email = serializers.CharField(source='changed_by.email', read_only=True, allow_null=True)
+    invoice_no = serializers.CharField(source='invoice.invoice_no', read_only=True)
+    
+    class Meta:
+        model = DeliveryCourierAuditLog
+        fields = [
+            'id', 'delivery_session', 'invoice', 'invoice_no', 'changed_by', 'changed_by_name_display',
+            'changed_by_email', 'changed_by_name', 'old_courier', 'old_courier_name', 'new_courier',
+            'new_courier_name', 'reason', 'changed_at'
+        ]
+        read_only_fields = ['id', 'invoice_no', 'changed_at']

@@ -5,7 +5,7 @@ from apps.accounts.models import User
 #INVOICE
 class Salesman(models.Model):
     name = models.CharField(max_length=150)
-    phone = models.CharField(max_length=20, null=True, blank=True)
+    phone = models.CharField(max_length=30, null=True, blank=True)
 
     def __str__(self):
         return self.name
@@ -18,8 +18,8 @@ class Customer(models.Model):
     address2 = models.TextField(blank=True)
     address3 = models.TextField(blank=True)
     pincode = models.CharField(max_length=10, blank=True)
-    phone1 = models.CharField(max_length=20, blank=True)
-    phone2 = models.CharField(max_length=20, blank=True)
+    phone1 = models.CharField(max_length=30, blank=True)
+    phone2 = models.CharField(max_length=30, blank=True)
     email = models.EmailField(blank=True)
 
     def __str__(self):
@@ -412,9 +412,10 @@ class DeliverySession(models.Model):
     attachment = models.FileField(upload_to='delivery_attachments/', blank=True, null=True)
     pickup_person_username = models.CharField(max_length=150, blank=True, null=True)
     pickup_person_name = models.CharField(max_length=150, blank=True, null=True)
-    pickup_person_phone = models.CharField(max_length=20, blank=True, null=True)
+    pickup_person_phone = models.CharField(max_length=30, blank=True, null=True)
     pickup_company_name = models.CharField(max_length=255, blank=True, null=True)
     pickup_company_id = models.CharField(max_length=100, blank=True, null=True)
+    box_weights = models.JSONField(blank=True, null=True, help_text="Array of weights for each box in the delivery")
     
     @property
     def attachment_url(self):
@@ -449,4 +450,81 @@ class BulkStatusUpdateLog(models.Model):
 
     def __str__(self):
         return f"{self.from_status}→{self.to_status} ({self.count}) @ {self.executed_at:%Y-%m-%d %H:%M}"
+
+
+class DeliveryCourierAuditLog(models.Model):
+    """
+    Audit log for tracking courier service changes in deliveries.
+    Records who changed it, when, and from which courier to which.
+    """
+    delivery_session = models.ForeignKey(
+        DeliverySession, 
+        on_delete=models.CASCADE, 
+        related_name='courier_audit_logs'
+    )
+    invoice = models.ForeignKey(
+        Invoice, 
+        on_delete=models.CASCADE, 
+        related_name='courier_change_logs',
+        help_text="Reference to the invoice being delivered"
+    )
+    changed_by = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='courier_changes',
+        help_text="User who made the courier change"
+    )
+    changed_by_name = models.CharField(
+        max_length=150, 
+        blank=True, 
+        null=True,
+        help_text="Username/name of person who changed the courier"
+    )
+    old_courier = models.ForeignKey(
+        'accounts.Courier',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='old_deliveries',
+        help_text="Previous courier service"
+    )
+    old_courier_name = models.CharField(
+        max_length=150, 
+        blank=True, 
+        null=True,
+        help_text="Name of old courier (snapshot)"
+    )
+    new_courier = models.ForeignKey(
+        'accounts.Courier',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='new_deliveries',
+        help_text="New courier service"
+    )
+    new_courier_name = models.CharField(
+        max_length=150, 
+        blank=True, 
+        null=True,
+        help_text="Name of new courier (snapshot)"
+    )
+    reason = models.TextField(
+        blank=True, 
+        null=True,
+        help_text="Reason for change (optional)"
+    )
+    changed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-changed_at']
+        indexes = [
+            models.Index(fields=['invoice', '-changed_at']),
+            models.Index(fields=['delivery_session', '-changed_at']),
+            models.Index(fields=['-changed_at']),
+        ]
+
+    def __str__(self):
+        return f"Courier change for {self.invoice.invoice_no}: {self.old_courier_name or 'None'} → {self.new_courier_name or 'None'} @ {self.changed_at:%Y-%m-%d %H:%M}"
 

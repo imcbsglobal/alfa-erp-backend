@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Invoice, InvoiceItem, InvoiceReturn, Customer, Salesman, PickingSession, PackingSession, DeliverySession, Box, BoxItem
+from .models import Invoice, InvoiceItem, InvoiceReturn, Customer, Salesman, PickingSession, PackingSession, DeliverySession, Box, BoxItem, DeliveryCourierAuditLog
 
 
 class InvoiceItemInline(admin.TabularInline):
@@ -92,3 +92,13 @@ class DeliverySessionAdmin(admin.ModelAdmin):
     list_filter = ['delivery_type', 'delivery_status', 'start_time']
     search_fields = ['invoice__invoice_no', 'assigned_to__email', 'tracking_no']
     raw_id_fields = ['invoice', 'assigned_to']
+
+
+@admin.register(DeliveryCourierAuditLog)
+class DeliveryCourierAuditLogAdmin(admin.ModelAdmin):
+    list_display = ['invoice', 'changed_by_name', 'old_courier_name', 'new_courier_name', 'changed_at']
+    list_filter = ['changed_at', 'new_courier']
+    search_fields = ['invoice__invoice_no', 'changed_by_name', 'old_courier_name', 'new_courier_name']
+    readonly_fields = ['changed_at', 'invoice', 'delivery_session']
+    raw_id_fields = ['changed_by', 'old_courier', 'new_courier']
+    date_hierarchy = 'changed_at'

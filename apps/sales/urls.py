@@ -27,6 +27,8 @@ from .views import (
     AssignDeliveryStaffView,
     EligibleDeliveryStaffView,
     UploadCourierSlipView,
+    UpdateDeliveryCourierView,
+    GetCourierAuditLogsView,
     CancelSessionView,
     MissingInvoiceFinderView,
     BulkPickingStartView,
@@ -43,6 +45,7 @@ from .views import (
     GetBoxingDataView,
     CompleteBoxingView,
     InvoicePublicDetailView,
+    ItemsBilledTodayView,
 )
 from .admin_views import AdminCompleteWorkflowView, AdminBulkStatusUpdateView, AdminBulkStatusHistoryView
 
@@ -98,6 +101,8 @@ urlpatterns = [
     path("delivery/eligible-staff/", EligibleDeliveryStaffView.as_view(), name="delivery-eligible-staff"),
     path("delivery/assign/", AssignDeliveryStaffView.as_view(), name="delivery-assign-staff"),
     path("delivery/upload-slip/", UploadCourierSlipView.as_view()),
+    path("delivery/update-courier/", UpdateDeliveryCourierView.as_view(), name="delivery-update-courier"),
+    path("delivery/audit-logs/", GetCourierAuditLogsView.as_view(), name="delivery-audit-logs"),
 
     # Billing endpoints
     path("billing/history/", BillingHistoryView.as_view(), name="billing-history"),
@@ -116,5 +121,8 @@ urlpatterns = [
     # Invoice Report
     path("invoice-report/", InvoiceReportView.as_view(), name="invoice-report"),
     path('invoice-report/export/', InvoiceReportExportView.as_view(), name='invoice-report-export'),
+    
+    # Items Billed Today Report
+    path("items-billed-today/", ItemsBilledTodayView.as_view(), name="items-billed-today"),
 ]
 

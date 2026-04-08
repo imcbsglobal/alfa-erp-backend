@@ -4,7 +4,8 @@ import time
 import json
 import logging
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import Q, Sum, F, Count
+from django.db.models.fields import DecimalField
 from django.utils import timezone
 from django.core.cache import cache
 from django.core.files.base import ContentFile
@@ -37,7 +38,7 @@ from .serializers import (
 )
 from .update_serializers import InvoiceUpdateSerializer
 from .events import INVOICE_CHANNEL
-from .models import Invoice, PickingSession, PackingSession, DeliverySession, Box, BoxItem
+from .models import Invoice, PickingSession, PackingSession, DeliverySession, Box, BoxItem, InvoiceItem
 from rest_framework import generics
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
@@ -896,6 +897,11 @@ class StartDeliveryView(APIView):
                 'assigned_to':   request.user,
                 'start_time':    timezone.now(),
             }
+            
+            # Add box weights if provided
+            box_weights = request.data.get('box_weights')
+            if box_weights:
+                delivery_data['box_weights'] = box_weights
 
             if delivery_type == 'COURIER':
                 delivery_data.update({
@@ -1487,6 +1493,207 @@ class UploadCourierSlipView(APIView):
                 "tracking_no": tracking_no or None,
                 "boxing_group_id": boxing_group_id or None,
             }
+        }, status=status.HTTP_200_OK)
+
+
+class UpdateDeliveryCourierView(APIView):
+    """
+    POST /api/sales/delivery/update-courier/
+    
+    Update courier service for delivery(ies) and log the change.
+    Records who changed it, when, and from/to which courier.
+    
+    Body (JSON):
+    {
+        "invoice_nos": ["INV001", "INV002"],
+        "courier_id": 5,
+        "reason": "Original courier unavailable"  # Optional
+    }
+    
+    Response: {
+        "success": true,
+        "message": "Courier updated successfully",
+        "data": {
+            "updated_count": 2,
+            "invoice_nos": ["INV001", "INV002"],
+            "new_courier_name": "FedEx",
+            "audit_logs": [...]
+        }
+    }
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        try:
+            invoice_nos = request.data.get("invoice_nos", [])
+            courier_id = request.data.get("courier_id")
+            reason = request.data.get("reason", "")
+            
+            # Validation
+            if not invoice_nos:
+                return Response({
+                    "success": False,
+                    "message": "invoice_nos is required and must be a non-empty list"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            if not courier_id:
+                return Response({
+                    "success": False,
+                    "message": "courier_id is required"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Normalize invoice nos
+            invoice_nos = [str(inv).strip() for inv in invoice_nos if str(inv).strip()]
+            
+            # Get new courier
+            from apps.accounts.models import Courier
+            try:
+                new_courier = Courier.objects.get(courier_id=courier_id)
+            except Courier.DoesNotExist:
+                return Response({
+                    "success": False,
+                    "message": f"Courier with ID {courier_id} not found"
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Get invoices and deliveries
+            invoices = list(Invoice.objects.filter(invoice_no__in=invoice_nos))
+            invoice_map = {inv.invoice_no: inv for inv in invoices}
+            missing_invoice_nos = [inv_no for inv_no in invoice_nos if inv_no not in invoice_map]
+            
+            if missing_invoice_nos:
+                return Response({
+                    "success": False,
+                    "message": "Some invoices were not found",
+                    "missing_invoice_nos": missing_invoice_nos
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            deliveries = list(
+                DeliverySession.objects.select_related("invoice", "courier")
+                .filter(invoice__invoice_no__in=invoice_nos)
+            )
+            delivery_map = {d.invoice.invoice_no: d for d in deliveries}
+            
+            # Validate all deliveries exist and are courier deliveries
+            validation_errors = []
+            target_deliveries = []
+            audit_logs_created = []
+            
+            for inv_no in invoice_nos:
+                delivery = delivery_map.get(inv_no)
+                if not delivery:
+                    validation_errors.append({"invoice_no": inv_no, "error": "Delivery session not found"})
+                    continue
+                if delivery.delivery_type != 'COURIER':
+                    validation_errors.append({"invoice_no": inv_no, "error": "Not a courier delivery session"})
+                    continue
+                target_deliveries.append(delivery)
+            
+            if validation_errors:
+                return Response({
+                    "success": False,
+                    "message": "Cannot update courier for one or more deliveries",
+                    "errors": validation_errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Update deliveries and create audit logs
+            with transaction.atomic():
+                for delivery in target_deliveries:
+                    old_courier = delivery.courier
+                    old_courier_name = delivery.courier_name
+                    
+                    # Update delivery
+                    delivery.courier = new_courier
+                    delivery.courier_name = new_courier.courier_name
+                    delivery.save(update_fields=['courier', 'courier_name'])
+                    
+                    # Create audit log
+                    from .models import DeliveryCourierAuditLog
+                    audit_log = DeliveryCourierAuditLog.objects.create(
+                        delivery_session=delivery,
+                        invoice=delivery.invoice,
+                        changed_by=request.user,
+                        changed_by_name=request.user.name if hasattr(request.user, 'name') else request.user.username,
+                        old_courier=old_courier,
+                        old_courier_name=old_courier_name,
+                        new_courier=new_courier,
+                        new_courier_name=new_courier.courier_name,
+                        reason=reason
+                    )
+                    audit_logs_created.append(audit_log)
+            
+            # Serialize audit logs
+            from .serializers import DeliveryCourierAuditLogSerializer
+            audit_logs_data = DeliveryCourierAuditLogSerializer(
+                audit_logs_created, 
+                many=True, 
+                context={'request': request}
+            ).data
+            
+            return Response({
+                "success": True,
+                "message": "Courier updated successfully",
+                "data": {
+                    "updated_count": len(target_deliveries),
+                    "invoice_nos": [d.invoice.invoice_no for d in target_deliveries],
+                    "new_courier_name": new_courier.courier_name,
+                    "new_courier_id": new_courier.courier_id,
+                    "audit_logs": audit_logs_data
+                }
+            }, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            logger.exception("Error updating delivery courier")
+            return Response({
+                "success": False,
+                "message": "An error occurred while updating courier",
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class GetCourierAuditLogsView(APIView):
+    """
+    GET /api/sales/delivery/audit-logs/?invoice_no=INV001
+    
+    Fetch courier change audit logs for a specific invoice.
+    Shows who changed it, when, and from/to which courier.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        invoice_no = request.query_params.get("invoice_no")
+        
+        if not invoice_no:
+            return Response({
+                "success": False,
+                "message": "invoice_no query parameter is required"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            invoice = Invoice.objects.get(invoice_no=invoice_no)
+        except Invoice.DoesNotExist:
+            return Response({
+                "success": False,
+                "message": "Invoice not found"
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        from .models import DeliveryCourierAuditLog
+        from .serializers import DeliveryCourierAuditLogSerializer
+        
+        # Get all courier change audit logs for this invoice
+        audit_logs = DeliveryCourierAuditLog.objects.filter(
+            invoice=invoice
+        ).order_by('-changed_at')
+        
+        serializer = DeliveryCourierAuditLogSerializer(
+            audit_logs,
+            many=True,
+            context={'request': request}
+        )
+        
+        return Response({
+            "success": True,
+            "data": serializer.data,
+            "count": audit_logs.count()
         }, status=status.HTTP_200_OK)
         
 class CompleteDeliveryView(APIView):
@@ -3768,4 +3975,158 @@ class CompleteBoxingView(APIView):
         }, status=200)
 
 
+# ===== Items Billed Today Report =====
 
+class ItemsBilledTodayView(APIView):
+    """
+    GET /api/sales/items-billed-today/
+    
+    Returns a list of all items that were billed in the specified date range, grouped and aggregated by item code/name.
+    Shows total quantity sold, unit price, total revenue, and number of bills.
+    
+    This helps admin track which items sold the most on a given date.
+    
+    Query Parameters:
+    - start_date: Filter from this date (YYYY-MM-DD format) - default: today
+    - end_date: Filter until this date (YYYY-MM-DD format) - default: today
+    - sort: Sort field (total_quantity, total_revenue, item_name) - default: total_quantity (descending)
+    - order: asc or desc - default: desc
+    
+    Response:
+    {
+        "success": true,
+        "data": [
+            {
+                "item_code": "MED001",
+                "item_name": "Paracetamol 500mg",
+                "company_name": "ABC Pharma",
+                "total_quantity": 150,
+                "unit_price": 45.50,
+                "total_revenue": 6825.00,
+                "number_of_bills": 5,
+                "packing": "Strip of 10",
+                "barcode": "BC-MED001",
+                "shelf_location": "A-12-04"
+            }
+        ],
+        "summary": {
+            "date": "2026-04-08",
+            "total_items_type": 10,
+            "total_quantity": 500,
+            "total_revenue": 25000.00,
+            "total_bills": 25
+        }
+    }
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        try:
+            # Get date filters
+            start_date_str = request.query_params.get('start_date')
+            end_date_str = request.query_params.get('end_date')
+            
+            # Parse dates with error handling
+            today = timezone.now().date()
+            start_date = today
+            end_date = today
+            
+            if start_date_str:
+                try:
+                    from datetime import datetime
+                    start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+                except ValueError:
+                    start_date = today
+            
+            if end_date_str:
+                try:
+                    from datetime import datetime
+                    end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+                except ValueError:
+                    end_date = today
+            
+            # Get all invoices billed in the date range with billing_status = BILLED
+            invoices_in_range = Invoice.objects.filter(
+                invoice_date__gte=start_date,
+                invoice_date__lte=end_date,
+                billing_status='BILLED'
+            ).prefetch_related('items').values_list('id', flat=True)
+            
+            # Aggregate items by item_code
+            items_data = InvoiceItem.objects.filter(
+                invoice_id__in=invoices_in_range
+            ).values(
+                'item_code',
+                'name',
+                'company_name',
+                'mrp',
+                'packing',
+                'barcode',
+                'shelf_location'
+            ).annotate(
+                total_quantity=Sum('quantity'),
+                unit_price=F('mrp'),
+                total_revenue=Sum(F('quantity') * F('mrp'), output_field=DecimalField()),
+                number_of_bills=Count('invoice', distinct=True)
+            ).order_by('-total_quantity')  # Default sort by quantity descending
+            
+            # Handle custom sorting
+            sort_field = request.query_params.get('sort', 'total_quantity')
+            order = request.query_params.get('order', 'desc')
+            
+            # Validate sort field
+            valid_sort_fields = ['total_quantity', 'total_revenue', 'item_name', 'number_of_bills']
+            if sort_field not in valid_sort_fields:
+                sort_field = 'total_quantity'
+            
+            # Apply sort
+            order_prefix = '' if order.lower() == 'desc' else '-'
+            if sort_field == 'item_name':
+                items_data = items_data.order_by(f'{order_prefix}name')
+            else:
+                items_data = items_data.order_by(f'{order_prefix}{sort_field}')
+            
+            # Convert to list for serialization
+            items_list = []
+            total_quantity = 0
+            total_revenue = 0
+            
+            for item in items_data:
+                items_list.append({
+                    'item_code': item['item_code'],
+                    'item_name': item['name'],
+                    'company_name': item['company_name'] or 'N/A',
+                    'total_quantity': item['total_quantity'] or 0,
+                    'unit_price': float(item['unit_price'] or 0),
+                    'total_revenue': float(item['total_revenue'] or 0),
+                    'number_of_bills': item['number_of_bills'] or 0,
+                    'packing': item['packing'],
+                    'barcode': item['barcode'],
+                    'shelf_location': item['shelf_location'],
+                })
+                
+                total_quantity += item['total_quantity'] or 0
+                total_revenue += float(item['total_revenue'] or 0)
+            
+            # Get unique bill count
+            total_bills_count = len(invoices_in_range)
+            
+            return Response({
+                "success": True,
+                "data": items_list,
+                "summary": {
+                    "date": str(start_date) if start_date == end_date else f"{start_date} to {end_date}",
+                    "total_items_type": len(items_list),
+                    "total_quantity": total_quantity,
+                    "total_revenue": round(total_revenue, 2),
+                    "total_bills": total_bills_count
+                }
+            }, status=200)
+        
+        except Exception as e:
+            logger.exception("Failed to fetch items billed in date range")
+            return Response({
+                "success": False,
+                "message": "Failed to fetch items data",
+                "error": str(e)
+            }, status=500)

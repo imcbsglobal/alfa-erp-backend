@@ -331,6 +331,18 @@ class Command(BaseCommand):
             }
         )
 
+        items_wise_reports, _ = MenuItem.objects.update_or_create(
+            code="items_wise_reports",
+            defaults={
+                'name': "Items Wise Reports",
+                'icon': "Pill",
+                'url': "/history/items-sold-today",
+                'parent': history,
+                'order': 7,
+                'is_active': True,
+            }
+        )
+
         user_summary, _ = MenuItem.objects.update_or_create(
             code="user_summary",
             defaults={
@@ -338,7 +350,7 @@ class Command(BaseCommand):
                 'icon': "Users",
                 'url': "/history/billing-user-summary",
                 'parent': history,
-                'order': 7,
+                'order': 8,
                 'is_active': True,
             }
         )
@@ -571,6 +583,7 @@ class Command(BaseCommand):
         self.stdout.write("   ├─ Picking Reports → /history/picking-report")
         self.stdout.write("   ├─ Packing Reports → /history/packing-report")
         self.stdout.write("   ├─ Delivery Reports → /history/delivery-report")
+        self.stdout.write("   ├─ Items Wise Reports → /history/items-sold-today")
         self.stdout.write("   └─ User Summary (nested)")
         self.stdout.write("      ├─ Billing → /history/billing-user-summary")
         self.stdout.write("      ├─ Picking → /history/picking-user-summary")
@@ -627,6 +640,7 @@ class Command(BaseCommand):
             'picking_reports': MenuItem.objects.get(code='picking_reports'),
             'packing_reports': MenuItem.objects.get(code='packing_reports'),
             'delivery_reports': MenuItem.objects.get(code='delivery_reports'),
+            'items_wise_reports': MenuItem.objects.get(code='items_wise_reports'),
             'user_summary': MenuItem.objects.get(code='user_summary'),
             'billing_user_summary': MenuItem.objects.get(code='billing_user_summary'),
             'user_summary_picking': MenuItem.objects.get(code='user_summary_picking'),
@@ -654,6 +668,7 @@ class Command(BaseCommand):
                 menus['delivery_company_list'], menus['my_assigned_delivery'],
                 menus['history'], menus['history_consolidate'], menus['history_invoice_workflow'],
                 menus['invoice_reports'], menus['picking_reports'], menus['packing_reports'], menus['delivery_reports'],
+                menus['items_wise_reports'],
                 menus['user_summary'], menus['billing_user_summary'], menus['user_summary_picking'], menus['user_summary_packing'], menus['user_summary_delivery'],
                 menus['user_mgmt'], menus['user_list'], menus['user_control'],
                 menus['master'], menus['job_title'], menus['department'], menus['courier'], menus['tray'],
@@ -665,6 +680,7 @@ class Command(BaseCommand):
                 menus['packing'], menus['packing_list'], menus['my_assigned_packing'], menus['boxing_list'],
                 menus['history'], menus['history_consolidate'], menus['history_invoice_workflow'],
                 menus['invoice_reports'], menus['picking_reports'], menus['packing_reports'], menus['delivery_reports'],
+                menus['items_wise_reports'],
                 menus['user_summary'], menus['billing_user_summary'], menus['user_summary_picking'], menus['user_summary_packing'], menus['user_summary_delivery'],
             ],
             'STORE': [
@@ -672,6 +688,7 @@ class Command(BaseCommand):
                 menus['invoices'], menus['picking_list'], menus['my_assigned_picking'],
                 menus['history'], menus['history_consolidate'], menus['history_invoice_workflow'],
                 menus['invoice_reports'], menus['picking_reports'], menus['packing_reports'], menus['delivery_reports'],
+                menus['items_wise_reports'],
                 menus['user_summary'], menus['billing_user_summary'], menus['user_summary_picking'], menus['user_summary_packing'], menus['user_summary_delivery'],
             ],
             'PICKER': [
