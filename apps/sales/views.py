@@ -4062,12 +4062,21 @@ class ItemsBilledTodayView(APIView):
                 unique_bills.add(invoice.invoice_no)
                 for item in invoice.items.all():
                     sale_total = float(item.quantity * item.mrp)
+                    
+                    # Get location info - area → address1 → address2 → temp_name
+                    location = ''
+                    if invoice.customer:
+                        location = invoice.customer.area or invoice.customer.address1 or invoice.customer.address2 or ''
+                    if not location:
+                        location = invoice.temp_name or ''
+                    
                     items_list.append({
                         'bill_no': invoice.invoice_no,
                         'invoice_date': str(invoice.invoice_date),
                         'item_name': item.name,
                         'item_code': item.item_code,
                         'customer_name': invoice.customer.name if invoice.customer else invoice.temp_name or 'N/A',
+                        'customer_location': location,
                         'barcode': item.barcode or '',
                         'quantity': item.quantity,
                         'rate': float(item.mrp),
