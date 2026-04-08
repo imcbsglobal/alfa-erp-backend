@@ -3981,15 +3981,13 @@ class ItemsBilledTodayView(APIView):
     """
     GET /api/sales/items-billed-today/
     
-    Returns a list of all items that were billed in the specified date range, grouped and aggregated by item code/name.
-    Shows total quantity sold, unit price, total revenue, and number of bills.
-    
-    This helps admin track which items sold the most on a given date.
+    Returns a detailed list of all items from invoices billed in the specified date range.
+    Each row represents a line item from a bill, including bill number, date, and customer info.
     
     Query Parameters:
     - start_date: Filter from this date (YYYY-MM-DD format) - default: today
     - end_date: Filter until this date (YYYY-MM-DD format) - default: today
-    - sort: Sort field (total_quantity, total_revenue, item_name) - default: total_quantity (descending)
+    - sort: Sort field (bill_no, invoice_date, item_name, quantity, rate) - default: invoice_date (descending)
     - order: asc or desc - default: desc
     
     Response:
@@ -3997,21 +3995,23 @@ class ItemsBilledTodayView(APIView):
         "success": true,
         "data": [
             {
+                "bill_no": "E-28",
+                "invoice_date": "2025-01-04",
+                "item_name": "MAGGI MASALA NOODLES 1`S(96)",
                 "item_code": "MED001",
-                "item_name": "Paracetamol 500mg",
+                "customer_name": "PEE KAY MART (RETAIL)",
+                "barcode": "8901058017687",
+                "quantity": 384,
+                "rate": 12.29,
+                "sale_total": 4719.36,
                 "company_name": "ABC Pharma",
-                "total_quantity": 150,
-                "unit_price": 45.50,
-                "total_revenue": 6825.00,
-                "number_of_bills": 5,
                 "packing": "Strip of 10",
-                "barcode": "BC-MED001",
                 "shelf_location": "A-12-04"
             }
         ],
         "summary": {
-            "date": "2026-04-08",
-            "total_items_type": 10,
+            "date_range": "2026-04-08",
+            "total_line_items": 150,
             "total_quantity": 500,
             "total_revenue": 25000.00,
             "total_bills": 25
@@ -4046,80 +4046,62 @@ class ItemsBilledTodayView(APIView):
                     end_date = today
             
             # Get all invoices billed in the date range with billing_status = BILLED
-            invoices_in_range = Invoice.objects.filter(
+            invoices = Invoice.objects.filter(
                 invoice_date__gte=start_date,
                 invoice_date__lte=end_date,
                 billing_status='BILLED'
-            ).prefetch_related('items').values_list('id', flat=True)
+            ).prefetch_related('items', 'customer')
             
-            # Aggregate items by item_code
-            items_data = InvoiceItem.objects.filter(
-                invoice_id__in=invoices_in_range
-            ).values(
-                'item_code',
-                'name',
-                'company_name',
-                'mrp',
-                'packing',
-                'barcode',
-                'shelf_location'
-            ).annotate(
-                total_quantity=Sum('quantity'),
-                unit_price=F('mrp'),
-                total_revenue=Sum(F('quantity') * F('mrp'), output_field=DecimalField()),
-                number_of_bills=Count('invoice', distinct=True)
-            ).order_by('-total_quantity')  # Default sort by quantity descending
+            # Get all invoice items with invoice and customer details
+            items_list = []
+            total_quantity = 0
+            total_revenue = 0.0
+            unique_bills = set()
+            
+            for invoice in invoices:
+                unique_bills.add(invoice.invoice_no)
+                for item in invoice.items.all():
+                    sale_total = float(item.quantity * item.mrp)
+                    items_list.append({
+                        'bill_no': invoice.invoice_no,
+                        'invoice_date': str(invoice.invoice_date),
+                        'item_name': item.name,
+                        'item_code': item.item_code,
+                        'customer_name': invoice.customer.name if invoice.customer else invoice.temp_name or 'N/A',
+                        'barcode': item.barcode or '',
+                        'quantity': item.quantity,
+                        'rate': float(item.mrp),
+                        'sale_total': round(sale_total, 2),
+                        'company_name': item.company_name or 'N/A',
+                        'packing': item.packing or '',
+                        'shelf_location': item.shelf_location or '',
+                    })
+                    
+                    total_quantity += item.quantity
+                    total_revenue += sale_total
             
             # Handle custom sorting
-            sort_field = request.query_params.get('sort', 'total_quantity')
+            sort_field = request.query_params.get('sort', 'invoice_date')
             order = request.query_params.get('order', 'desc')
             
             # Validate sort field
-            valid_sort_fields = ['total_quantity', 'total_revenue', 'item_name', 'number_of_bills']
+            valid_sort_fields = ['bill_no', 'invoice_date', 'item_name', 'quantity', 'rate', 'sale_total']
             if sort_field not in valid_sort_fields:
-                sort_field = 'total_quantity'
+                sort_field = 'invoice_date'
             
-            # Apply sort
-            order_prefix = '' if order.lower() == 'desc' else '-'
-            if sort_field == 'item_name':
-                items_data = items_data.order_by(f'{order_prefix}name')
-            else:
-                items_data = items_data.order_by(f'{order_prefix}{sort_field}')
-            
-            # Convert to list for serialization
-            items_list = []
-            total_quantity = 0
-            total_revenue = 0
-            
-            for item in items_data:
-                items_list.append({
-                    'item_code': item['item_code'],
-                    'item_name': item['name'],
-                    'company_name': item['company_name'] or 'N/A',
-                    'total_quantity': item['total_quantity'] or 0,
-                    'unit_price': float(item['unit_price'] or 0),
-                    'total_revenue': float(item['total_revenue'] or 0),
-                    'number_of_bills': item['number_of_bills'] or 0,
-                    'packing': item['packing'],
-                    'barcode': item['barcode'],
-                    'shelf_location': item['shelf_location'],
-                })
-                
-                total_quantity += item['total_quantity'] or 0
-                total_revenue += float(item['total_revenue'] or 0)
-            
-            # Get unique bill count
-            total_bills_count = len(invoices_in_range)
+            # Apply sort (reverse if desc)
+            reverse = True if order.lower() == 'desc' else False
+            items_list.sort(key=lambda x: x[sort_field], reverse=reverse)
             
             return Response({
                 "success": True,
                 "data": items_list,
                 "summary": {
-                    "date": str(start_date) if start_date == end_date else f"{start_date} to {end_date}",
-                    "total_items_type": len(items_list),
+                    "date_range": str(start_date) if start_date == end_date else f"{start_date} to {end_date}",
+                    "total_line_items": len(items_list),
                     "total_quantity": total_quantity,
                     "total_revenue": round(total_revenue, 2),
-                    "total_bills": total_bills_count
+                    "total_bills": len(unique_bills)
                 }
             }, status=200)
         
