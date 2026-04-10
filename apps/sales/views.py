@@ -4054,7 +4054,11 @@ class ItemsBilledTodayView(APIView):
                 'item_name': item.name,
                 'item_code': item.item_code,
                 'customer_name': customer.name if customer else (invoice.temp_name or '—'),
-                'customer_location': customer.area if customer else '',
+                'customer_location': (customer.area if customer and customer.area else None) 
+                                    or (customer.address1 if customer and customer.address1 else None)
+                                    or invoice.temp_name   # ← fallback to temp_name
+                                    or '',
+                'temp_name': invoice.temp_name or '',        # ← also expose it directly
                 'company_name': item.company_name or '—',
                 'quantity': item.quantity,
                 'rate': float(item.mrp),
