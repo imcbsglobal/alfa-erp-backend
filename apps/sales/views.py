@@ -3982,135 +3982,98 @@ class CompleteBoxingView(APIView):
 
 # ===== Items Billed Today Report =====
 
+# apps/sales/views.py
+
+from django.db.models import Sum, Count, F
+from django.db.models.functions import Coalesce
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from .models import InvoiceItem, Invoice
+import datetime
+
+
 class ItemsBilledTodayView(APIView):
-    """
-    GET /api/sales/items-billed-today/
-    
-    Returns a detailed list of all items from invoices billed in the specified date range.
-    Each row represents a line item from a bill, including bill number, date, and customer info.
-    
-    Query Parameters:
-    - start_date: Filter from this date (YYYY-MM-DD format) - default: today
-    - end_date: Filter until this date (YYYY-MM-DD format) - default: today
-    - sort: Sort field (bill_no, invoice_date, item_name, quantity, rate) - default: invoice_date (descending)
-    - order: asc or desc - default: desc
-    
-    Response optimized with select_related and prefetch_related for single database query.
-    """
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
-        try:
-            from datetime import datetime
-            
-            # Get date filters
-            start_date_str = request.query_params.get('start_date')
-            end_date_str = request.query_params.get('end_date')
-            
-            # Parse dates with error handling
-            today = timezone.now().date()
+        # Parse params
+        sort_by = request.query_params.get('sort', 'invoice_date')
+        order = request.query_params.get('order', 'desc')
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+
+        # Default to today if no date provided
+        today = datetime.date.today()
+        if not start_date:
             start_date = today
+        if not end_date:
             end_date = today
-            
-            if start_date_str:
-                try:
-                    start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
-                except ValueError:
-                    start_date = today
-            
-            if end_date_str:
-                try:
-                    end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
-                except ValueError:
-                    end_date = today
-            
-            # Optimized: single query with select_related for FK, prefetch_related for reverse
-            invoices = Invoice.objects.filter(
-                invoice_date__gte=start_date,
-                invoice_date__lte=end_date,
-                billing_status='BILLED'
-            ).select_related('customer').prefetch_related('items').order_by('-invoice_date')
-            
-            # Build items list efficiently
-            items_list = []
-            total_quantity = 0
-            total_revenue = 0.0
-            unique_bills = set()
-            
-            for invoice in invoices:
-                unique_bills.add(invoice.invoice_no)
-                
-                # Extract customer info once per invoice
-                customer_name = invoice.customer.name if invoice.customer else (invoice.temp_name or 'N/A')
-                customer_location = ''
-                if invoice.customer:
-                    customer_location = (
-                        invoice.customer.area or 
-                        invoice.customer.address1 or 
-                        invoice.customer.address2 or 
-                        ''
-                    )
-                if not customer_location:
-                    customer_location = invoice.temp_name or ''
-                
-                # Process items (already prefetched, no additional queries)
-                for item in invoice.items.all():
-                    sale_total = float(item.quantity * item.mrp)
-                    
-                    items_list.append({
-                        'bill_no': invoice.invoice_no,
-                        'invoice_date': str(invoice.invoice_date),
-                        'item_name': item.name,
-                        'item_code': item.item_code,
-                        'customer_name': customer_name,
-                        'customer_location': customer_location,
-                        'barcode': item.barcode or '',
-                        'quantity': item.quantity,
-                        'rate': float(item.mrp),
-                        'sale_total': round(sale_total, 2),
-                        'company_name': item.company_name or 'N/A',
-                        'packing': item.packing or '',
-                        'shelf_location': item.shelf_location or '',
-                    })
-                    
-                    total_quantity += item.quantity
-                    total_revenue += sale_total
-            
-            # Handle custom sorting
-            sort_field = request.query_params.get('sort', 'invoice_date')
-            order = request.query_params.get('order', 'desc')
-            
-            # Validate sort field
-            valid_sort_fields = ['bill_no', 'invoice_date', 'item_name', 'quantity', 'rate', 'sale_total']
-            if sort_field not in valid_sort_fields:
-                sort_field = 'invoice_date'
-            
-            # Apply sort (reverse if desc)
-            reverse = True if order.lower() == 'desc' else False
-            items_list.sort(key=lambda x: x[sort_field], reverse=reverse)
-            
-            response = Response({
-                "success": True,
-                "data": items_list,
-                "summary": {
-                    "date_range": str(start_date) if start_date == end_date else f"{start_date} to {end_date}",
-                    "total_line_items": len(items_list),
-                    "total_quantity": total_quantity,
-                    "total_revenue": round(total_revenue, 2),
-                    "total_bills": len(unique_bills)
-                }
-            }, status=200)
-            
-            # Add cache headers to reduce repeated requests (5 minute cache)
-            response['Cache-Control'] = 'private, max-age=300'
-            response['ETag'] = f'items-{start_date}-{end_date}'
-            
-            return response
-        
-        except Exception as e:
-            logger.exception("Failed to fetch items billed in date range")
-            return Response({
-                "success": False,
-                "message": "Failed to fetch items data",
-                "error": str(e)
-            }, status=500)
+
+        # Parse date strings safely
+        try:
+            if isinstance(start_date, str):
+                start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
+            if isinstance(end_date, str):
+                end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
+        except ValueError:
+            return Response({"error": "Invalid date format. Use YYYY-MM-DD."}, status=400)
+
+        # Build queryset - flat list of invoice items with invoice info
+        qs = InvoiceItem.objects.select_related(
+            'invoice', 'invoice__customer', 'invoice__salesman'
+        ).filter(
+            invoice__invoice_date__gte=start_date,
+            invoice__invoice_date__lte=end_date,
+        )
+
+        # Map sort fields to model fields
+        sort_field_map = {
+            'bill_no': 'invoice__invoice_no',
+            'invoice_date': 'invoice__invoice_date',
+            'item_name': 'name',
+            'quantity': 'quantity',
+            'rate': 'mrp',
+            'invoice_total': 'invoice__Total',
+        }
+
+        db_sort_field = sort_field_map.get(sort_by, 'invoice__invoice_date')
+        if order == 'desc':
+            db_sort_field = f'-{db_sort_field}'
+
+        qs = qs.order_by(db_sort_field)
+
+        # Build response data
+        data = []
+        for item in qs:
+            invoice = item.invoice
+            customer = invoice.customer
+            data.append({
+                'bill_no': invoice.invoice_no,
+                'invoice_date': str(invoice.invoice_date),
+                'item_name': item.name,
+                'item_code': item.item_code,
+                'customer_name': customer.name if customer else (invoice.temp_name or '—'),
+                'customer_location': customer.area if customer else '',
+                'company_name': item.company_name or '—',
+                'quantity': item.quantity,
+                'rate': float(item.mrp),
+                'invoiceTotal': float(invoice.Total),
+                'packing': item.packing or None,
+                'barcode': item.barcode or None,
+                'shelf_location': item.shelf_location or None,
+            })
+
+        # Summary
+        total_quantity = sum(i['quantity'] for i in data)
+        total_revenue = sum(i['invoiceTotal'] for i in data)
+        unique_bills = len(set(i['bill_no'] for i in data))
+
+        summary = {
+            'total_line_items': len(data),
+            'total_quantity': total_quantity,
+            'total_revenue': total_revenue,
+            'total_bills': unique_bills,
+        }
+
+        return Response({'data': data, 'summary': summary})
