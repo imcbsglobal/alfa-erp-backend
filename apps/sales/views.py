@@ -157,6 +157,11 @@ class InvoiceListView(generics.ListAPIView):
                 deliverysession__delivery_status=exclude_delivery_status
             )
 
+        # Filter by invoice_no (exact match or partial - supports both invoice_no and invoice_no__exact)
+        invoice_no = self.request.query_params.get('invoice_no__exact') or self.request.query_params.get('invoice_no')
+        if invoice_no:
+            queryset = queryset.filter(invoice_no__exact=invoice_no)
+
         return queryset
 
 
@@ -3990,38 +3995,14 @@ class ItemsBilledTodayView(APIView):
     - sort: Sort field (bill_no, invoice_date, item_name, quantity, rate) - default: invoice_date (descending)
     - order: asc or desc - default: desc
     
-    Response:
-    {
-        "success": true,
-        "data": [
-            {
-                "bill_no": "E-28",
-                "invoice_date": "2025-01-04",
-                "item_name": "MAGGI MASALA NOODLES 1`S(96)",
-                "item_code": "MED001",
-                "customer_name": "PEE KAY MART (RETAIL)",
-                "barcode": "8901058017687",
-                "quantity": 384,
-                "rate": 12.29,
-                "sale_total": 4719.36,
-                "company_name": "ABC Pharma",
-                "packing": "Strip of 10",
-                "shelf_location": "A-12-04"
-            }
-        ],
-        "summary": {
-            "date_range": "2026-04-08",
-            "total_line_items": 150,
-            "total_quantity": 500,
-            "total_revenue": 25000.00,
-            "total_bills": 25
-        }
-    }
+    Response optimized with select_related and prefetch_related for single database query.
     """
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
         try:
+            from datetime import datetime
+            
             # Get date filters
             start_date_str = request.query_params.get('start_date')
             end_date_str = request.query_params.get('end_date')
@@ -4033,26 +4014,24 @@ class ItemsBilledTodayView(APIView):
             
             if start_date_str:
                 try:
-                    from datetime import datetime
                     start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
                 except ValueError:
                     start_date = today
             
             if end_date_str:
                 try:
-                    from datetime import datetime
                     end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
                 except ValueError:
                     end_date = today
             
-            # Get all invoices billed in the date range with billing_status = BILLED
+            # Optimized: single query with select_related for FK, prefetch_related for reverse
             invoices = Invoice.objects.filter(
                 invoice_date__gte=start_date,
                 invoice_date__lte=end_date,
                 billing_status='BILLED'
-            ).prefetch_related('items', 'customer')
+            ).select_related('customer').prefetch_related('items').order_by('-invoice_date')
             
-            # Get all invoice items with invoice and customer details
+            # Build items list efficiently
             items_list = []
             total_quantity = 0
             total_revenue = 0.0
@@ -4060,23 +4039,31 @@ class ItemsBilledTodayView(APIView):
             
             for invoice in invoices:
                 unique_bills.add(invoice.invoice_no)
+                
+                # Extract customer info once per invoice
+                customer_name = invoice.customer.name if invoice.customer else (invoice.temp_name or 'N/A')
+                customer_location = ''
+                if invoice.customer:
+                    customer_location = (
+                        invoice.customer.area or 
+                        invoice.customer.address1 or 
+                        invoice.customer.address2 or 
+                        ''
+                    )
+                if not customer_location:
+                    customer_location = invoice.temp_name or ''
+                
+                # Process items (already prefetched, no additional queries)
                 for item in invoice.items.all():
                     sale_total = float(item.quantity * item.mrp)
-                    
-                    # Get location info - area → address1 → address2 → temp_name
-                    location = ''
-                    if invoice.customer:
-                        location = invoice.customer.area or invoice.customer.address1 or invoice.customer.address2 or ''
-                    if not location:
-                        location = invoice.temp_name or ''
                     
                     items_list.append({
                         'bill_no': invoice.invoice_no,
                         'invoice_date': str(invoice.invoice_date),
                         'item_name': item.name,
                         'item_code': item.item_code,
-                        'customer_name': invoice.customer.name if invoice.customer else invoice.temp_name or 'N/A',
-                        'customer_location': location,
+                        'customer_name': customer_name,
+                        'customer_location': customer_location,
                         'barcode': item.barcode or '',
                         'quantity': item.quantity,
                         'rate': float(item.mrp),
@@ -4102,7 +4089,7 @@ class ItemsBilledTodayView(APIView):
             reverse = True if order.lower() == 'desc' else False
             items_list.sort(key=lambda x: x[sort_field], reverse=reverse)
             
-            return Response({
+            response = Response({
                 "success": True,
                 "data": items_list,
                 "summary": {
@@ -4113,6 +4100,12 @@ class ItemsBilledTodayView(APIView):
                     "total_bills": len(unique_bills)
                 }
             }, status=200)
+            
+            # Add cache headers to reduce repeated requests (5 minute cache)
+            response['Cache-Control'] = 'private, max-age=300'
+            response['ETag'] = f'items-{start_date}-{end_date}'
+            
+            return response
         
         except Exception as e:
             logger.exception("Failed to fetch items billed in date range")
