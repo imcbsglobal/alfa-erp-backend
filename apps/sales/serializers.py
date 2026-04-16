@@ -91,7 +91,7 @@ class InvoiceListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'invoice_no', 'invoice_date', 'customer','status', 'priority', 'salesman', 
             'created_by', 'items', 'Total', 'temp_name', 'remarks', 'created_at',
-            'billing_status', 'return_info',
+            'billing_status', 'return_info', 'is_express_delivery',
             'picker_info', 'packer_info', 'delivery_info', 'current_handler', 'tray_codes' ]
     
     def get_tray_codes(self, obj):

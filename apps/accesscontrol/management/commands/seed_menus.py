@@ -86,6 +86,22 @@ class Command(BaseCommand):
         self.stdout.write("  ✓ Billing menus created")
 
         # ========================================
+        # 2.5 EXPRESS BILLING (Single - BILLER & SUPERADMIN)
+        # ========================================
+        express_billing, _ = MenuItem.objects.update_or_create(
+            code="express_billing",
+            defaults={
+                'name': "Express Billing",
+                'icon': "Send",
+                'url': "/billing/express",
+                'order': 2.5,
+                'is_active': True,
+                'parent': None,
+            }
+        )
+        self.stdout.write("  ✓ Express Billing menu created")
+
+        # ========================================
         # 3. PICKING/INVOICES (Dropdown - NOT PICKER, PACKER, BILLER, DELIVERY)
         # ========================================
         invoices, _ = MenuItem.objects.update_or_create(
@@ -564,6 +580,7 @@ class Command(BaseCommand):
         self.stdout.write("2. Invoice/Billing (dropdown) [BILLER/BILLING, SUPERADMIN]")
         self.stdout.write("   ├─ Invoice List → /billing/invoices")
         self.stdout.write("   └─ Reviewed Bills → /billing/reviewed")
+        self.stdout.write("2.5. Express Billing (single) → /billing/express [BILLER/BILLING, SUPERADMIN]")
         self.stdout.write("3. Picking (dropdown) [NOT: PICKER, PACKER, BILLER, DELIVERY]")
         self.stdout.write("   ├─ Picking List → /invoices")
         self.stdout.write("   └─ My Assigned Picking → /invoices/my")

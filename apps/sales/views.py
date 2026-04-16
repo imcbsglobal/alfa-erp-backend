@@ -166,14 +166,53 @@ class InvoiceListView(generics.ListAPIView):
 
 
 # ===== Retrieve Invoice API =====
-class InvoiceDetailView(generics.RetrieveAPIView):
+class InvoiceDetailView(generics.RetrieveUpdateAPIView):
     """
     GET /api/sales/invoices/{id}/
     Retrieve a single invoice by primary key with nested customer, salesman and items.
+    
+    PATCH /api/sales/invoices/{id}/
+    Update invoice status (for Express Billing workflow: INVOICED → PICKED → PACKED)
     """
     queryset = Invoice.objects.select_related('customer', 'salesman', 'created_user').prefetch_related('items')
     serializer_class = InvoiceListSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def partial_update(self, request, *args, **kwargs):
+        """Handle PATCH requests - Allow status updates"""
+        invoice = self.get_object()
+        
+        # Only allow status field updates for now
+        if 'status' in request.data:
+            new_status = request.data.get('status', '').upper()
+            
+            # Validate status transitions for Express Billing workflow
+            current_status = invoice.status
+            allowed_transitions = {
+                'INVOICED': ['PICKED'],
+                'PICKED': ['PACKED'],
+                'PACKED': [],  # No further transitions from PACKED in Express Billing
+            }
+            
+            if new_status not in allowed_transitions.get(current_status, []):
+                return Response(
+                    {'error': f'Cannot transition from {current_status} to {new_status}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            invoice.status = new_status
+            
+            # Mark as express delivery when transitioning to PACKED through Express Billing workflow
+            if new_status == 'PACKED' and current_status == 'PICKED':
+                invoice.is_express_delivery = True
+            
+            invoice.save()
+            
+            serializer = self.get_serializer(invoice)
+            return Response(serializer.data)
+        
+        # Default behavior for other fields
+        return super().partial_update(request, *args, **kwargs)
 
 
 # ===== My Active Picking Task API =====

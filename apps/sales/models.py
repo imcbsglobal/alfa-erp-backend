@@ -89,6 +89,11 @@ class Invoice(models.Model):
         help_text="True when the packer chose to print address labels themselves (bypasses Boxing Queue)"
     )
 
+    is_express_delivery = models.BooleanField(
+        default=False,
+        help_text="True when invoice is processed through Express Billing (INVOICED→PICKED→PACKED pathway)"
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -371,6 +376,11 @@ class DeliverySession(models.Model):
         indexes = [
             models.Index(fields=['delivery_status']),
             models.Index(fields=['invoice', 'delivery_status']),
+            models.Index(fields=['delivery_type']),
+            models.Index(fields=['created_at']),  # For date range queries
+            models.Index(fields=['delivery_status', 'delivery_type']),  # Common filter combination
+            models.Index(fields=['delivery_type', 'created_at']),  # For type + date filtered queries
+            models.Index(fields=['assigned_to', 'created_at']),  # For user filtering
         ]
     
     # ✅ NEW FIELDS FOR COUNTER PICKUP
