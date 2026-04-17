@@ -206,6 +206,54 @@ class InvoiceDetailView(generics.RetrieveUpdateAPIView):
             if new_status == 'PACKED' and current_status == 'PICKED':
                 invoice.is_express_delivery = True
             
+            # Create PickingSession when marking as PICKED from Express Billing
+            if new_status == 'PICKED' and current_status == 'INVOICED':
+                source = request.data.get('source', 'EXPRESS_BILLING')
+                picker_name = request.data.get('picker_name', 'Express Billing')
+                
+                # Create or update picking session
+                picking_session, created = PickingSession.objects.get_or_create(
+                    invoice=invoice,
+                    defaults={
+                        'picker': request.user,
+                        'start_time': timezone.now(),
+                        'end_time': timezone.now(),
+                        'picking_status': 'PICKED',
+                        'notes': f'Picked via {source}. Picker: {picker_name}'
+                    }
+                )
+                
+                if not created:
+                    # Update existing session
+                    picking_session.picking_status = 'PICKED'
+                    picking_session.end_time = timezone.now()
+                    picking_session.notes = f'Picked via {source}. Picker: {picker_name}'
+                    picking_session.save()
+            
+            # Create PackingSession when marking as PACKED from Express Billing
+            if new_status == 'PACKED' and current_status == 'PICKED':
+                source = request.data.get('source', 'EXPRESS_BILLING')
+                packer_name = request.data.get('picker_name', 'Express Billing')
+                
+                # Create or update packing session
+                packing_session, created = PackingSession.objects.get_or_create(
+                    invoice=invoice,
+                    defaults={
+                        'packer': request.user,
+                        'start_time': timezone.now(),
+                        'end_time': timezone.now(),
+                        'packing_status': 'PACKED',
+                        'notes': f'Packed via {source}. Packer: {packer_name}'
+                    }
+                )
+                
+                if not created:
+                    # Update existing session
+                    packing_session.packing_status = 'PACKED'
+                    packing_session.end_time = timezone.now()
+                    packing_session.notes = f'Packed via {source}. Packer: {packer_name}'
+                    packing_session.save()
+            
             invoice.save()
             
             serializer = self.get_serializer(invoice)
@@ -1320,7 +1368,7 @@ class EligibleDeliveryStaffView(APIView):
                 menu=delivery_menu,
                 is_active=True,
                 user__is_active=True,
-            ).select_related('user')
+            ).select_related('user', 'user__job_title')
 
             excluded_emails = {'delivery@alfa.com'}
             seen_ids = set()

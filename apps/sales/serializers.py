@@ -766,6 +766,7 @@ class PickingHistorySerializer(serializers.ModelSerializer):
         read_only=True
     )
     duration = serializers.SerializerMethodField()
+    source = serializers.SerializerMethodField()
     
     class Meta:
         model = PickingSession
@@ -773,18 +774,20 @@ class PickingHistorySerializer(serializers.ModelSerializer):
             'id', 'invoice_no', 'invoice_date', 'invoice_created_at', 'invoice_status', 'invoice_remarks',
             'customer_name', 'customer_email', 'customer_phone', 'customer_address','customer_area',
             'salesman_name', 'picker_email', 'picker_name', 'temp_name', 'picking_status',
-            'items', 'Total', 'start_time', 'end_time', 'duration', 'notes', 'created_at'
+            'items', 'Total', 'start_time', 'end_time', 'duration', 'notes', 'source', 'created_at'
         ]
-    
-    # def get_total_amount(self, obj):
-    #     """Calculate total amount from invoice items"""
-    #     return sum(item.quantity * item.mrp for item in obj.invoice.items.all())
     
     def get_duration(self, obj):
         """Calculate duration in minutes"""
         if obj.start_time and obj.end_time:
             delta = obj.end_time - obj.start_time
             return round(delta.total_seconds() / 60, 2)  # minutes
+        return None
+    
+    def get_source(self, obj):
+        """Extract source from notes field"""
+        if obj.notes and 'EXPRESS_BILLING' in obj.notes:
+            return 'EXPRESS_BILLING'
         return None
 
 
@@ -813,6 +816,7 @@ class PackingHistorySerializer(serializers.ModelSerializer):
     duration = serializers.SerializerMethodField()
     boxes = serializers.SerializerMethodField()
     courier_name = serializers.SerializerMethodField()
+    source = serializers.SerializerMethodField()
 
     class Meta:
         model = PackingSession
@@ -820,7 +824,7 @@ class PackingHistorySerializer(serializers.ModelSerializer):
             'id', 'invoice_no', 'invoice_date', 'invoice_status', 'invoice_remarks',
             'customer_name', 'customer_email', 'customer_phone', 'customer_address','customer_area',
             'salesman_name', 'packer_email', 'packer_name', 'temp_name', 'packing_status',
-            'items', 'Total', 'start_time', 'end_time', 'duration', 'notes', 'created_at',
+            'items', 'Total', 'start_time', 'end_time', 'duration', 'notes', 'source', 'created_at',
             'boxes', 'label_count', 'courier_name', 'boxing_group_id',
         ]
     
@@ -850,6 +854,12 @@ class PackingHistorySerializer(serializers.ModelSerializer):
                 return obj.courier.courier_name
             except Exception:
                 pass
+        return None
+    
+    def get_source(self, obj):
+        """Extract source from notes field"""
+        if obj.notes and 'EXPRESS_BILLING' in obj.notes:
+            return 'EXPRESS_BILLING'
         return None
 
 
