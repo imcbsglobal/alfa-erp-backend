@@ -817,6 +817,11 @@ class PackingHistorySerializer(serializers.ModelSerializer):
     boxes = serializers.SerializerMethodField()
     courier_name = serializers.SerializerMethodField()
     source = serializers.SerializerMethodField()
+    # ✅ NEW: Picking session data included directly (no more N+1 calls)
+    picking_start_time = serializers.SerializerMethodField()
+    picking_end_time = serializers.SerializerMethodField()
+    picking_date = serializers.SerializerMethodField()
+    picking_source = serializers.SerializerMethodField()
 
     class Meta:
         model = PackingSession
@@ -826,6 +831,8 @@ class PackingHistorySerializer(serializers.ModelSerializer):
             'salesman_name', 'packer_email', 'packer_name', 'temp_name', 'packing_status',
             'items', 'Total', 'start_time', 'end_time', 'duration', 'notes', 'source', 'created_at',
             'boxes', 'label_count', 'courier_name', 'boxing_group_id',
+            # ✅ NEW: Picking session fields
+            'picking_start_time', 'picking_end_time', 'picking_date', 'picking_source',
         ]
     
     # def get_total_amount(self, obj):
@@ -860,6 +867,44 @@ class PackingHistorySerializer(serializers.ModelSerializer):
         """Extract source from notes field"""
         if obj.notes and 'EXPRESS_BILLING' in obj.notes:
             return 'EXPRESS_BILLING'
+        return None
+    
+    # ✅ NEW: Picking session data accessors (no extra queries due to prefetch_related)
+    def get_picking_start_time(self, obj):
+        """Get picking session start time"""
+        try:
+            picking = obj.invoice.pickingsession
+            return picking.start_time if picking else None
+        except:
+            return None
+    
+    def get_picking_end_time(self, obj):
+        """Get picking session end time"""
+        try:
+            picking = obj.invoice.pickingsession
+            return picking.end_time if picking else None
+        except:
+            return None
+    
+    def get_picking_date(self, obj):
+        """Get picking session date (from created_at or invoice_created_at or invoice_date)"""
+        try:
+            picking = obj.invoice.pickingsession
+            if picking:
+                # Priority: picking.created_at > invoice.created_at > invoice.invoice_date
+                return picking.created_at or obj.invoice.created_at or obj.invoice.invoice_date
+            return None
+        except:
+            return None
+    
+    def get_picking_source(self, obj):
+        """Extract picking source from notes field"""
+        try:
+            picking = obj.invoice.pickingsession
+            if picking and picking.notes and 'EXPRESS_BILLING' in picking.notes:
+                return 'EXPRESS_BILLING'
+        except:
+            pass
         return None
 
 

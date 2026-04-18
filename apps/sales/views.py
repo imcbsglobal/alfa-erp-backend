@@ -2187,8 +2187,9 @@ class PackingHistoryView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
+        from django.db.models import Prefetch
         user = self.request.user
-        # ✅ PERFORMANCE FIX: Prefetch all invoice related data
+        # ✅ PERFORMANCE FIX: Prefetch all invoice related data and PickingSession
         queryset = PackingSession.objects.select_related(
             'invoice',
             'invoice__customer',
@@ -2199,6 +2200,7 @@ class PackingHistoryView(generics.ListAPIView):
         ).prefetch_related(
             'invoice__items',
             'invoice__boxes',
+            Prefetch('invoice__pickingsession'),  # ✅ Include picking session data
         ).order_by('created_at')
         
         # Permission check: regular users only see their own sessions
