@@ -14,7 +14,9 @@ Usage:
   - python manage.py seed_invoices --count 30 --with-sessions
 - Create invoices all in a specific status (e.g. INVOICED):
   - python manage.py seed_invoices --count 30 --status INVOICED
-  - Supported statuses: INVOICED, PICKING, PICKED, PACKING, PACKED, DISPATCHED, DELIVERED
+  - Supported statuses: INVOICED, PICKING, PICKED, PACKING, BOXING, PACKED, DISPATCHED, DELIVERED, REVIEW
+
+Seeded invoices include the invoice API fields used by the frontend list/detail serializers: `invoice_no`, `invoice_date`, `salesman`, `created_by`, `created_user`, `customer`, `temp_name`, `remarks`, `Total`, `status`, `priority`, `billing_status`, `is_hold`, `self_boxing`, and `is_express_delivery`.
 
 What it creates:
 - Sample salesmen and customers

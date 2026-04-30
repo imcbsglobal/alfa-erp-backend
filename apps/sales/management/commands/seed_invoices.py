@@ -5,6 +5,7 @@ from apps.sales.models import (
     PickingSession, PackingSession, DeliverySession
 )
 from apps.accounts.models import User
+from decimal import Decimal
 from datetime import datetime, timedelta
 import random
 
@@ -28,7 +29,7 @@ class Command(BaseCommand):
             '--status',
             type=str,
             default=None,
-            help='Set all invoices to a specific status (INVOICED, PICKING, PICKED, PACKING, PACKED, DISPATCHED, DELIVERED)',
+            help='Set all invoices to a specific status (INVOICED, PICKING, PICKED, PACKING, BOXING, PACKED, DISPATCHED, DELIVERED, REVIEW)',
         )
 
     def handle(self, *args, **options):
@@ -37,7 +38,7 @@ class Command(BaseCommand):
         status = options['status']
 
         # Validate status if provided
-        valid_statuses = ['INVOICED', 'PICKING', 'PICKED', 'PACKING', 'PACKED', 'DISPATCHED', 'DELIVERED']
+        valid_statuses = ['INVOICED', 'PICKING', 'PICKED', 'PACKING', 'BOXING', 'PACKED', 'DISPATCHED', 'DELIVERED', 'REVIEW']
         if status and status not in valid_statuses:
             self.stdout.write(self.style.ERROR(f"Invalid status: {status}. Must be one of: {', '.join(valid_statuses)}"))
             return
@@ -98,7 +99,7 @@ class Command(BaseCommand):
         ]
 
         priorities = ["LOW", "MEDIUM", "HIGH"]
-        statuses = ["INVOICED", "PICKING", "PICKED", "PACKING", "PACKED", "DISPATCHED", "DELIVERED"]
+        statuses = valid_statuses
 
         invoices_created = 0
         items_created = 0
@@ -129,23 +130,39 @@ class Command(BaseCommand):
             
             # Use provided status or random
             invoice_status = status if status else random.choice(statuses)
+
+            selected_salesman = random.choice(salesmen)
+            selected_customer = random.choice(customers)
+            created_user = random.choice(users) if users else None
+            created_by = created_user.email if created_user else "seed_invoices"
+            temp_name = None if selected_customer.address1 else f"Temp {selected_customer.name}"
             
             invoice = Invoice.objects.create(
                 invoice_no=invoice_no,
-                invoice_date=invoice_date,
-                salesman=random.choice(salesmen),
-                customer=random.choice(customers),
+                invoice_date=invoice_date.date(),
+                salesman=selected_salesman,
+                created_by=created_by,
+                created_user=created_user,
+                customer=selected_customer,
+                temp_name=temp_name,
+                Total=Decimal("0.00"),
                 status=invoice_status,
                 priority=random.choice(priorities),
-                remarks=f"Test invoice {i+1}"
+                remarks=f"Test invoice {i+1}",
+                billing_status="BILLED",
+                is_hold=True,
+                self_boxing=False,
+                is_express_delivery=False,
             )
             invoices_created += 1
 
             # Create 2-5 items per invoice
             num_items = random.randint(2, 5)
             selected_items = random.sample(items_data, num_items)
+            invoice_total = Decimal("0.00")
             
             for item_code, name, company, packing, mrp in selected_items:
+                quantity = random.randint(1, 10)
                 InvoiceItem.objects.create(
                     invoice=invoice,
                     item_code=item_code,
@@ -153,13 +170,17 @@ class Command(BaseCommand):
                     barcode=f"BC-{item_code}",
                     company_name=company,
                     packing=packing,
-                    quantity=random.randint(1, 10),
+                    quantity=quantity,
                     mrp=mrp,
                     shelf_location=f"A{random.randint(1, 5)}-{random.randint(1, 20)}",
                     batch_no=f"BATCH-{random.randint(1000, 9999)}",
                     expiry_date=datetime.now() + timedelta(days=random.randint(180, 730))
                 )
+                invoice_total += Decimal(str(mrp)) * Decimal(quantity)
                 items_created += 1
+
+            invoice.Total = invoice_total
+            invoice.save(update_fields=['Total'])
 
             # Create sessions if requested
             if with_sessions and users:
@@ -177,7 +198,7 @@ class Command(BaseCommand):
 
                 # Packing session
                 if invoice_status in ['PACKING', 'PACKED', 'DISPATCHED', 'DELIVERED']:
-                    packing_status = "PACKED" if invoice_status in ['PACKED', 'DISPATCHED', 'DELIVERED'] else "IN_PROGRESS"
+                    packing_status = "PACKED" if invoice_status in ['PACKED', 'DISPATCHED', 'DELIVERED'] else "PACKING"
                     PackingSession.objects.create(
                         invoice=invoice,
                         packer=random.choice(users),
