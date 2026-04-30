@@ -44,6 +44,15 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
+# Add this after the imports, before the first class definition
+def user_has_menu_access(user, menu_code):
+    from apps.accesscontrol.models import UserMenu
+    return UserMenu.objects.filter(
+        user=user,
+        menu__code=menu_code,
+        is_active=True
+    ).exists()
+
 
 logger = logging.getLogger(__name__)
 
@@ -2088,7 +2097,11 @@ class PickingHistoryView(generics.ListAPIView):
         
         # Permission check: regular users only see their own sessions.
         # Users with role 'PICKER' are treated like admins and can view all picking sessions.
-        if not (user.is_admin_or_superadmin() or getattr(user, 'role', '').upper() == 'PICKER'):
+        if not (
+            user.is_admin_or_superadmin() or
+            getattr(user, 'role', '').upper() == 'PICKER' or
+            user_has_menu_access(user, 'picking_reports')
+        ):
             queryset = queryset.filter(picker=user)
         
         # Invoice filters: by primary key or by invoice number
@@ -2204,7 +2217,11 @@ class PackingHistoryView(generics.ListAPIView):
         ).order_by('created_at')
         
         # Permission check: regular users only see their own sessions
-        if not (user.is_admin_or_superadmin() or getattr(user, 'role', '').upper() == 'PACKER'):
+        if not (
+            user.is_admin_or_superadmin() or
+            getattr(user, 'role', '').upper() == 'PACKER' or
+            user_has_menu_access(user, 'packing_reports')
+        ):
             queryset = queryset.filter(packer=user)
         
         # Invoice filters: by primary key or by invoice number
@@ -2302,7 +2319,8 @@ class DeliveryHistoryView(generics.ListAPIView):
         # Permission check: regular users only see their own sessions
         if not (
             user.is_admin_or_superadmin() or
-            getattr(user, 'role', '').upper() == 'DELIVERY'
+            getattr(user, 'role', '').upper() == 'DELIVERY' or
+            user_has_menu_access(user, 'delivery_reports')
         ):
             queryset = queryset.filter(assigned_to=user)
         
@@ -2400,7 +2418,10 @@ class BillingHistoryView(generics.ListAPIView):
         ).order_by('created_at') # Most recent first
         
         # Permission check: regular users only see invoices they created
-        if not user.is_admin_or_superadmin():
+        if not (
+            user.is_admin_or_superadmin() or
+            user_has_menu_access(user, 'invoice_reports')
+        ):
             queryset = queryset.filter(created_user=user)
         
         # Invoice filters
