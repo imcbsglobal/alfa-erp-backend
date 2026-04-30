@@ -22,10 +22,9 @@ Created 4 comprehensive documentation files:
 3. **MENU_QUICK_REFERENCE.md** - Quick lookup tables and commands
 4. **MENU_SYSTEM_VISUAL_GUIDE.md** - Visual diagrams and flow charts
 
-### 3. 🧪 Created Test Script
-**Location:** `test_menu_access.py`
+### 3. 🧪 Manual Validation Steps
 
-Comprehensive test script that validates:
+Use a Django shell session to validate:
 - Menu count and structure
 - User role assignments
 - Parent-child relationships
@@ -101,10 +100,7 @@ python manage.py seed_menus --clear --assign
 
 ### Verify the Setup
 ```bash
-# Run test script
-python manage.py shell < test_menu_access.py
-
-# Or manually check
+# Manual check in shell
 python manage.py shell
 >>> from apps.accesscontrol.models import MenuItem, UserMenu
 >>> MenuItem.objects.count()  # Should be 30
@@ -274,7 +270,7 @@ for menu in menus:
 
 ### Run Complete Test Suite
 ```bash
-python manage.py shell < test_menu_access.py
+python manage.py shell
 ```
 
 ### Test Login API
@@ -377,7 +373,7 @@ python manage.py seed_menus --clear --assign
 
 - Check logs: `tail -f logs/django.log`
 - Django admin: `http://localhost:8000/admin/accesscontrol/`
-- Run test script: `python manage.py shell < test_menu_access.py`
+- Run manual shell checks using the snippet above
 
 ---
 
