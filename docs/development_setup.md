@@ -148,6 +148,12 @@ GRANT ALL PRIVILEGES ON DATABASE ALFA_ERP TO alfa_user;
 \q
 ```
 
+```env
+DJANGO_SETTINGS_MODULE=config.settings.development
+ALLOWED_HOSTS=localhost,127.0.0.1
+DB_HOST=localhost
+DB_PORT=5432
+```
 **Option B: pgAdmin GUI**
 
 1. Open pgAdmin

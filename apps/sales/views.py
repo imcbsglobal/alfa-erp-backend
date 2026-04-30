@@ -413,7 +413,9 @@ class HasAPIKeyOrAuthenticated(BasePermission):
             return True
         # Otherwise, check X-API-KEY header
         api_key = request.headers.get('X-API-KEY') or request.META.get('HTTP_X_API_KEY')
-        expected = getattr(settings, 'SALES_IMPORT_API_KEY', 'WEDFBNPOIUFSDFTY')
+        expected = getattr(settings, 'SALES_IMPORT_API_KEY', None)
+        if not expected:
+            return False
         return api_key == expected
 
 
@@ -2269,7 +2271,7 @@ class DeliveryHistoryView(generics.ListAPIView):
     
     Query Parameters:
     - search: Search by invoice number or customer details
-    - status: Filter by delivery_status (PENDING, IN_TRANSIT, DELIVERED)
+    - status: Filter by delivery_status (PENDING, TO_CONSIDER, IN_TRANSIT, DELIVERED)
     - delivery_type: Filter by delivery type (DIRECT, COURIER, INTERNAL)
     - start_date: Filter by date (YYYY-MM-DD) - sessions created on or after
     - end_date: Filter by date (YYYY-MM-DD) - sessions created on or before
@@ -2332,13 +2334,18 @@ class DeliveryHistoryView(generics.ListAPIView):
         
         # Status filter
         status_filter = self.request.query_params.get('status', '').strip().upper()
-        if status_filter and status_filter in ['PENDING', 'IN_TRANSIT', 'DELIVERED']:
+        if status_filter and status_filter in ['PENDING', 'TO_CONSIDER', 'IN_TRANSIT', 'DELIVERED']:
             queryset = queryset.filter(delivery_status=status_filter)
         
         # Delivery type filter
         delivery_type = self.request.query_params.get('delivery_type', '').strip().upper()
         if delivery_type and delivery_type in ['DIRECT', 'COURIER', 'INTERNAL']:
             queryset = queryset.filter(delivery_type=delivery_type)
+
+        # Courier name filter (exact match by courier display name)
+        courier_name = self.request.query_params.get('courier_name', '').strip()
+        if courier_name:
+            queryset = queryset.filter(courier_name__iexact=courier_name)
         
         # Date filters
         start_date = self.request.query_params.get('start_date')

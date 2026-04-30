@@ -1,7 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated
 from django.db.models import Q, Sum, Count, Max, Exists, OuterRef
 from django.contrib.auth import get_user_model
 from django.utils import timezone
@@ -110,13 +110,15 @@ class FollowUpTrackerAPI(APIView):
       page      = page number  (default: 1)
       page_size = items per page (default: 50)
     """
-    authentication_classes = []
-    permission_classes     = [AllowAny]
+    permission_classes     = [IsAuthenticated]
 
     def get(self, request):
         sys.stderr.write("🚀 TRACKER HIT\n")
         sys.stderr.flush()
         try:
+            if not _user_has_followup_access(request.user):
+                return Response({'detail': 'You do not have access to follow-up tracker data.'}, status=403)
+
             filter_type = request.query_params.get('filter', 'all')
             search      = request.query_params.get('search', '').strip().lower()
             agent       = request.query_params.get('agent', '').strip().lower()
