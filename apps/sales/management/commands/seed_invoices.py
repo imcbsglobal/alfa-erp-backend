@@ -126,7 +126,7 @@ class Command(BaseCommand):
         for i in range(count):
             # Create unique invoice number
             invoice_no = f"INV-{current_month}-{starting_number + i}"
-            invoice_date = datetime.now() - timedelta(days=random.randint(0, 30))
+            invoice_date = timezone.localdate()
             
             # Use provided status or random
             invoice_status = status if status else random.choice(statuses)
@@ -139,7 +139,7 @@ class Command(BaseCommand):
             
             invoice = Invoice.objects.create(
                 invoice_no=invoice_no,
-                invoice_date=invoice_date.date(),
+                invoice_date=invoice_date,
                 salesman=selected_salesman,
                 created_by=created_by,
                 created_user=created_user,

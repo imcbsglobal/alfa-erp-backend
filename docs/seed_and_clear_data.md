@@ -17,6 +17,7 @@ Usage:
   - Supported statuses: INVOICED, PICKING, PICKED, PACKING, BOXING, PACKED, DISPATCHED, DELIVERED, REVIEW
 
 Seeded invoices include the invoice API fields used by the frontend list/detail serializers: `invoice_no`, `invoice_date`, `salesman`, `created_by`, `created_user`, `customer`, `temp_name`, `remarks`, `Total`, `status`, `priority`, `billing_status`, `is_hold`, `self_boxing`, and `is_express_delivery`.
+Seeded invoice dates are set to today's date.
 
 What it creates:
 - Sample salesmen and customers
