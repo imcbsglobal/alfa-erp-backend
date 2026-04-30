@@ -6,7 +6,6 @@ import os
 from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
-from django.core.exceptions import ImproperlyConfigured
 
 
 load_dotenv()
@@ -17,8 +16,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv('SECRET_KEY')
-if not SECRET_KEY:
-    raise ImproperlyConfigured('SECRET_KEY must be set in the environment.')
 
 # Application definition
 INSTALLED_APPS = [
@@ -84,13 +81,11 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': os.getenv('DB_NAME', 'ALFA_ERP'),
         'USER': os.getenv('DB_USER', 'postgres'),
-        'PASSWORD': os.getenv('DB_PASSWORD'),
+        'PASSWORD': os.getenv('DB_PASSWORD', '12345'),
         'HOST': os.getenv('DB_HOST', 'localhost'),
         'PORT': os.getenv('DB_PORT', '5432'),
     }
 }
-if not DATABASES['default']['PASSWORD']:
-    raise ImproperlyConfigured('DB_PASSWORD must be set in the environment.')
 
 # Custom User Model
 AUTH_USER_MODEL = 'accounts.User'
@@ -163,7 +158,7 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
+        'rest_framework.permissions.AllowAny',
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
@@ -198,7 +193,7 @@ SIMPLE_JWT = {
 
 # API key used by external systems to import invoices.
 # IMPORTANT: Set this in your environment for production; the default below is insecure.
-SALES_IMPORT_API_KEY = os.getenv('SALES_IMPORT_API_KEY')
+SALES_IMPORT_API_KEY = os.getenv('SALES_IMPORT_API_KEY', 'WEDFBNPOIUFSDFTY')
 
 # CORS Settings
 CORS_ALLOW_ALL_ORIGINS = False
@@ -234,10 +229,10 @@ CORS_ALLOW_METHODS = [
 ]
 
 # Allowed hosts for production
-ALLOWED_HOSTS = [host.strip() for host in os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if host.strip()]
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if os.getenv('ALLOWED_HOSTS') else ['*']
 
 # Django Eventstream Configuration
-EVENTSTREAM_ALLOW_ORIGIN = os.getenv('EVENTSTREAM_ALLOW_ORIGIN', 'http://localhost:5173')
+EVENTSTREAM_ALLOW_ORIGIN = '*'  # Configure based on your needs
 EVENTSTREAM_ALLOW_CREDENTIALS = True
 
 # Channel Layers for SSE - Using in-memory for development

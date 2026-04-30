@@ -5,7 +5,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny, BasePermission
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 
@@ -46,7 +46,6 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     Custom login endpoint
     Returns JWT tokens and user information
     """
-    permission_classes = [AllowAny]
     serializer_class = CustomTokenObtainPairSerializer
 
     def post(self, request, *args, **kwargs):
@@ -59,10 +58,6 @@ class CustomTokenObtainPairView(TokenObtainPairView):
                 message='Invalid email or password',
                 status_code=status.HTTP_401_UNAUTHORIZED
             )
-
-
-class CustomTokenRefreshView(TokenRefreshView):
-    permission_classes = [AllowAny]
 
 
 class UserViewSet(BaseModelViewSet):
