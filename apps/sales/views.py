@@ -570,7 +570,7 @@ class UpdateInvoiceView(APIView):
                 "success": False,
                 "message": f"Failed to update invoice: {str(e)}"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+
         # Calculate new total
         total_amount = sum(item.quantity * item.mrp for item in invoice.items.all())
         
@@ -927,7 +927,7 @@ class StartDeliveryView(APIView):
                     "success": False,
                     "message": "Invalid courier ID"
                 }, status=status.HTTP_400_BAD_REQUEST)
-            message = f"Invoice(s) assigned to {courier.courier_name}. Moved to Courier Delivery list."
+            message = f"Invoice(s) assigned to {courier.courier_name} and marked as delivered."
 
         elif delivery_type == 'INTERNAL':
             from apps.accounts.models import User as UserModel
@@ -1008,9 +1008,11 @@ class StartDeliveryView(APIView):
                 delivery_data.update({
                     'courier':         courier,
                     'courier_name':    courier.courier_name,
-                    'delivery_status': 'TO_CONSIDER',
+                    'delivery_status': 'DELIVERED',
+                    'delivered_by':    request.user,
+                    'end_time':        timezone.now(),
                 })
-                invoice.status = 'PACKED'  # stays PACKED, moves to consider list
+                invoice.status = 'DELIVERED'
 
             elif delivery_type == 'INTERNAL':
                 delivery_data['assigned_to']    = assigned_user
