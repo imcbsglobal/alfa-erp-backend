@@ -915,6 +915,7 @@ class DeliveryHistorySerializer(serializers.ModelSerializer):
     invoice_status = serializers.CharField(source='invoice.status', read_only=True)
     invoice_remarks = serializers.CharField(source='invoice.remarks', read_only=True)
     customer_name    = serializers.SerializerMethodField()
+    customer_display_name = serializers.SerializerMethodField()
     customer_email   = serializers.SerializerMethodField()
     customer_phone   = serializers.SerializerMethodField()
     customer_area    = serializers.SerializerMethodField()
@@ -941,7 +942,7 @@ class DeliveryHistorySerializer(serializers.ModelSerializer):
         model = DeliverySession
         fields = [
             'id', 'invoice_no', 'invoice_date', 'invoice_status', 'invoice_remarks',
-            'customer_name', 'customer_email', 'customer_phone', 'customer_address','customer_area',
+            'customer_name', 'customer_display_name', 'customer_email', 'customer_phone', 'customer_address','customer_area',
             'salesman_name', 'temp_name', 'delivery_type', 'delivery_user_email', 'delivery_user_name',
             'counter_sub_mode', 'pickup_person_name', 'pickup_person_phone',
             'pickup_company_name', 'pickup_company_id',
@@ -955,6 +956,9 @@ class DeliveryHistorySerializer(serializers.ModelSerializer):
         if obj.invoice.customer:
             return obj.invoice.customer.name
         return getattr(obj.invoice, 'temp_name', None)
+
+    def get_customer_display_name(self, obj):
+        return self.get_customer_name(obj)
 
     def get_customer_email(self, obj):
         return obj.invoice.customer.email if obj.invoice.customer else None
