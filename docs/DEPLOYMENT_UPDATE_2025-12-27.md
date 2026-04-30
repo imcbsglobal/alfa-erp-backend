@@ -53,7 +53,7 @@ npm run build
 
 ```bash
 # SSH into the server
-ssh root@88.222.212.14
+ssh root@187.127.153.140
 
 # Navigate to backend directory
 cd /var/www/alfa-erp-backend-prod/
