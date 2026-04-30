@@ -166,10 +166,8 @@ class UserMenu(models.Model):
             parent=None,
             is_active=True
         ).order_by('order')
-        
-        menu_structure = []
-        
-        for menu in root_menus:
+
+        def serialize_menu(menu):
             menu_data = {
                 'id': str(menu.id),
                 'name': menu.name,
@@ -179,20 +177,46 @@ class UserMenu(models.Model):
                 'order': menu.order,
                 'children': []
             }
-            
-            # Get children that user also has access to
+
             children = menu.get_children().filter(id__in=menu_ids)
-            if children.exists():
-                for child in children:
-                    menu_data['children'].append({
-                        'id': str(child.id),
-                        'name': child.name,
-                        'code': child.code,
-                        'icon': child.icon,
-                        'url': child.url,
-                        'order': child.order
-                    })
-            
-            menu_structure.append(menu_data)
+            for child in children:
+                menu_data['children'].append(serialize_menu(child))
+
+            return menu_data
+
+        entries_group_codes = ['billing', 'invoices', 'packing', 'delivery']
+        entries_group = []
+        if all(MenuItem.objects.filter(id__in=menu_ids, code=code, parent=None, is_active=True).exists() for code in entries_group_codes):
+            grouped_roots = []
+            for code in entries_group_codes:
+                menu = next((item for item in root_menus if item.code == code), None)
+                if menu:
+                    grouped_roots.append(menu)
+
+            if len(grouped_roots) == 4:
+                entries_group = [{
+                    'id': 'entries',
+                    'name': 'Entries',
+                    'code': 'orders',
+                    'icon': 'Pill',
+                    'url': '/invoices',
+                    'order': min(menu.order for menu in grouped_roots),
+                    'children': [serialize_menu(menu) for menu in grouped_roots],
+                }]
+        
+        menu_structure = []
+        root_codes_to_group = set(entries_group_codes) if entries_group else set()
+        entries_inserted = False
+
+        for menu in root_menus:
+            if menu.code in root_codes_to_group:
+                if entries_group and not entries_inserted and menu.code == entries_group_codes[0]:
+                    menu_structure.extend(entries_group)
+                    entries_inserted = True
+                continue
+            menu_structure.append(serialize_menu(menu))
+
+        if entries_group and not entries_inserted:
+            menu_structure = entries_group + menu_structure
         
         return menu_structure

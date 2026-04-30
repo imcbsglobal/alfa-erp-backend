@@ -86,20 +86,72 @@ class Command(BaseCommand):
         self.stdout.write("  ✓ Billing menus created")
 
         # ========================================
-        # 2.5 EXPRESS BILLING (Single - BILLER & SUPERADMIN)
+        # 6 EXPRESS DELIVERY (Single - BILLER & SUPERADMIN)
         # ========================================
         express_billing, _ = MenuItem.objects.update_or_create(
             code="express_billing",
             defaults={
-                'name': "Express Billing",
+                'name': "Express Delivery",
                 'icon': "Send",
                 'url': "/billing/express",
-                'order': 2.5,
+                'order': 6,
                 'is_active': True,
                 'parent': None,
             }
         )
-        self.stdout.write("  ✓ Express Billing menu created")
+        self.stdout.write("  ✓ Express Delivery menu created")
+
+        # ========================================
+        # 7 PAYMENT FOLLOW-UP (Dropdown - All authenticated users)
+        # ========================================
+        followup, _ = MenuItem.objects.update_or_create(
+            code="followup",
+            defaults={
+                'name': "Payment Follow-Up",
+                'icon': "CreditCard",
+                'url': "/followup/tracker",
+                'order': 7,
+                'is_active': True,
+                'parent': None,
+            }
+        )
+
+        followup_tracker, _ = MenuItem.objects.update_or_create(
+            code="followup_tracker",
+            defaults={
+                'name': "Tracker",
+                'icon': "TrendingUp",
+                'url': "/followup/tracker",
+                'parent': followup,
+                'order': 1,
+                'is_active': True,
+            }
+        )
+
+        followup_report, _ = MenuItem.objects.update_or_create(
+            code="followup_report",
+            defaults={
+                'name': "Reports",
+                'icon': "FileText",
+                'url': "/followup/report",
+                'parent': followup,
+                'order': 2,
+                'is_active': True,
+            }
+        )
+
+        followup_alerts, _ = MenuItem.objects.update_or_create(
+            code="followup_alerts",
+            defaults={
+                'name': "Alerts",
+                'icon': "AlertCircle",
+                'url': "/followup/alerts",
+                'parent': followup,
+                'order': 3,
+                'is_active': True,
+            }
+        )
+        self.stdout.write("  ✓ Payment Follow-Up menus created")
 
         # ========================================
         # 3. PICKING/INVOICES (Dropdown - NOT PICKER, PACKER, BILLER, DELIVERY)
@@ -580,7 +632,6 @@ class Command(BaseCommand):
         self.stdout.write("2. Invoice/Billing (dropdown) [BILLER/BILLING, SUPERADMIN]")
         self.stdout.write("   ├─ Invoice List → /billing/invoices")
         self.stdout.write("   └─ Reviewed Bills → /billing/reviewed")
-        self.stdout.write("2.5. Express Billing (single) → /billing/express [BILLER/BILLING, SUPERADMIN]")
         self.stdout.write("3. Picking (dropdown) [NOT: PICKER, PACKER, BILLER, DELIVERY]")
         self.stdout.write("   ├─ Picking List → /invoices")
         self.stdout.write("   └─ My Assigned Picking → /invoices/my")
@@ -593,7 +644,12 @@ class Command(BaseCommand):
         self.stdout.write("   ├─ Courier List → /delivery/courier-list")
         self.stdout.write("   ├─ Company Delivery List → /delivery/company-list")
         self.stdout.write("   └─ My Assigned Delivery → /delivery/my")
-        self.stdout.write("6. Reports (dropdown) [SUPERADMIN, ADMIN, STORE, USER]")
+        self.stdout.write("6. Express Delivery (single) → /billing/express [BILLER/BILLING, SUPERADMIN]")
+        self.stdout.write("7. Payment Follow-Up (dropdown) [ALL AUTHENTICATED USERS]")
+        self.stdout.write("   ├─ Tracker → /followup/tracker")
+        self.stdout.write("   ├─ Reports → /followup/report")
+        self.stdout.write("   └─ Alerts → /followup/alerts")
+        self.stdout.write("8. Reports (dropdown) [SUPERADMIN, ADMIN, STORE, USER]")
         self.stdout.write("   ├─ Consolidate → /history")
         self.stdout.write("   ├─ Invoice Workflow → /history/consolidate")
         self.stdout.write("   ├─ Invoice Reports → /history/invoice-report")
@@ -606,15 +662,15 @@ class Command(BaseCommand):
         self.stdout.write("      ├─ Picking → /history/picking-user-summary")
         self.stdout.write("      ├─ Packing → /history/packing-user-summary")
         self.stdout.write("      └─ Delivery → /history/delivery-user-summary")
-        self.stdout.write("7. User Management (dropdown) [SUPERADMIN, ADMIN]")
+        self.stdout.write("9. User Management (dropdown) [SUPERADMIN, ADMIN]")
         self.stdout.write("   ├─ User List → /user-management")
         self.stdout.write("   └─ User Control → /user-control")
-        self.stdout.write("8. Master (dropdown) [SUPERADMIN, ADMIN]")
+        self.stdout.write("10. Master (dropdown) [SUPERADMIN, ADMIN]")
         self.stdout.write("   ├─ Job Title → /master/job-title")
         self.stdout.write("   ├─ Department → /master/department")
         self.stdout.write("   ├─ Courier → /master/courier")
         self.stdout.write("   └─ Tray → /master/tray")                     # NEW
-        self.stdout.write("9. Advanced Control (single) → /admin/privilege [SUPERADMIN, ADMIN]")
+        self.stdout.write("11. Advanced Control (single) → /admin/privilege [SUPERADMIN, ADMIN]")
         self.stdout.write(f"{'='*70}")
         self.stdout.write("\nNOTE: Developer Options is NOT in database - only in frontend menuConfig.js for SUPERADMIN")
         self.stdout.write(f"{'='*70}")
@@ -638,6 +694,10 @@ class Command(BaseCommand):
             'billing': MenuItem.objects.get(code='billing'),
             'billing_invoice_list': MenuItem.objects.get(code='billing_invoice_list'),
             'billing_reviewed': MenuItem.objects.get(code='billing_reviewed'),
+            'followup': MenuItem.objects.get(code='followup'),
+            'followup_tracker': MenuItem.objects.get(code='followup_tracker'),
+            'followup_report': MenuItem.objects.get(code='followup_report'),
+            'followup_alerts': MenuItem.objects.get(code='followup_alerts'),
             'invoices': MenuItem.objects.get(code='invoices'),
             'picking_list': MenuItem.objects.get(code='picking_list'),
             'my_assigned_picking': MenuItem.objects.get(code='my_assigned_picking'),
@@ -678,6 +738,7 @@ class Command(BaseCommand):
             'SUPERADMIN': [],  # SUPERADMIN gets empty array (uses menuConfig.js)
             'ADMIN': [
                 menus['dashboard'],
+                menus['followup'], menus['followup_tracker'], menus['followup_report'], menus['followup_alerts'],
                 menus['billing'], menus['billing_invoice_list'], menus['billing_reviewed'],
                 menus['invoices'], menus['picking_list'], menus['my_assigned_picking'],
                 menus['packing'], menus['packing_list'], menus['my_assigned_packing'], menus['boxing_list'],
@@ -693,6 +754,7 @@ class Command(BaseCommand):
             ],
             'USER': [
                 menus['dashboard'],
+                menus['followup'], menus['followup_tracker'], menus['followup_report'], menus['followup_alerts'],
                 menus['invoices'], menus['picking_list'], menus['my_assigned_picking'],
                 menus['packing'], menus['packing_list'], menus['my_assigned_packing'], menus['boxing_list'],
                 menus['history'], menus['history_consolidate'], menus['history_invoice_workflow'],
@@ -702,6 +764,7 @@ class Command(BaseCommand):
             ],
             'STORE': [
                 menus['dashboard'],
+                menus['followup'], menus['followup_tracker'], menus['followup_report'], menus['followup_alerts'],
                 menus['invoices'], menus['picking_list'], menus['my_assigned_picking'],
                 menus['history'], menus['history_consolidate'], menus['history_invoice_workflow'],
                 menus['invoice_reports'], menus['picking_reports'], menus['packing_reports'], menus['delivery_reports'],
@@ -710,28 +773,33 @@ class Command(BaseCommand):
             ],
             'PICKER': [
                 menus['dashboard'],
-                # PICKER doesn't get invoices menu (as per menuConfig: NOT includes PICKER)
+                menus['followup'], menus['followup_tracker'], menus['followup_report'], menus['followup_alerts'],
             ],
             'PACKER': [
                 menus['dashboard'],
+                menus['followup'], menus['followup_tracker'], menus['followup_report'], menus['followup_alerts'],
                 menus['packing'], menus['packing_list'], menus['my_assigned_packing'],
                 menus['boxing_list'],
             ],
             'BILLING': [
                 menus['dashboard'],
+                menus['followup'], menus['followup_tracker'], menus['followup_report'], menus['followup_alerts'],
                 menus['billing'], menus['billing_invoice_list'], menus['billing_reviewed'],
             ],
             'BILLER': [
                 menus['dashboard'],
+                menus['followup'], menus['followup_tracker'], menus['followup_report'], menus['followup_alerts'],
                 menus['billing'], menus['billing_invoice_list'], menus['billing_reviewed'],
             ],
             'DELIVERY': [
                 menus['dashboard'],
+                menus['followup'], menus['followup_tracker'], menus['followup_report'], menus['followup_alerts'],
                 menus['delivery'], menus['delivery_dispatch'], menus['delivery_courier_list'],
                 menus['delivery_company_list'], menus['my_assigned_delivery'],
             ],
             'DRIVER': [
                 menus['dashboard'],
+                menus['followup'], menus['followup_tracker'], menus['followup_report'], menus['followup_alerts'],
                 menus['delivery'], menus['delivery_dispatch'], menus['my_assigned_delivery'],
             ],
         }

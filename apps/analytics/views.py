@@ -51,16 +51,21 @@ def compute_today_stats(today):
     ).count()
 
     # ── 5. COMPLETED DELIVERY
+    # Only count actual deliveries completed by a person (delivered_by is set).
+    # Exclude bulk-updated deliveries where delivered_by is NULL.
     completed_delivery = DeliverySession.objects.filter(
         end_time__date=today,
-        delivery_status='DELIVERED'
+        delivery_status='DELIVERED',
+        delivered_by__isnull=False  # Only real deliveries by staff, not bulk updates
     ).count()
 
     # ── 6. COMPLETED HOLD INVOICES: live count of how many hold invoices picked today
     completed_hold_invoices = PickingSession.objects.filter(
         end_time__date=today,
         picking_status='PICKED',
-        invoice__created_at__date__lt=today
+        invoice__created_at__date__lt=today,
+    ).exclude(
+        invoice__status='INVOICED'
     ).count()
 
     # Safety cap — completed can never exceed total
@@ -161,7 +166,11 @@ class DashboardStatsSSEView(View):
                         lambda: PackingSession.objects.filter(end_time__date=today, packing_status='PACKED').count()
                     )
                     completed_delivery = await asyncio.to_thread(
-                        lambda: DeliverySession.objects.filter(end_time__date=today, delivery_status='DELIVERED').count()
+                        lambda: DeliverySession.objects.filter(
+                            end_time__date=today, 
+                            delivery_status='DELIVERED',
+                            delivered_by__isnull=False  # Only real deliveries by staff, not bulk updates
+                        ).count()
                     )
                     
                     # ── Completed hold invoices: picking sessions today for invoices created BEFORE today
@@ -169,7 +178,9 @@ class DashboardStatsSSEView(View):
                         lambda: PickingSession.objects.filter(
                             end_time__date=today,
                             picking_status='PICKED',
-                            invoice__created_at__date__lt=today
+                            invoice__created_at__date__lt=today,
+                        ).exclude(
+                            invoice__status='INVOICED'
                         ).count()
                     )
                     # Cap at hold_invoices to prevent inconsistency
@@ -260,16 +271,17 @@ class StatusBreakdownView(APIView):
             )
 
             # ── DELIVERY ─────────────────────────────────────────────────────
+            # Completed: only actual deliveries completed by staff (delivered_by set)
+            # Exclude bulk-updated deliveries (where delivered_by is NULL)
             delivery_completed = DeliverySession.objects.filter(
                 end_time__date=today,
                 delivery_status='DELIVERED',
+                delivered_by__isnull=False,  # Only real deliveries by staff, not bulk updates
             ).count()
 
-            # Preparing: only sessions where the invoice is NOT yet DELIVERED
+            # Preparing: sessions with TO_CONSIDER (waiting for assignment) or IN_TRANSIT (in progress)
             delivery_preparing = DeliverySession.objects.filter(
-                delivery_status__in=['TO_CONSIDER', 'IN_TRANSIT'],
-            ).exclude(
-                invoice__status='DELIVERED'
+                delivery_status__in=['TO_CONSIDER', 'IN_TRANSIT']
             ).count()
 
             # Pending: Invoices with PACKED status but no delivery session yet

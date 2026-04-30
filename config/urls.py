@@ -22,7 +22,10 @@ urlpatterns = [
     
     # Common/Developer endpoints
     path('api/developer/', include('apps.common.urls')),
-    path('api/common/', include('apps.common.urls'))
+    path('api/common/', include('apps.common.urls')),
+
+    # Payment Follow-Up endpoints
+    path('api/followup/', include('apps.payment_followup.urls')),
 ]
 
 # Serve media files in development

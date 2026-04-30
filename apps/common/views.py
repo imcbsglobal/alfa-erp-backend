@@ -2,7 +2,8 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, viewsets
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from django.db import connection
 from .models import DeveloperSettings
 from .serializers import DeveloperSettingsSerializer
 from apps.accounts.models import Tray
@@ -120,5 +121,4 @@ class TrayViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         instance.delete()
         return Response({'success': True, 'message': 'Tray deleted successfully'})
-
 
