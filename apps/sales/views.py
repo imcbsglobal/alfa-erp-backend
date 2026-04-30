@@ -2521,10 +2521,7 @@ class BillingInvoicesView(generics.ListAPIView):
             print(f"Cache error for cleared_invoices: {e}")
         
         # If user is not admin, filter to only show invoices where they are the salesman
-        if not (
-            user.is_admin_or_superadmin() or
-            user_has_menu_access(user, 'billing_invoice_list')
-        ):
+        if not user.is_admin_or_superadmin():
             queryset = queryset.filter(
                 salesman__name__iexact=user.name
             )
