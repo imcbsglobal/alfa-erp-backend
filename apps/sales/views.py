@@ -2521,9 +2521,10 @@ class BillingInvoicesView(generics.ListAPIView):
             print(f"Cache error for cleared_invoices: {e}")
         
         # If user is not admin, filter to only show invoices where they are the salesman
-        if not user.is_admin_or_superadmin():
-            # Filter by salesman matching user's name
-            from django.db.models import Q
+        if not (
+            user.is_admin_or_superadmin() or
+            user_has_menu_access(user, 'billing_invoice_list')
+        ):
             queryset = queryset.filter(
                 salesman__name__iexact=user.name
             )
